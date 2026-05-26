@@ -67,3 +67,20 @@ def test_dashboard_has_growing_unit_filter(client):
 def test_dashboard_has_identity_panel(client):
     resp = client.get("/")
     assert b"identity" in resp.content.lower() or b"growing_units" in resp.content or b"source" in resp.content.lower()
+
+
+def test_dashboard_has_manage_panel(client):
+    resp = client.get("/")
+    assert b"manage" in resp.content.lower()
+
+
+def test_dashboard_has_add_location_form(client):
+    resp = client.get("/")
+    assert b"new-loc-name" in resp.content
+    assert b"Add location" in resp.content
+
+
+def test_dashboard_has_add_unit_form(client):
+    resp = client.get("/")
+    assert b"new-unit-name" in resp.content
+    assert b"Add unit" in resp.content
