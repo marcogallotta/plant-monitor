@@ -1,13 +1,15 @@
 import io
 import json
+import os
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
@@ -646,6 +648,25 @@ def list_events(db: Session = Depends(get_db)):
 
 # --- Assistant read-only API ---
 
+_bearer = HTTPBearer(auto_error=False)
+
+
+def _require_assistant_token(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+):
+    token = os.environ.get("ASSISTANT_API_TOKEN", "")
+    if not token:
+        raise HTTPException(status_code=503, detail="assistant API token not configured")
+    if not credentials or credentials.credentials != token:
+        raise HTTPException(
+            status_code=401,
+            detail="invalid or missing token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+_assistant = APIRouter(prefix="/assistant", dependencies=[Depends(_require_assistant_token)])
+
 class AssistantSummary(BaseModel):
     photo_count: int
     unclassified_count: int
@@ -667,7 +688,7 @@ class GrowingUnitContext(BaseModel):
     events: list[EventOut]
 
 
-@app.get("/assistant/summary", response_model=AssistantSummary)
+@_assistant.get("/summary", response_model=AssistantSummary)
 def assistant_summary(db: Session = Depends(get_db)):
     photo_count = db.query(Photo).count()
     unclassified_count = db.query(Photo).filter(Photo.photo_type.is_(None)).count()
@@ -685,7 +706,7 @@ def assistant_summary(db: Session = Depends(get_db)):
     )
 
 
-@app.get("/assistant/photos", response_model=list[PhotoOut])
+@_assistant.get("/photos", response_model=list[PhotoOut])
 def assistant_list_photos(
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
@@ -713,7 +734,7 @@ def assistant_list_photos(
     return [_photo_out(p, db) for p in q.all()]
 
 
-@app.get("/assistant/photos/{photo_id}/context", response_model=PhotoContext)
+@_assistant.get("/photos/{photo_id}/context", response_model=PhotoContext)
 def assistant_photo_context(photo_id: int, db: Session = Depends(get_db)):
     photo = db.query(Photo).filter_by(id=photo_id).first()
     if not photo:
@@ -732,7 +753,7 @@ def assistant_photo_context(photo_id: int, db: Session = Depends(get_db)):
     )
 
 
-@app.get("/assistant/photos/{photo_id}/thumbnail")
+@_assistant.get("/photos/{photo_id}/thumbnail")
 def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
     photo = db.query(Photo).filter_by(id=photo_id).first()
     if not photo:
@@ -755,7 +776,7 @@ def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
     return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
-@app.get("/assistant/photos/{photo_id}", response_model=PhotoOut)
+@_assistant.get("/photos/{photo_id}", response_model=PhotoOut)
 def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
     photo = db.query(Photo).filter_by(id=photo_id).first()
     if not photo:
@@ -763,12 +784,12 @@ def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
     return _photo_out(photo, db)
 
 
-@app.get("/assistant/growing-units", response_model=list[GrowingUnitOut])
+@_assistant.get("/growing-units", response_model=list[GrowingUnitOut])
 def assistant_list_growing_units(db: Session = Depends(get_db)):
     return db.query(GrowingUnit).order_by(GrowingUnit.name).all()
 
 
-@app.get("/assistant/growing-units/{unit_id}/context", response_model=GrowingUnitContext)
+@_assistant.get("/growing-units/{unit_id}/context", response_model=GrowingUnitContext)
 def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
     unit = db.query(GrowingUnit).filter_by(id=unit_id).first()
     if not unit:
@@ -794,20 +815,23 @@ def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
     )
 
 
-@app.get("/assistant/locations", response_model=list[LocationOut])
+@_assistant.get("/locations", response_model=list[LocationOut])
 def assistant_list_locations(db: Session = Depends(get_db)):
     return db.query(Location).order_by(Location.name).all()
 
 
-@app.get("/assistant/events", response_model=list[EventOut])
+@_assistant.get("/events", response_model=list[EventOut])
 def assistant_list_events(db: Session = Depends(get_db)):
     return [_event_out(ev, db) for ev in db.query(Event).order_by(Event.event_at.desc()).all()]
 
 
-@app.get("/assistant/unclassified", response_model=list[PhotoOut])
+@_assistant.get("/unclassified", response_model=list[PhotoOut])
 def assistant_unclassified(db: Session = Depends(get_db)):
     photos = db.query(Photo).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
     return [_photo_out(p, db) for p in photos]
+
+
+app.include_router(_assistant)
 
 
 @app.get("/photos/{filename}")

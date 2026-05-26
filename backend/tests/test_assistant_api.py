@@ -2,13 +2,42 @@ import io
 from datetime import datetime, timezone
 
 import pytest
+from fastapi.testclient import TestClient
 from PIL import Image
 
 import app.main
+from app.database import get_db
+from app.main import app as fastapi_app
 from app.models import (
     Event, EventGrowingUnit, EventPhoto,
     GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote,
 )
+
+_TOKEN = "test-assistant-token"
+
+
+@pytest.fixture
+def client(db_session, monkeypatch):
+    monkeypatch.setenv("ASSISTANT_API_TOKEN", _TOKEN)
+
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    yield TestClient(fastapi_app, headers={"Authorization": f"Bearer {_TOKEN}"})
+    fastapi_app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def unauth_client(db_session, monkeypatch):
+    monkeypatch.setenv("ASSISTANT_API_TOKEN", _TOKEN)
+
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    yield TestClient(fastapi_app)
+    fastapi_app.dependency_overrides.clear()
 
 
 def _location(db, name="Location A"):
@@ -325,3 +354,41 @@ def test_assistant_unclassified_returns_photos_without_type(client, db_session):
 
 def test_assistant_unclassified_empty(client):
     assert client.get("/assistant/unclassified").json() == []
+
+
+# --- Auth ---
+
+def test_no_token_returns_401(unauth_client):
+    assert unauth_client.get("/assistant/summary").status_code == 401
+
+
+def test_wrong_token_returns_401(db_session, monkeypatch):
+    monkeypatch.setenv("ASSISTANT_API_TOKEN", _TOKEN)
+
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    try:
+        tc = TestClient(fastapi_app, headers={"Authorization": "Bearer wrong-token"})
+        assert tc.get("/assistant/summary").status_code == 401
+    finally:
+        fastapi_app.dependency_overrides.clear()
+
+
+def test_token_not_configured_returns_503(db_session, monkeypatch):
+    monkeypatch.delenv("ASSISTANT_API_TOKEN", raising=False)
+
+    def override_get_db():
+        yield db_session
+
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    try:
+        tc = TestClient(fastapi_app, headers={"Authorization": "Bearer anything"})
+        assert tc.get("/assistant/summary").status_code == 503
+    finally:
+        fastapi_app.dependency_overrides.clear()
+
+
+def test_auth_does_not_affect_non_assistant_routes(unauth_client):
+    assert unauth_client.get("/photos").status_code == 200
