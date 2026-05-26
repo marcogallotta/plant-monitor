@@ -62,6 +62,32 @@ class PhotoGrowingUnit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class Event(Base):
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    event_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    note_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    location_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("locations.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class EventGrowingUnit(Base):
+    __tablename__ = "event_growing_units"
+
+    event_id: Mapped[int] = mapped_column(Integer, ForeignKey("events.id"), primary_key=True)
+    growing_unit_id: Mapped[int] = mapped_column(Integer, ForeignKey("growing_units.id"), primary_key=True)
+
+
+class EventPhoto(Base):
+    __tablename__ = "event_photos"
+
+    event_id: Mapped[int] = mapped_column(Integer, ForeignKey("events.id"), primary_key=True)
+    photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), primary_key=True)
+
+
 class PhotoNote(Base):
     __tablename__ = "photo_notes"
     __table_args__ = (

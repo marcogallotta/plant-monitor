@@ -84,3 +84,9 @@ def test_dashboard_has_add_unit_form(client):
     resp = client.get("/")
     assert b"new-unit-name" in resp.content
     assert b"Add unit" in resp.content
+
+
+def test_dashboard_has_events_ui(client):
+    resp = client.get("/")
+    assert b"/events" in resp.content
+    assert b"Log event" in resp.content

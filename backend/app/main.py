@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote
+from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote
 
 app = FastAPI()
 
@@ -538,6 +538,108 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="note not found")
     db.delete(note)
     db.commit()
+
+
+class PhotoBrief(BaseModel):
+    id: int
+    filename: str
+    url: str
+
+    model_config = {"from_attributes": True}
+
+
+class EventCreate(BaseModel):
+    event_type: str
+    event_at: Optional[datetime] = None
+    note_text: Optional[str] = None
+    location_id: Optional[int] = None
+    growing_unit_ids: Optional[list[int]] = None
+    photo_ids: Optional[list[int]] = None
+
+
+class EventOut(BaseModel):
+    id: int
+    event_type: str
+    event_at: datetime
+    note_text: Optional[str] = None
+    location_id: Optional[int] = None
+    location_name: Optional[str] = None
+    growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
+    photos: list[PhotoBrief] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+def _event_out(ev: Event, db: Session) -> EventOut:
+    location_name = None
+    if ev.location_id:
+        loc = db.query(Location).filter_by(id=ev.location_id).first()
+        location_name = loc.name if loc else None
+    units = (
+        db.query(GrowingUnit)
+        .join(EventGrowingUnit, EventGrowingUnit.growing_unit_id == GrowingUnit.id)
+        .filter(EventGrowingUnit.event_id == ev.id)
+        .all()
+    )
+    photos = (
+        db.query(Photo)
+        .join(EventPhoto, EventPhoto.photo_id == Photo.id)
+        .filter(EventPhoto.event_id == ev.id)
+        .all()
+    )
+    return EventOut(
+        id=ev.id,
+        event_type=ev.event_type,
+        event_at=ev.event_at,
+        note_text=ev.note_text,
+        location_id=ev.location_id,
+        location_name=location_name,
+        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in units],
+        photos=[PhotoBrief(id=p.id, filename=p.filename, url=f"/photos/{p.filename}") for p in photos],
+        created_at=ev.created_at,
+        updated_at=ev.updated_at,
+    )
+
+
+@app.post("/events", response_model=EventOut, status_code=201)
+def create_event(body: EventCreate, db: Session = Depends(get_db)):
+    _check_location_exists(body.location_id, db)
+    for uid in (body.growing_unit_ids or []):
+        if not db.query(GrowingUnit).filter_by(id=uid).first():
+            raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+    for pid in (body.photo_ids or []):
+        if not db.query(Photo).filter_by(id=pid).first():
+            raise HTTPException(status_code=404, detail=f"photo {pid} not found")
+
+    ev = Event(
+        event_type=body.event_type,
+        event_at=body.event_at or datetime.now(timezone.utc),
+        note_text=body.note_text,
+        location_id=body.location_id,
+    )
+    db.add(ev)
+    db.flush()
+
+    for uid in (body.growing_unit_ids or []):
+        db.add(EventGrowingUnit(event_id=ev.id, growing_unit_id=uid))
+    for pid in (body.photo_ids or []):
+        db.add(EventPhoto(event_id=ev.id, photo_id=pid))
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(ev)
+    return _event_out(ev, db)
+
+
+@app.get("/events", response_model=list[EventOut])
+def list_events(db: Session = Depends(get_db)):
+    events = db.query(Event).order_by(Event.event_at.desc()).all()
+    return [_event_out(ev, db) for ev in events]
 
 
 @app.get("/photos/{filename}")
