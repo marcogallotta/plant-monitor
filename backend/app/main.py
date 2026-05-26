@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,12 @@ from .models import Photo, PhotoNote
 app = FastAPI()
 
 PHOTOS_DIR = Path("data/photos")
+_STATIC_DIR = Path(__file__).parent.parent / "static"
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard():
+    return HTMLResponse((_STATIC_DIR / "index.html").read_text())
 
 _STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}Z$")
 

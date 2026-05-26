@@ -17,9 +17,9 @@ def engine():
         f"Refusing to run tests against {engine.url} — expected a plantmonitoring database"
     )
 
-    Base.metadata.drop_all(engine)
-
     alembic_cfg = Config("alembic.ini")
+    command.stamp(alembic_cfg, "base")  # sync alembic_version before drop so upgrade reruns cleanly
+    Base.metadata.drop_all(engine)
     command.upgrade(alembic_cfg, "head")
 
     yield engine

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plant Monitor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #111;
+      color: #ddd;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header h1 { font-size: 1.1rem; font-weight: 600; color: #fff; }
+
+    .filters {
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      border-bottom: 1px solid #222;
+      background: #161616;
+    }
+
+    .filters label { font-size: 0.8rem; color: #888; display: flex; align-items: center; gap: 0.4rem; }
+
+    .filters input[type="datetime-local"] {
+      background: #222;
+      border: 1px solid #444;
+      color: #ddd;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+
+    .filters button {
+      background: #2a2a2a;
+      border: 1px solid #444;
+      color: #ddd;
+      padding: 0.3rem 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+
+    .filters button:hover { background: #333; }
+
+    #status {
+      padding: 0.5rem 1.5rem;
+      font-size: 0.8rem;
+      color: #666;
+      min-height: 1.8rem;
+    }
+
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 4px;
+      padding: 4px 1.5rem 1.5rem;
+    }
+
+    .photo-card {
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+      background: #1a1a1a;
+      border-radius: 4px;
+    }
+
+    .photo-card img {
+      width: 100%;
+      aspect-ratio: 16/9;
+      object-fit: cover;
+      display: block;
+      transition: opacity 0.15s;
+    }
+
+    .photo-card:hover img { opacity: 0.85; }
+
+    .photo-card .caption {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 0.4rem 0.5rem;
+      font-size: 0.7rem;
+      color: #ccc;
+      background: linear-gradient(transparent, rgba(0,0,0,0.7));
+      pointer-events: none;
+    }
+
+    /* Modal */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.hidden { display: none; }
+
+    .modal-bg {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      cursor: pointer;
+    }
+
+    .modal-box {
+      position: relative;
+      z-index: 1;
+      max-width: 92vw;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .modal-box img {
+      max-width: 100%;
+      max-height: 80vh;
+      border-radius: 4px;
+      display: block;
+    }
+
+    .modal-caption {
+      font-size: 0.8rem;
+      color: #aaa;
+      text-align: center;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: -2rem;
+      right: 0;
+      background: none;
+      border: none;
+      color: #aaa;
+      font-size: 1.4rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .modal-close:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Plant Monitor</h1>
+</header>
+
+<div class="filters">
+  <label>From <input type="datetime-local" id="start"></label>
+  <label>To <input type="datetime-local" id="end"></label>
+  <button onclick="applyFilter()">Filter</button>
+  <button onclick="clearFilter()">Clear</button>
+</div>
+
+<div id="status"></div>
+
+<div id="photo-grid" class="photo-grid"></div>
+
+<div id="modal" class="modal hidden" onkeydown="handleKey(event)">
+  <div class="modal-bg" onclick="closeModal()"></div>
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    <img id="modal-img" src="" alt="">
+    <div id="modal-caption" class="modal-caption"></div>
+  </div>
+</div>
+
+<script>
+  let allPhotos = [];
+
+  async function loadPhotos() {
+    const start = document.getElementById('start').value;
+    const end   = document.getElementById('end').value;
+
+    let url = '/photos';
+    const params = [];
+    if (start) params.push('start=' + encodeURIComponent(new Date(start).toISOString()));
+    if (end)   params.push('end='   + encodeURIComponent(new Date(end).toISOString()));
+    if (params.length) url += '?' + params.join('&');
+
+    setStatus('Loading…');
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      allPhotos = await resp.json();
+      renderGrid(allPhotos);
+      setStatus(allPhotos.length === 0 ? 'No photos found.' : allPhotos.length + ' photo' + (allPhotos.length === 1 ? '' : 's'));
+    } catch (e) {
+      setStatus('Error loading photos: ' + e.message);
+    }
+  }
+
+  function renderGrid(photos) {
+    const grid = document.getElementById('photo-grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < photos.length; i++) {
+      const p = photos[i];
+      const card = document.createElement('div');
+      card.className = 'photo-card';
+      card.dataset.index = i;
+      card.onclick = () => openModal(i);
+      const ts = new Date(p.captured_at).toLocaleString();
+      card.innerHTML =
+        '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy">' +
+        '<div class="caption">' + ts + '</div>';
+      grid.appendChild(card);
+    }
+  }
+
+  function applyFilter() { loadPhotos(); }
+
+  function clearFilter() {
+    document.getElementById('start').value = '';
+    document.getElementById('end').value   = '';
+    loadPhotos();
+  }
+
+  // Modal
+  let currentIndex = 0;
+
+  function openModal(index) {
+    currentIndex = index;
+    showModalPhoto(index);
+    document.getElementById('modal').classList.remove('hidden');
+    document.getElementById('modal').focus();
+  }
+
+  function showModalPhoto(index) {
+    const p = allPhotos[index];
+    document.getElementById('modal-img').src = p.url;
+    document.getElementById('modal-caption').textContent =
+      new Date(p.captured_at).toLocaleString() + ' — ' + p.filename;
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+    document.getElementById('modal-img').src = '';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Escape')       closeModal();
+    if (e.key === 'ArrowRight' && currentIndex < allPhotos.length - 1) { currentIndex++; showModalPhoto(currentIndex); }
+    if (e.key === 'ArrowLeft'  && currentIndex > 0)                    { currentIndex--; showModalPhoto(currentIndex); }
+  }
+
+  document.addEventListener('keydown', handleKey);
+
+  function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+  loadPhotos();
+</script>
+
+</body>
+</html>
