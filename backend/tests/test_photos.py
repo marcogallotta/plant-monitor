@@ -1,22 +1,8 @@
 import json
 import pytest
-from fastapi.testclient import TestClient
-
-from app.main import app
 
 VALID_STEM = "2026-05-26T103000Z"
 VALID_META = {"captured_at": "2026-05-26T10:30:00Z", "filename": f"{VALID_STEM}.jpg"}
-
-
-@pytest.fixture(autouse=True)
-def isolated_photos_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.main.PHOTOS_DIR", tmp_path)
-    yield tmp_path
-
-
-@pytest.fixture()
-def client():
-    return TestClient(app)
 
 
 def _upload(client, stem=VALID_STEM, image_bytes=b"FAKEJPEG", meta=None):

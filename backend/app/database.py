@@ -1,4 +1,5 @@
 import os
+from typing import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -17,3 +18,21 @@ def build_engine():
 
 def build_session_factory(engine):
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+
+_session_factory = None
+
+
+def _get_session_factory():
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = build_session_factory(build_engine())
+    return _session_factory
+
+
+def get_db() -> Generator[Session, None, None]:
+    db = _get_session_factory()()
+    try:
+        yield db
+    finally:
+        db.close()

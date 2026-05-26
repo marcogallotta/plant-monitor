@@ -1,8 +1,13 @@
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from sqlalchemy.orm import Session
+
+from .database import get_db
+from .models import Photo
 
 app = FastAPI()
 
@@ -49,17 +54,31 @@ def _validated_metadata(raw: bytes, expected_image_filename: str) -> dict:
     return meta
 
 
+def _upsert_photo_record(db: Session, stem: str, meta: dict) -> None:
+    if db.query(Photo).filter_by(filename=f"{stem}.jpg").first():
+        return
+    captured_at = datetime.fromisoformat(meta["captured_at"].replace("Z", "+00:00"))
+    db.add(Photo(
+        filename=f"{stem}.jpg",
+        captured_at=captured_at,
+        storage_path=str(PHOTOS_DIR / f"{stem}.jpg"),
+        metadata_path=str(PHOTOS_DIR / f"{stem}.json"),
+    ))
+    db.flush()
+
+
 @app.post("/photos")
 async def upload_photo(
     image: UploadFile = File(...),
     metadata: UploadFile = File(...),
+    db: Session = Depends(get_db),
 ):
     stem = _validated_stem(image.filename, metadata.filename)
 
     image_bytes = await image.read()
     meta_bytes = await metadata.read()
 
-    _validated_metadata(meta_bytes, f"{stem}.jpg")
+    meta = _validated_metadata(meta_bytes, f"{stem}.jpg")
 
     PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -69,6 +88,8 @@ async def upload_photo(
     meta_exists = meta_path.exists()
 
     if image_exists and meta_exists:
+        _upsert_photo_record(db, stem, meta)
+        db.commit()
         return {"status": "duplicate"}
     if image_exists or meta_exists:
         raise HTTPException(status_code=409, detail="partial duplicate: one of image or metadata already exists")
@@ -85,4 +106,6 @@ async def upload_photo(
         meta_tmp.unlink(missing_ok=True)
         raise
 
+    _upsert_photo_record(db, stem, meta)
+    db.commit()
     return {"status": "ok"}
