@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-pi up down build
+.PHONY: test test-backend test-pi migrate up down build
 
 test: test-backend test-pi
 
@@ -7,6 +7,9 @@ test-backend:
 
 test-pi:
 	docker compose run --rm pi pytest tests/ -v
+
+migrate:
+	docker compose run --rm backend alembic upgrade head
 
 up:
 	docker compose up

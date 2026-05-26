@@ -1,0 +1,39 @@
+from datetime import datetime
+
+from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Photo(Base):
+    __tablename__ = "photos"
+    __table_args__ = (
+        UniqueConstraint("filename", name="photos_filename_uniq"),
+        Index("photos_captured_at_idx", "captured_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    filename: Mapped[str] = mapped_column(String, nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String, nullable=False)
+    metadata_path: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PhotoNote(Base):
+    __tablename__ = "photo_notes"
+    __table_args__ = (
+        CheckConstraint("x >= 0.0 AND x <= 1.0", name="photo_notes_x_range"),
+        CheckConstraint("y >= 0.0 AND y <= 1.0", name="photo_notes_y_range"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), nullable=False)
+    note_text: Mapped[str] = mapped_column(Text, nullable=False)
+    x: Mapped[float] = mapped_column(Float, nullable=False)
+    y: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
