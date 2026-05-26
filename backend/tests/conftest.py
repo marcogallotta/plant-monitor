@@ -13,8 +13,8 @@ from app.models import Base
 def engine():
     engine = build_engine()
 
-    assert "plantmonitoring" in str(engine.url), (
-        f"Refusing to run tests against {engine.url} — expected a plantmonitoring database"
+    assert "plantmonitoring_test" in str(engine.url), (
+        f"Refusing to run tests against {engine.url} — expected plantmonitoring_test database"
     )
 
     alembic_cfg = Config("alembic.ini")
@@ -24,8 +24,7 @@ def engine():
 
     yield engine
 
-    command.downgrade(alembic_cfg, "base")
-    engine.dispose()
+    engine.dispose()  # volume is destroyed by `make test-backend` (down -v)
 
 
 @pytest.fixture

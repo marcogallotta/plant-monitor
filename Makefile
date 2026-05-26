@@ -1,9 +1,12 @@
-.PHONY: test test-backend test-pi migrate up down build
+.PHONY: test test-backend test-pi migrate seed up down build
+
+TEST_COMPOSE := docker compose -f docker-compose.test.yml
 
 test: test-backend test-pi
 
 test-backend:
-	docker compose run --rm backend pytest tests/ -v
+	$(TEST_COMPOSE) run --rm backend pytest tests/ -v
+	$(TEST_COMPOSE) down -v
 
 test-pi:
 	docker compose run --rm pi pytest tests/ -v
