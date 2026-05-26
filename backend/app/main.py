@@ -6,11 +6,11 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import GrowingUnit, Location, Photo, PhotoNote
+from .models import GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote
 
 app = FastAPI()
 
@@ -83,11 +83,25 @@ class GrowingUnitOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class GrowingUnitBrief(BaseModel):
+    id: int
+    name: str
+    unit_type: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class PhotoOut(BaseModel):
     id: int
     filename: str
     captured_at: datetime
     url: str
+    source: Optional[str] = None
+    photo_type: Optional[str] = None
+    original_filename: Optional[str] = None
+    location_id: Optional[int] = None
+    location_name: Optional[str] = None
+    growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -195,6 +209,7 @@ def _upsert_photo_record(db: Session, stem: str, meta: dict) -> None:
         captured_at=captured_at,
         storage_path=str(PHOTOS_DIR / f"{stem}.jpg"),
         metadata_path=str(PHOTOS_DIR / f"{stem}.json"),
+        source="pi",
     ))
     db.flush()
 
@@ -278,6 +293,31 @@ def update_growing_unit(unit_id: int, body: GrowingUnitUpdate, db: Session = Dep
     return unit
 
 
+def _photo_out(p: Photo, db: Session) -> PhotoOut:
+    location_name = None
+    if p.location_id:
+        loc = db.query(Location).filter_by(id=p.location_id).first()
+        location_name = loc.name if loc else None
+    units = (
+        db.query(GrowingUnit)
+        .join(PhotoGrowingUnit, PhotoGrowingUnit.growing_unit_id == GrowingUnit.id)
+        .filter(PhotoGrowingUnit.photo_id == p.id)
+        .all()
+    )
+    return PhotoOut(
+        id=p.id,
+        filename=p.filename,
+        captured_at=p.captured_at,
+        url=f"/photos/{p.filename}",
+        source=p.source,
+        photo_type=p.photo_type,
+        original_filename=p.original_filename,
+        location_id=p.location_id,
+        location_name=location_name,
+        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in units],
+    )
+
+
 @app.post("/photos")
 async def upload_photo(
     image: UploadFile = File(...),
@@ -326,6 +366,10 @@ async def upload_photo(
 def list_photos(
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
+    source: Optional[str] = Query(None),
+    photo_type: Optional[str] = Query(None),
+    location_id: Optional[int] = Query(None),
+    growing_unit_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(Photo).order_by(Photo.captured_at)
@@ -333,10 +377,45 @@ def list_photos(
         q = q.filter(Photo.captured_at >= start)
     if end is not None:
         q = q.filter(Photo.captured_at <= end)
-    return [
-        PhotoOut(id=p.id, filename=p.filename, captured_at=p.captured_at, url=f"/photos/{p.filename}")
-        for p in q.all()
-    ]
+    if source is not None:
+        q = q.filter(Photo.source == source)
+    if photo_type is not None:
+        q = q.filter(Photo.photo_type == photo_type)
+    if location_id is not None:
+        q = q.filter(Photo.location_id == location_id)
+    if growing_unit_id is not None:
+        q = q.join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id).filter(
+            PhotoGrowingUnit.growing_unit_id == growing_unit_id
+        )
+    return [_photo_out(p, db) for p in q.all()]
+
+
+class PhotoClassify(BaseModel):
+    photo_type: Optional[str] = None
+    location_id: Optional[int] = None
+    growing_unit_ids: Optional[list[int]] = None
+
+
+@app.put("/photos/{photo_id}", response_model=PhotoOut)
+def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    if "photo_type" in body.model_fields_set:
+        photo.photo_type = body.photo_type
+    if "location_id" in body.model_fields_set:
+        _check_location_exists(body.location_id, db)
+        photo.location_id = body.location_id
+    if body.growing_unit_ids is not None:
+        for uid in body.growing_unit_ids:
+            if not db.query(GrowingUnit).filter_by(id=uid).first():
+                raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+        db.query(PhotoGrowingUnit).filter_by(photo_id=photo_id).delete()
+        for uid in body.growing_unit_ids:
+            db.add(PhotoGrowingUnit(photo_id=photo_id, growing_unit_id=uid))
+    db.commit()
+    db.refresh(photo)
+    return _photo_out(photo, db)
 
 
 @app.post("/photos/{photo_id}/notes", response_model=NoteOut, status_code=201)
