@@ -16,6 +16,7 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/plantmonitoring
+      ASSISTANT_API_TOKEN: ${ASSISTANT_API_TOKEN}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
