@@ -31,5 +31,12 @@ services:
     volumes:
       - ./pi:/app
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   pgdata:
