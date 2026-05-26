@@ -235,10 +235,60 @@
     .modal.hidden { display: none; }
     .modal-bg { position: absolute; inset: 0; background: rgba(0,0,0,0.85); cursor: pointer; }
     .modal-box { position: relative; z-index: 1; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column; gap: 0.5rem; }
-    .modal-box img { max-width: 100%; max-height: 80vh; border-radius: 4px; display: block; }
     .modal-caption { font-size: 0.8rem; color: #aaa; text-align: center; }
     .modal-close { position: absolute; top: -2rem; right: 0; background: none; border: none; color: #aaa; font-size: 1.4rem; cursor: pointer; line-height: 1; }
     .modal-close:hover { color: #fff; }
+
+    /* Notes */
+    .modal-img-wrap { position: relative; display: inline-block; line-height: 0; max-width: 100%; cursor: crosshair; }
+    .modal-img-wrap img { max-width: 100%; max-height: 72vh; border-radius: 4px; display: block; }
+    .note-pins { position: absolute; inset: 0; pointer-events: none; }
+    .note-pin {
+      position: absolute;
+      width: 22px; height: 22px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: #e83;
+      border: 2px solid #fff;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      pointer-events: all;
+      z-index: 2;
+      transition: background 0.1s;
+    }
+    .note-pin:hover { background: #f94; }
+    .note-pin.selected { background: #48f; border-color: #8cf; }
+    .note-panel {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .note-panel.hidden { display: none; }
+    .note-panel-title { color: #888; font-size: 0.75rem; }
+    .note-panel textarea {
+      background: #222;
+      border: 1px solid #444;
+      color: #ddd;
+      border-radius: 3px;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.8rem;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 2.5rem;
+      width: 100%;
+    }
+    .note-panel-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .note-panel-actions button.danger { background: #3a1a1a; border-color: #844; color: #f88; }
+    .note-panel-actions button.danger:hover { background: #4a2222; }
+    .note-hint { font-size: 0.72rem; color: #555; text-align: center; }
 
     .pb { padding-bottom: 2rem; }
   </style>
@@ -323,8 +373,21 @@
   <div class="modal-bg" onclick="closeModal()"></div>
   <div class="modal-box">
     <button class="modal-close" onclick="closeModal()">&#x2715;</button>
-    <img id="modal-img" src="" alt="">
+    <div class="modal-img-wrap" id="modal-img-wrap" onclick="modalImgClick(event)">
+      <img id="modal-img" src="" alt="">
+      <div class="note-pins" id="note-pins"></div>
+    </div>
     <div id="modal-caption" class="modal-caption"></div>
+    <div class="note-hint">Click image to add a note</div>
+    <div id="note-panel" class="note-panel hidden">
+      <div id="note-panel-title" class="note-panel-title">New note</div>
+      <textarea id="note-text" placeholder="Enter note…" rows="2"></textarea>
+      <div class="note-panel-actions">
+        <button id="note-save" onclick="noteSave()">Save</button>
+        <button id="note-delete" class="danger" onclick="noteDelete()" style="display:none">Delete</button>
+        <button onclick="noteCancel()">Cancel</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -491,34 +554,144 @@
   // ── Modal ────────────────────────────────────────────────
 
   let currentIndex = 0;
+  let currentPhotoId = null;
+  let currentNotes = [];
+  let pendingNote = null; // {x, y} for new note, or {noteId, x, y} for edit
 
   function openModal(index) {
-    currentIndex = index;
     showModalPhoto(index);
     document.getElementById('modal').classList.remove('hidden');
   }
 
   function showModalPhoto(index) {
+    currentIndex = index;
+    noteCancel();
     const p = allPhotos[index];
+    currentPhotoId = p.id;
     document.getElementById('modal-img').src = p.url;
     document.getElementById('modal-caption').textContent =
       new Date(p.captured_at).toLocaleString() + ' — ' + p.filename;
+    loadNotes();
   }
 
   function closeModal() {
+    noteCancel();
     document.getElementById('modal').classList.add('hidden');
     document.getElementById('modal-img').src = '';
+    currentPhotoId = null;
+    currentNotes = [];
   }
 
   document.addEventListener('keydown', function(e) {
     const modalOpen = !document.getElementById('modal').classList.contains('hidden');
     if (e.key === 'Escape') { closeModal(); stopAuto(); }
     if (modalOpen) {
-      if (e.key === 'ArrowRight' && currentIndex < allPhotos.length - 1) { currentIndex++; showModalPhoto(currentIndex); }
-      if (e.key === 'ArrowLeft'  && currentIndex > 0)                    { currentIndex--; showModalPhoto(currentIndex); }
+      if (e.key === 'ArrowRight' && currentIndex < allPhotos.length - 1) showModalPhoto(currentIndex + 1);
+      if (e.key === 'ArrowLeft'  && currentIndex > 0)                    showModalPhoto(currentIndex - 1);
     }
     if (e.key === 'f' || e.key === 'F') flickerToggle();
   });
+
+  // ── Notes ─────────────────────────────────────────────────
+
+  async function loadNotes() {
+    if (!currentPhotoId) return;
+    try {
+      const resp = await fetch('/photos/' + currentPhotoId + '/notes');
+      if (!resp.ok) return;
+      currentNotes = await resp.json();
+      renderPins();
+    } catch (e) { setStatus('Failed to load notes: ' + e.message); }
+  }
+
+  function renderPins() {
+    const container = document.getElementById('note-pins');
+    container.innerHTML = '';
+    currentNotes.forEach(function(note, i) {
+      const pin = document.createElement('div');
+      pin.className = 'note-pin' + (pendingNote && pendingNote.noteId === note.id ? ' selected' : '');
+      pin.style.left = (note.x * 100) + '%';
+      pin.style.top  = (note.y * 100) + '%';
+      pin.textContent = i + 1;
+      pin.title = note.note_text;
+      pin.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openEditForm(note);
+      });
+      container.appendChild(pin);
+    });
+  }
+
+  function modalImgClick(e) {
+    if (!currentPhotoId) return;
+    const wrap = document.getElementById('modal-img-wrap');
+    const img  = document.getElementById('modal-img');
+    const r = img.getBoundingClientRect();
+    // Ignore clicks outside the rendered image area (on padding of wrapper)
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top)  / r.height;
+    openCreateForm(x, y);
+  }
+
+  function openCreateForm(x, y) {
+    pendingNote = {x: x, y: y};
+    document.getElementById('note-panel-title').textContent = 'New note';
+    document.getElementById('note-text').value = '';
+    document.getElementById('note-delete').style.display = 'none';
+    document.getElementById('note-panel').classList.remove('hidden');
+    document.getElementById('note-text').focus();
+    renderPins();
+  }
+
+  function openEditForm(note) {
+    pendingNote = {noteId: note.id, x: note.x, y: note.y};
+    document.getElementById('note-panel-title').textContent = 'Edit note';
+    document.getElementById('note-text').value = note.note_text;
+    document.getElementById('note-delete').style.display = 'inline-block';
+    document.getElementById('note-panel').classList.remove('hidden');
+    document.getElementById('note-text').focus();
+    renderPins();
+  }
+
+  async function noteSave() {
+    if (!pendingNote || !currentPhotoId) return;
+    const text = document.getElementById('note-text').value.trim();
+    if (!text) return;
+    try {
+      if (pendingNote.noteId) {
+        await fetch('/notes/' + pendingNote.noteId, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({note_text: text, x: pendingNote.x, y: pendingNote.y}),
+        });
+      } else {
+        await fetch('/photos/' + currentPhotoId + '/notes', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({note_text: text, x: pendingNote.x, y: pendingNote.y}),
+        });
+      }
+    } catch (e) { setStatus('Note save failed: ' + e.message); return; }
+    noteCancel();
+    loadNotes();
+  }
+
+  async function noteDelete() {
+    if (!pendingNote || !pendingNote.noteId) return;
+    try {
+      await fetch('/notes/' + pendingNote.noteId, {method: 'DELETE'});
+    } catch (e) { setStatus('Note delete failed: ' + e.message); return; }
+    noteCancel();
+    loadNotes();
+  }
+
+  function noteCancel() {
+    pendingNote = null;
+    document.getElementById('note-panel').classList.add('hidden');
+    document.getElementById('note-text').value = '';
+    renderPins();
+  }
 
   // ── Timelapse ────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 .PHONY: test test-backend test-pi migrate seed up down build
 
-TEST_COMPOSE := docker compose -f docker-compose.test.yml
+TEST_COMPOSE := docker compose -p plant-monitoring-test -f docker-compose.test.yml
 
 test: test-backend test-pi
 
