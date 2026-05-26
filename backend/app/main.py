@@ -1,16 +1,16 @@
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Photo
+from .models import Photo, PhotoNote
 
 app = FastAPI()
 
@@ -24,6 +24,44 @@ class PhotoOut(BaseModel):
     filename: str
     captured_at: datetime
     url: str
+
+    model_config = {"from_attributes": True}
+
+
+class NoteCreate(BaseModel):
+    note_text: str
+    x: float
+    y: float
+
+    @field_validator("x", "y")
+    @classmethod
+    def must_be_normalized(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("must be between 0.0 and 1.0")
+        return v
+
+
+class NoteUpdate(BaseModel):
+    note_text: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+
+    @field_validator("x", "y")
+    @classmethod
+    def must_be_normalized(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not 0.0 <= v <= 1.0:
+            raise ValueError("must be between 0.0 and 1.0")
+        return v
+
+
+class NoteOut(BaseModel):
+    id: int
+    photo_id: int
+    note_text: str
+    x: float
+    y: float
+    created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -138,6 +176,50 @@ def list_photos(
         PhotoOut(id=p.id, filename=p.filename, captured_at=p.captured_at, url=f"/photos/{p.filename}")
         for p in q.all()
     ]
+
+
+@app.post("/photos/{photo_id}/notes", response_model=NoteOut, status_code=201)
+def create_note(photo_id: int, body: NoteCreate, db: Session = Depends(get_db)):
+    if not db.query(Photo).filter_by(id=photo_id).first():
+        raise HTTPException(status_code=404, detail="photo not found")
+    note = PhotoNote(photo_id=photo_id, note_text=body.note_text, x=body.x, y=body.y)
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@app.get("/photos/{photo_id}/notes", response_model=list[NoteOut])
+def list_notes(photo_id: int, db: Session = Depends(get_db)):
+    if not db.query(Photo).filter_by(id=photo_id).first():
+        raise HTTPException(status_code=404, detail="photo not found")
+    return db.query(PhotoNote).filter_by(photo_id=photo_id).all()
+
+
+@app.put("/notes/{note_id}", response_model=NoteOut)
+def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
+    note = db.query(PhotoNote).filter_by(id=note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="note not found")
+    if body.note_text is not None:
+        note.note_text = body.note_text
+    if body.x is not None:
+        note.x = body.x
+    if body.y is not None:
+        note.y = body.y
+    note.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+@app.delete("/notes/{note_id}", status_code=204)
+def delete_note(note_id: int, db: Session = Depends(get_db)):
+    note = db.query(PhotoNote).filter_by(id=note_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="note not found")
+    db.delete(note)
+    db.commit()
 
 
 @app.get("/photos/{filename}")
