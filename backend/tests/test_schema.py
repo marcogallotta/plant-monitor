@@ -27,7 +27,7 @@ def test_photo_notes_table_exists(engine):
 
 def test_photo_notes_columns(engine):
     cols = {c["name"] for c in inspect(engine).get_columns("photo_notes")}
-    assert cols == {"id", "photo_id", "note_text", "x", "y", "created_at", "updated_at"}
+    assert cols == {"id", "photo_id", "note_text", "x", "y", "x2", "y2", "created_at", "updated_at"}
 
 
 def test_photo_notes_photo_id_fk(engine):

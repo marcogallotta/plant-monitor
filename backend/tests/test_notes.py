@@ -16,8 +16,8 @@ def _photo(db_session, stem="2026-05-26T100000Z"):
     return photo
 
 
-def _note(db_session, photo_id, note_text="test note", x=0.5, y=0.5):
-    note = PhotoNote(photo_id=photo_id, note_text=note_text, x=x, y=y)
+def _note(db_session, photo_id, note_text="test note", x=0.5, y=0.5, x2=None, y2=None):
+    note = PhotoNote(photo_id=photo_id, note_text=note_text, x=x, y=y, x2=x2, y2=y2)
     db_session.add(note)
     db_session.commit()
     db_session.refresh(note)
@@ -40,9 +40,50 @@ def test_create_note_response_fields(client, db_session):
     assert data["note_text"] == "hello"
     assert data["x"] == 0.25
     assert data["y"] == 0.75
+    assert data["x2"] is None
+    assert data["y2"] is None
     assert "id" in data
     assert "created_at" in data
     assert "updated_at" in data
+
+
+def test_create_rect_note_returns_201(client, db_session):
+    photo = _photo(db_session)
+    resp = client.post(f"/photos/{photo.id}/notes",
+                       json={"note_text": "bad leaf", "x": 0.1, "y": 0.2, "x2": 0.4, "y2": 0.6})
+    assert resp.status_code == 201
+
+
+def test_create_rect_note_response_fields(client, db_session):
+    photo = _photo(db_session)
+    resp = client.post(f"/photos/{photo.id}/notes",
+                       json={"note_text": "pest", "x": 0.1, "y": 0.2, "x2": 0.4, "y2": 0.6})
+    data = resp.json()
+    assert data["x"] == 0.1
+    assert data["y"] == 0.2
+    assert data["x2"] == 0.4
+    assert data["y2"] == 0.6
+
+
+def test_create_rect_note_x2_out_of_range_returns_422(client, db_session):
+    photo = _photo(db_session)
+    resp = client.post(f"/photos/{photo.id}/notes",
+                       json={"note_text": "hi", "x": 0.1, "y": 0.2, "x2": 1.5, "y2": 0.6})
+    assert resp.status_code == 422
+
+
+def test_create_rect_note_x2_without_y2_returns_422(client, db_session):
+    photo = _photo(db_session)
+    resp = client.post(f"/photos/{photo.id}/notes",
+                       json={"note_text": "hi", "x": 0.1, "y": 0.2, "x2": 0.4})
+    assert resp.status_code == 422
+
+
+def test_create_rect_note_y2_without_x2_returns_422(client, db_session):
+    photo = _photo(db_session)
+    resp = client.post(f"/photos/{photo.id}/notes",
+                       json={"note_text": "hi", "x": 0.1, "y": 0.2, "y2": 0.6})
+    assert resp.status_code == 422
 
 
 def test_create_note_unknown_photo_returns_404(client):
@@ -111,6 +152,22 @@ def test_update_note_position(client, db_session):
     data = resp.json()
     assert data["x"] == 0.8
     assert data["y"] == 0.9
+
+
+def test_update_note_adds_rect(client, db_session):
+    photo = _photo(db_session)
+    note = _note(db_session, photo.id)
+    resp = client.put(f"/notes/{note.id}", json={"x2": 0.7, "y2": 0.8})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["x2"] == 0.7
+    assert data["y2"] == 0.8
+
+
+def test_update_note_rect_x2_without_y2_returns_422(client, db_session):
+    photo = _photo(db_session)
+    note = _note(db_session, photo.id)
+    assert client.put(f"/notes/{note.id}", json={"x2": 0.7}).status_code == 422
 
 
 def test_update_note_sets_updated_at(client, db_session):

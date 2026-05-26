@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -28,6 +29,8 @@ class PhotoNote(Base):
     __table_args__ = (
         CheckConstraint("x >= 0.0 AND x <= 1.0", name="photo_notes_x_range"),
         CheckConstraint("y >= 0.0 AND y <= 1.0", name="photo_notes_y_range"),
+        CheckConstraint("x2 IS NULL OR (x2 >= 0.0 AND x2 <= 1.0)", name="photo_notes_x2_range"),
+        CheckConstraint("y2 IS NULL OR (y2 >= 0.0 AND y2 <= 1.0)", name="photo_notes_y2_range"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -35,5 +38,7 @@ class PhotoNote(Base):
     note_text: Mapped[str] = mapped_column(Text, nullable=False)
     x: Mapped[float] = mapped_column(Float, nullable=False)
     y: Mapped[float] = mapped_column(Float, nullable=False)
+    x2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    y2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

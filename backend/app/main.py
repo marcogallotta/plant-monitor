@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -38,26 +38,42 @@ class NoteCreate(BaseModel):
     note_text: str
     x: float
     y: float
+    x2: Optional[float] = None
+    y2: Optional[float] = None
 
-    @field_validator("x", "y")
+    @field_validator("x", "y", "x2", "y2")
     @classmethod
-    def must_be_normalized(cls, v: float) -> float:
-        if not 0.0 <= v <= 1.0:
+    def must_be_normalized(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not 0.0 <= v <= 1.0:
             raise ValueError("must be between 0.0 and 1.0")
         return v
+
+    @model_validator(mode="after")
+    def x2_y2_must_be_paired(self) -> "NoteCreate":
+        if (self.x2 is None) != (self.y2 is None):
+            raise ValueError("x2 and y2 must both be provided or both omitted")
+        return self
 
 
 class NoteUpdate(BaseModel):
     note_text: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
+    x2: Optional[float] = None
+    y2: Optional[float] = None
 
-    @field_validator("x", "y")
+    @field_validator("x", "y", "x2", "y2")
     @classmethod
     def must_be_normalized(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and not 0.0 <= v <= 1.0:
             raise ValueError("must be between 0.0 and 1.0")
         return v
+
+    @model_validator(mode="after")
+    def x2_y2_must_be_paired(self) -> "NoteUpdate":
+        if (self.x2 is None) != (self.y2 is None):
+            raise ValueError("x2 and y2 must both be provided or both omitted")
+        return self
 
 
 class NoteOut(BaseModel):
@@ -66,6 +82,8 @@ class NoteOut(BaseModel):
     note_text: str
     x: float
     y: float
+    x2: Optional[float] = None
+    y2: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 
@@ -188,7 +206,7 @@ def list_photos(
 def create_note(photo_id: int, body: NoteCreate, db: Session = Depends(get_db)):
     if not db.query(Photo).filter_by(id=photo_id).first():
         raise HTTPException(status_code=404, detail="photo not found")
-    note = PhotoNote(photo_id=photo_id, note_text=body.note_text, x=body.x, y=body.y)
+    note = PhotoNote(photo_id=photo_id, note_text=body.note_text, x=body.x, y=body.y, x2=body.x2, y2=body.y2)
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -213,6 +231,10 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
         note.x = body.x
     if body.y is not None:
         note.y = body.y
+    if body.x2 is not None:
+        note.x2 = body.x2
+    if body.y2 is not None:
+        note.y2 = body.y2
     note.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(note)
