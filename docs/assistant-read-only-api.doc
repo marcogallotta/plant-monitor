@@ -1,0 +1,54 @@
+# Future Design Note — Assistant Read-Only API
+
+## Goal
+
+Add a small read-only API layer that allows an AI assistant to inspect the plant tracking system safely.
+
+This is not part of the current stage. It is a future convenience feature for debugging, review, planning, and guidance.
+
+The assistant should be able to answer questions like:
+
+- what photos exist for this growing unit?
+- what happened around this date?
+- show the recent evidence for this plant/batch/location
+- which photos are unclassified?
+- what notes/events are linked to this photo?
+
+## Scope
+
+Include read-only assistant endpoints for:
+
+- photos
+- growing units
+- locations
+- notes
+- events
+- summary/export views
+- optional thumbnails
+
+Do not include write access at first.
+
+## Non-goals
+
+This does not include:
+
+- direct database access
+- raw SQL access
+- delete/update endpoints
+- irrigation/control actions
+- automatic public sharing
+- unrestricted full-resolution photo dumps
+
+## Proposed endpoints
+
+```text
+GET /assistant/summary
+GET /assistant/photos
+GET /assistant/photos/{photo_id}
+GET /assistant/photos/{photo_id}/context
+GET /assistant/photos/{photo_id}/thumbnail
+GET /assistant/growing-units
+GET /assistant/growing-units/{id}/context
+GET /assistant/locations
+GET /assistant/events
+GET /assistant/unclassified
