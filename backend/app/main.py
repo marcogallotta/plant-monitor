@@ -2,8 +2,11 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -14,6 +17,15 @@ app = FastAPI()
 PHOTOS_DIR = Path("data/photos")
 
 _STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}Z$")
+
+
+class PhotoOut(BaseModel):
+    id: int
+    filename: str
+    captured_at: datetime
+    url: str
+
+    model_config = {"from_attributes": True}
 
 
 def _validated_stem(image_filename: str, metadata_filename: str) -> str:
@@ -109,3 +121,37 @@ async def upload_photo(
     _upsert_photo_record(db, stem, meta)
     db.commit()
     return {"status": "ok"}
+
+
+@app.get("/photos", response_model=list[PhotoOut])
+def list_photos(
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Photo).order_by(Photo.captured_at)
+    if start is not None:
+        q = q.filter(Photo.captured_at >= start)
+    if end is not None:
+        q = q.filter(Photo.captured_at <= end)
+    return [
+        PhotoOut(id=p.id, filename=p.filename, captured_at=p.captured_at, url=f"/photos/{p.filename}")
+        for p in q.all()
+    ]
+
+
+@app.get("/photos/{filename}")
+def serve_photo(filename: str, db: Session = Depends(get_db)):
+    path = Path(filename)
+    if path.suffix != ".jpg" or not _STEM_RE.match(path.stem):
+        raise HTTPException(status_code=422, detail="invalid filename format")
+
+    photo = db.query(Photo).filter_by(filename=filename).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+
+    file_path = PHOTOS_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="photo file not found on disk")
+
+    return FileResponse(file_path)
