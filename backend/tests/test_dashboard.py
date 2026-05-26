@@ -25,3 +25,10 @@ def test_dashboard_has_comparison_view(client):
 def test_dashboard_has_flicker_control(client):
     resp = client.get("/")
     assert b"flicker" in resp.content.lower()
+
+
+def test_dashboard_has_timelapse_controls(client):
+    resp = client.get("/")
+    assert b"timelapse" in resp.content.lower()
+    assert b"play" in resp.content.lower()
+    assert b"prev" in resp.content.lower() or b"previous" in resp.content.lower()

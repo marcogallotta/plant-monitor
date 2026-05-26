@@ -294,6 +294,28 @@
   </div>
 </div>
 
+<!-- Timelapse panel -->
+<div class="compare-panel" style="margin-top:0.5rem;">
+  <div class="compare-header">
+    <h2>Timelapse</h2>
+    <span id="tl-counter" style="font-size:0.75rem;color:#555;">no photos loaded</span>
+  </div>
+
+  <div style="background:#111;position:relative;min-height:120px;display:flex;align-items:center;justify-content:center;">
+    <img id="tl-img" src="" alt="" style="width:100%;max-height:60vh;object-fit:contain;display:none;">
+    <div id="tl-empty" style="color:#444;font-size:0.85rem;">Load photos in the timeline above to play</div>
+    <div id="tl-label" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.6);padding:0.2rem 0.5rem;border-radius:3px;font-size:0.7rem;color:#aaa;display:none;"></div>
+  </div>
+
+  <div class="flicker-controls">
+    <button id="tl-prev" onclick="tlPrev()" disabled>&#9664; Prev</button>
+    <button id="tl-play" onclick="tlPlayPause()" disabled>&#9654; Play</button>
+    <button id="tl-next" onclick="tlNext()" disabled>&#9654; Next</button>
+    <label>Speed <input type="range" id="tl-speed" min="1" max="24" value="4"></label>
+    <span id="tl-fps" style="font-size:0.75rem;color:#555;"></span>
+  </div>
+</div>
+
 <div class="pb"></div>
 
 <!-- Modal -->
@@ -336,6 +358,7 @@
   }
 
   function renderGrid(photos) {
+    tlInit();
     const grid = document.getElementById('photo-grid');
     grid.innerHTML = '';
     for (let i = 0; i < photos.length; i++) {
@@ -496,6 +519,74 @@
     }
     if (e.key === 'f' || e.key === 'F') flickerToggle();
   });
+
+  // ── Timelapse ────────────────────────────────────────────
+
+  let tlIndex = 0;
+  let tlTimer = null;
+
+  function tlInit() {
+    tlStop();
+    tlIndex = 0;
+    const empty = document.getElementById('tl-empty');
+    const img   = document.getElementById('tl-img');
+    const label = document.getElementById('tl-label');
+    const hasPhotos = allPhotos.length > 0;
+    empty.style.display = hasPhotos ? 'none' : 'block';
+    img.style.display   = hasPhotos ? 'block' : 'none';
+    label.style.display = hasPhotos ? 'block' : 'none';
+    document.getElementById('tl-prev').disabled = !hasPhotos;
+    document.getElementById('tl-play').disabled = !hasPhotos;
+    document.getElementById('tl-next').disabled = !hasPhotos;
+    if (hasPhotos) tlShowFrame();
+  }
+
+  function tlShowFrame() {
+    const p = allPhotos[tlIndex];
+    document.getElementById('tl-img').src = p.url;
+    document.getElementById('tl-label').textContent = new Date(p.captured_at).toLocaleString();
+    document.getElementById('tl-counter').textContent = (tlIndex + 1) + ' / ' + allPhotos.length;
+  }
+
+  function tlPlayPause() {
+    if (tlTimer) { tlStop(); return; }
+    const btn = document.getElementById('tl-play');
+    btn.textContent = '⏸ Pause';
+    btn.classList.add('active');
+    const fps = parseInt(document.getElementById('tl-speed').value, 10);
+    tlTimer = setInterval(function() {
+      tlIndex = (tlIndex + 1) % allPhotos.length;
+      tlShowFrame();
+    }, 1000 / fps);
+  }
+
+  function tlStop() {
+    if (tlTimer) { clearInterval(tlTimer); tlTimer = null; }
+    const btn = document.getElementById('tl-play');
+    btn.textContent = '▶ Play';
+    btn.classList.remove('active');
+  }
+
+  function tlPrev() {
+    tlStop();
+    tlIndex = (tlIndex - 1 + allPhotos.length) % allPhotos.length;
+    tlShowFrame();
+  }
+
+  function tlNext() {
+    tlStop();
+    tlIndex = (tlIndex + 1) % allPhotos.length;
+    tlShowFrame();
+  }
+
+  function tlFps() { return parseInt(document.getElementById('tl-speed').value, 10); }
+
+  document.getElementById('tl-speed').addEventListener('input', function() {
+    document.getElementById('tl-fps').textContent = tlFps() + ' fps';
+    if (tlTimer) { tlStop(); tlPlayPause(); }
+  });
+
+  document.getElementById('tl-fps').textContent = tlFps() + ' fps';
 
   updateFlickerFps();
   loadPhotos();
