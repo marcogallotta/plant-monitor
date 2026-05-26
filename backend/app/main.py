@@ -1,3 +1,4 @@
+import io
 import json
 import re
 import uuid
@@ -6,7 +7,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
+from PIL import Image
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
@@ -640,6 +642,172 @@ def create_event(body: EventCreate, db: Session = Depends(get_db)):
 def list_events(db: Session = Depends(get_db)):
     events = db.query(Event).order_by(Event.event_at.desc()).all()
     return [_event_out(ev, db) for ev in events]
+
+
+# --- Assistant read-only API ---
+
+class AssistantSummary(BaseModel):
+    photo_count: int
+    unclassified_count: int
+    growing_unit_count: int
+    location_count: int
+    event_count: int
+    recent_photos: list[PhotoOut]
+
+
+class PhotoContext(BaseModel):
+    photo: PhotoOut
+    notes: list[NoteOut]
+    events: list[EventOut]
+
+
+class GrowingUnitContext(BaseModel):
+    growing_unit: GrowingUnitOut
+    photos: list[PhotoOut]
+    events: list[EventOut]
+
+
+@app.get("/assistant/summary", response_model=AssistantSummary)
+def assistant_summary(db: Session = Depends(get_db)):
+    photo_count = db.query(Photo).count()
+    unclassified_count = db.query(Photo).filter(Photo.photo_type.is_(None)).count()
+    growing_unit_count = db.query(GrowingUnit).count()
+    location_count = db.query(Location).count()
+    event_count = db.query(Event).count()
+    recent = db.query(Photo).order_by(Photo.captured_at.desc()).limit(5).all()
+    return AssistantSummary(
+        photo_count=photo_count,
+        unclassified_count=unclassified_count,
+        growing_unit_count=growing_unit_count,
+        location_count=location_count,
+        event_count=event_count,
+        recent_photos=[_photo_out(p, db) for p in recent],
+    )
+
+
+@app.get("/assistant/photos", response_model=list[PhotoOut])
+def assistant_list_photos(
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    source: Optional[str] = Query(None),
+    photo_type: Optional[str] = Query(None),
+    location_id: Optional[int] = Query(None),
+    growing_unit_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Photo).order_by(Photo.captured_at)
+    if start is not None:
+        q = q.filter(Photo.captured_at >= start)
+    if end is not None:
+        q = q.filter(Photo.captured_at <= end)
+    if source is not None:
+        q = q.filter(Photo.source == source)
+    if photo_type is not None:
+        q = q.filter(Photo.photo_type == photo_type)
+    if location_id is not None:
+        q = q.filter(Photo.location_id == location_id)
+    if growing_unit_id is not None:
+        q = q.join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id).filter(
+            PhotoGrowingUnit.growing_unit_id == growing_unit_id
+        )
+    return [_photo_out(p, db) for p in q.all()]
+
+
+@app.get("/assistant/photos/{photo_id}/context", response_model=PhotoContext)
+def assistant_photo_context(photo_id: int, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    notes = db.query(PhotoNote).filter_by(photo_id=photo_id).all()
+    events = (
+        db.query(Event)
+        .join(EventPhoto, EventPhoto.event_id == Event.id)
+        .filter(EventPhoto.photo_id == photo_id)
+        .all()
+    )
+    return PhotoContext(
+        photo=_photo_out(photo, db),
+        notes=notes,
+        events=[_event_out(ev, db) for ev in events],
+    )
+
+
+@app.get("/assistant/photos/{photo_id}/thumbnail")
+def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    file_path = Path(photo.storage_path).resolve()
+    try:
+        file_path.relative_to(PHOTOS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="photo not found")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="photo file not found on disk")
+    try:
+        img = Image.open(file_path)
+        img.load()
+    except Exception:
+        raise HTTPException(status_code=422, detail="photo file could not be decoded")
+    img.thumbnail((256, 256))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return Response(content=buf.getvalue(), media_type="image/jpeg")
+
+
+@app.get("/assistant/photos/{photo_id}", response_model=PhotoOut)
+def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    return _photo_out(photo, db)
+
+
+@app.get("/assistant/growing-units", response_model=list[GrowingUnitOut])
+def assistant_list_growing_units(db: Session = Depends(get_db)):
+    return db.query(GrowingUnit).order_by(GrowingUnit.name).all()
+
+
+@app.get("/assistant/growing-units/{unit_id}/context", response_model=GrowingUnitContext)
+def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
+    unit = db.query(GrowingUnit).filter_by(id=unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="growing unit not found")
+    photos = (
+        db.query(Photo)
+        .join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id)
+        .filter(PhotoGrowingUnit.growing_unit_id == unit_id)
+        .order_by(Photo.captured_at)
+        .all()
+    )
+    events = (
+        db.query(Event)
+        .join(EventGrowingUnit, EventGrowingUnit.event_id == Event.id)
+        .filter(EventGrowingUnit.growing_unit_id == unit_id)
+        .order_by(Event.event_at.desc())
+        .all()
+    )
+    return GrowingUnitContext(
+        growing_unit=unit,
+        photos=[_photo_out(p, db) for p in photos],
+        events=[_event_out(ev, db) for ev in events],
+    )
+
+
+@app.get("/assistant/locations", response_model=list[LocationOut])
+def assistant_list_locations(db: Session = Depends(get_db)):
+    return db.query(Location).order_by(Location.name).all()
+
+
+@app.get("/assistant/events", response_model=list[EventOut])
+def assistant_list_events(db: Session = Depends(get_db)):
+    return [_event_out(ev, db) for ev in db.query(Event).order_by(Event.event_at.desc()).all()]
+
+
+@app.get("/assistant/unclassified", response_model=list[PhotoOut])
+def assistant_unclassified(db: Session = Depends(get_db)):
+    photos = db.query(Photo).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
+    return [_photo_out(p, db) for p in photos]
 
 
 @app.get("/photos/{filename}")
