@@ -1,10 +1,11 @@
 import json
 import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
@@ -23,6 +24,7 @@ def dashboard():
     return HTMLResponse((_STATIC_DIR / "index.html").read_text())
 
 _STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}Z$")
+_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.jpg$")
 
 
 class LocationCreate(BaseModel):
@@ -418,6 +420,78 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
     return _photo_out(photo, db)
 
 
+@app.post("/manual-photos", response_model=PhotoOut, status_code=201)
+async def upload_manual_photo(
+    image: UploadFile = File(...),
+    captured_at: Optional[str] = Form(None),
+    photo_type: Optional[str] = Form(None),
+    location_id: Optional[int] = Form(None),
+    growing_unit_ids: Optional[List[int]] = Form(None),
+    note_text: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    if image.content_type not in {"image/jpeg", "image/jpg"}:
+        raise HTTPException(status_code=415, detail="manual uploads must be JPEG")
+
+    _check_location_exists(location_id, db)
+    for uid in (growing_unit_ids or []):
+        if not db.query(GrowingUnit).filter_by(id=uid).first():
+            raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+
+    if captured_at is not None:
+        try:
+            parsed_at = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="invalid captured_at format")
+    else:
+        parsed_at = datetime.now(timezone.utc)
+
+    image_bytes = await image.read()
+    original_filename = image.filename
+
+    stem = uuid.uuid4().hex
+    filename = f"{stem}.jpg"
+
+    PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+    image_path = PHOTOS_DIR / filename
+    tmp_path = image_path.with_suffix(".jpg.tmp")
+    try:
+        tmp_path.write_bytes(image_bytes)
+        tmp_path.rename(image_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    photo = Photo(
+        filename=filename,
+        captured_at=parsed_at,
+        storage_path=str(image_path),
+        metadata_path="",
+        source="manual",
+        photo_type=photo_type,
+        original_filename=original_filename,
+        location_id=location_id,
+    )
+    db.add(photo)
+    db.flush()
+
+    for uid in (growing_unit_ids or []):
+        db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=uid))
+
+    if note_text:
+        db.add(PhotoNote(photo_id=photo.id, note_text=note_text, x=0.0, y=0.0))
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        image_path.unlink(missing_ok=True)
+        raise
+
+    db.refresh(photo)
+    return _photo_out(photo, db)
+
+
 @app.post("/photos/{photo_id}/notes", response_model=NoteOut, status_code=201)
 def create_note(photo_id: int, body: NoteCreate, db: Session = Depends(get_db)):
     if not db.query(Photo).filter_by(id=photo_id).first():
@@ -468,15 +542,19 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
 
 @app.get("/photos/{filename}")
 def serve_photo(filename: str, db: Session = Depends(get_db)):
-    path = Path(filename)
-    if path.suffix != ".jpg" or not _STEM_RE.match(path.stem):
+    if not _SAFE_FILENAME_RE.match(filename):
         raise HTTPException(status_code=422, detail="invalid filename format")
 
     photo = db.query(Photo).filter_by(filename=filename).first()
     if not photo:
         raise HTTPException(status_code=404, detail="photo not found")
 
-    file_path = PHOTOS_DIR / filename
+    file_path = Path(photo.storage_path).resolve()
+    try:
+        file_path.relative_to(PHOTOS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="photo not found")
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="photo file not found on disk")
 

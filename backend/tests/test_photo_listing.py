@@ -1,14 +1,16 @@
 from datetime import datetime
+import app.main
 from app.models import Photo, PhotoGrowingUnit
 
 
 def _photo(db_session, stem, captured_at_str, **kwargs):
     captured_at = datetime.fromisoformat(captured_at_str.replace("Z", "+00:00"))
+    photos_dir = app.main.PHOTOS_DIR
     photo = Photo(
         filename=f"{stem}.jpg",
         captured_at=captured_at,
-        storage_path=f"data/photos/{stem}.jpg",
-        metadata_path=f"data/photos/{stem}.json",
+        storage_path=str(photos_dir / f"{stem}.jpg"),
+        metadata_path=str(photos_dir / f"{stem}.json"),
         **kwargs,
     )
     db_session.add(photo)

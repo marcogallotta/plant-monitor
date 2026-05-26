@@ -1,14 +1,16 @@
 from datetime import datetime
+import app.main
 from app.models import Photo
 
 
 def _photo(db_session, stem, captured_at_str):
     captured_at = datetime.fromisoformat(captured_at_str.replace("Z", "+00:00"))
+    photos_dir = app.main.PHOTOS_DIR
     photo = Photo(
         filename=f"{stem}.jpg",
         captured_at=captured_at,
-        storage_path=f"data/photos/{stem}.jpg",
-        metadata_path=f"data/photos/{stem}.json",
+        storage_path=str(photos_dir / f"{stem}.jpg"),
+        metadata_path=str(photos_dir / f"{stem}.json"),
     )
     db_session.add(photo)
     db_session.commit()
@@ -92,7 +94,8 @@ def test_serve_photo_invalid_extension_returns_422(client):
 
 
 def test_serve_photo_invalid_stem_returns_422(client):
-    assert client.get("/photos/notadate.jpg").status_code == 422
+    # contains '!' which fails the safe filename regex
+    assert client.get("/photos/not_valid!.jpg").status_code == 422
 
 
 def test_serve_photo_path_traversal_does_not_serve_file(client):
