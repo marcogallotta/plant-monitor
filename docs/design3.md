@@ -470,13 +470,36 @@ Stage 3 is done when:
 
 ## Suggested implementation order
 
-1. Add `growing_units`, `locations`, `photo_growing_units`, and photo identity fields.
-2. Add growing unit and location API endpoints.
-3. Extend photo responses and filters.
-4. Add manual photo upload endpoint.
-5. Add photo classification update endpoint.
-6. Add dashboard dropdown loading, upload panel, filters, and identity display.
-7. Add tests.
-8. Add simple structured events as the final sub-stage.
+Stage 3 is split into six sub-stages. Each sub-stage should have passing tests before moving on.
+
+**3.1 — Schema & migrations**
+- New tables: `growing_units`, `locations`, `photo_growing_units`
+- New columns on `photos`: `source`, `photo_type`, `original_filename`, `location_id`
+- Migration script and schema tests
+
+**3.2 — Growing units & locations API**
+- `POST/GET/GET{id}/PUT` for `growing_units` and `locations`
+- Tests: create, list, get, update for each
+
+**3.3 — Extend photo model, listing, and classification**
+- Extend `GET /photos` with new filters (`source`, `photo_type`, `location_id`, `growing_unit_id`) and richer response fields (source, type, original filename, location, linked units)
+- `PUT /photos/{id}` for reclassifying type/location/units after upload
+- Tests: filtering, classification update, verify Pi upload still sets `source='pi'`
+
+**3.4 — Manual photo upload**
+- `POST /manual-photos`: safe backend filename, preserve `original_filename`, set `source='manual'`, link units/location, optional initial note
+- Tests: file storage, photo row, source, original filename, unit linking, location linking, initial note
+
+**3.5 — Dashboard identity, upload panel, and filters**
+- Manual upload form (file, captured_at, type, location, units, note)
+- Filters sidebar (source, type, location, growing unit, date range)
+- Photo detail identity panel (show and edit type/location/units)
+- Existing zoom, notes, flicker, comparison, and timelapse must keep working
+
+**3.6 — Structured events**
+- New tables: `events`, `event_growing_units`, `event_photos`
+- Event API endpoints
+- Quick-add event UI in dashboard
+- Tests: event creation, linking to units/photos/location
 
 Keep the implementation boring, small, and compatible with the existing simple app.
