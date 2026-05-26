@@ -283,6 +283,59 @@ Required features:
 - notes display on or near the relevant photo
 - notes can be edited and deleted
 
+## Sub-stages
+
+### 2.1 — Database foundation
+
+- Add Postgres service to Docker Compose
+- Add database driver and migration tool to backend requirements
+- Write and run migrations for `photos` and `photo_notes` tables
+
+### 2.2 — Upload integration with DB
+
+- Update `POST /photos` to upsert a `photos` record after writing files to disk
+- Repeated upload of the same filename must not create duplicate database rows
+
+### 2.3 — List and serve photos
+
+- `GET /photos` — list photos sorted by `captured_at`, with optional `start`/`end` filter
+- `GET /photos/{filename}` — serve image file from disk with safe path validation
+
+### 2.4 — Notes API
+
+- `POST /photos/{photo_id}/notes`
+- `GET /photos/{photo_id}/notes`
+- `PUT /notes/{note_id}`
+- `DELETE /notes/{note_id}`
+
+### 2.5 — Seed script
+
+- Dev script that downloads 3 Picsum images, creates matching metadata JSON, and uploads each pair through `POST /photos`
+
+### 2.6 — Dashboard: photo timeline and viewer
+
+- HTML page served by FastAPI
+- Lists photos in capture-time order
+- Optional time-range filter
+- Click a photo to view it larger
+
+### 2.7 — Dashboard: comparison and flicker
+
+- Select photo A and photo B
+- Side-by-side comparison view
+- Flicker/toggle between A and B to spot visual changes
+
+### 2.8 — Dashboard: timelapse playback
+
+- Play a sequence of photos in order
+- Controls: play/pause, previous/next, optional speed
+
+### 2.9 — Dashboard: notes UI
+
+- Click on a photo to place a note at that image position
+- Notes displayed on or near the photo
+- Notes can be edited and deleted
+
 ## Acceptance criteria
 
 Stage 2 is done when:
