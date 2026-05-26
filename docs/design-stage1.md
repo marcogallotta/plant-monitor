@@ -37,6 +37,18 @@ Does not include:
 
 Use shell commands such as `ls`/`find` to inspect files.
 
+## Pi configuration
+
+Pi reads backend URL from a config file (e.g. `config.json`). Backend is addressed by DNS hostname.
+
+Example:
+
+```json
+{
+  "backend_url": "http://marco-laptop.local:8000"
+}
+```
+
 ## Backend
 
 Fresh repo.
@@ -100,6 +112,7 @@ Rules:
 - never delete unuploaded photos
 - move successfully uploaded photos and metadata to `uploaded/`
 - treat upload as complete only after backend success response
+- TODO: handle move failure after successful upload (e.g. disk full) — for now, file stays in capture folder and will be re-uploaded on next scan
 
 ## Pi cleanup
 
