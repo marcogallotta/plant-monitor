@@ -239,8 +239,19 @@
     .modal-close { position: absolute; top: -2rem; right: 0; background: none; border: none; color: #aaa; font-size: 1.4rem; cursor: pointer; line-height: 1; }
     .modal-close:hover { color: #fff; }
 
+    /* Zoom viewport */
+    #zoom-viewport {
+      display: inline-block;
+      overflow: hidden;
+      position: relative;
+      cursor: grab;
+      user-select: none;
+      max-width: 100%;
+    }
+    #zoom-viewport.grabbing { cursor: grabbing; }
+
     /* Notes */
-    .modal-img-wrap { position: relative; display: inline-block; line-height: 0; max-width: 100%; cursor: crosshair; }
+    .modal-img-wrap { position: relative; display: inline-block; line-height: 0; max-width: 100%; transform-origin: 0 0; will-change: transform; }
     .modal-img-wrap img { max-width: 100%; max-height: 72vh; border-radius: 4px; display: block; }
     .note-pins { position: absolute; inset: 0; pointer-events: none; }
     .note-pin {
@@ -373,12 +384,14 @@
   <div class="modal-bg" onclick="closeModal()"></div>
   <div class="modal-box">
     <button class="modal-close" onclick="closeModal()">&#x2715;</button>
-    <div class="modal-img-wrap" id="modal-img-wrap" onclick="modalImgClick(event)">
-      <img id="modal-img" src="" alt="">
-      <div class="note-pins" id="note-pins"></div>
+    <div id="zoom-viewport">
+      <div class="modal-img-wrap" id="modal-img-wrap" onclick="modalImgClick(event)">
+        <img id="modal-img" src="" alt="">
+        <div class="note-pins" id="note-pins"></div>
+      </div>
     </div>
     <div id="modal-caption" class="modal-caption"></div>
-    <div class="note-hint">Click image to add a note</div>
+    <div class="note-hint">Scroll to zoom · drag to pan · click to add a note</div>
     <div id="note-panel" class="note-panel hidden">
       <div id="note-panel-title" class="note-panel-title">New note</div>
       <textarea id="note-text" placeholder="Enter note…" rows="2"></textarea>
@@ -558,6 +571,28 @@
   let currentNotes = [];
   let pendingNote = null; // {x, y} for new note, or {noteId, x, y} for edit
 
+  // ── Zoom / pan ───────────────────────────────────────────
+  let zoom = 1, panX = 0, panY = 0;
+  let isPanning = false, panStart = null, wasDrag = false;
+
+  function applyTransform() {
+    document.getElementById('modal-img-wrap').style.transform =
+      'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoom + ')';
+  }
+
+  function resetZoom() {
+    zoom = 1; panX = 0; panY = 0;
+    applyTransform();
+  }
+
+  function clampPan() {
+    const img = document.getElementById('modal-img');
+    const W = img.offsetWidth, H = img.offsetHeight;
+    // panX/panY are in screen pixels; image occupies [panX, panX+zoom*W] × [panY, panY+zoom*H]
+    panX = Math.min(0, Math.max(W  * (1 - zoom), panX));
+    panY = Math.min(0, Math.max(H * (1 - zoom), panY));
+  }
+
   function openModal(index) {
     showModalPhoto(index);
     document.getElementById('modal').classList.remove('hidden');
@@ -565,6 +600,7 @@
 
   function showModalPhoto(index) {
     currentIndex = index;
+    resetZoom();
     noteCancel();
     const p = allPhotos[index];
     currentPhotoId = p.id;
@@ -623,6 +659,7 @@
   }
 
   function modalImgClick(e) {
+    if (wasDrag) { wasDrag = false; return; }
     if (!currentPhotoId) return;
     const wrap = document.getElementById('modal-img-wrap');
     const img  = document.getElementById('modal-img');
@@ -760,6 +797,53 @@
   });
 
   document.getElementById('tl-fps').textContent = tlFps() + ' fps';
+
+  // ── Zoom / pan events ────────────────────────────────────
+
+  var zoomViewport = document.getElementById('zoom-viewport');
+
+  zoomViewport.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    var rect = this.getBoundingClientRect();
+    var cx = e.clientX - rect.left;
+    var cy = e.clientY - rect.top;
+    var factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    var newZoom = Math.min(Math.max(zoom * factor, 1), 10);
+    // Keep the point under the cursor fixed: cx = panX + zoom*lx = newPanX + newZoom*lx
+    // => newPanX = cx - (newZoom/zoom) * (cx - panX)
+    panX = cx - (newZoom / zoom) * (cx - panX);
+    panY = cy - (newZoom / zoom) * (cy - panY);
+    zoom = newZoom;
+    clampPan();
+    applyTransform();
+  }, { passive: false });
+
+  zoomViewport.addEventListener('mousedown', function(e) {
+    if (e.button !== 0 || zoom <= 1) return;
+    isPanning = true;
+    wasDrag = false;
+    panStart = { x: e.clientX, y: e.clientY, panX: panX, panY: panY };
+    this.classList.add('grabbing');
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!isPanning) return;
+    var dx = e.clientX - panStart.x;
+    var dy = e.clientY - panStart.y;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) wasDrag = true;
+    // panX/panY are screen pixels — no /zoom needed
+    panX = panStart.panX + dx;
+    panY = panStart.panY + dy;
+    clampPan();
+    applyTransform();
+  });
+
+  document.addEventListener('mouseup', function(e) {
+    if (!isPanning) return;
+    isPanning = false;
+    document.getElementById('zoom-viewport').classList.remove('grabbing');
+  });
 
   updateFlickerFps();
   loadPhotos();
