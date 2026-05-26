@@ -17,9 +17,6 @@
     header {
       padding: 1rem 1.5rem;
       border-bottom: 1px solid #333;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
     }
 
     header h1 { font-size: 1.1rem; font-weight: 600; color: #fff; }
@@ -45,7 +42,7 @@
       font-size: 0.8rem;
     }
 
-    .filters button {
+    button {
       background: #2a2a2a;
       border: 1px solid #444;
       color: #ddd;
@@ -55,20 +52,22 @@
       font-size: 0.8rem;
     }
 
-    .filters button:hover { background: #333; }
+    button:hover { background: #333; }
+    button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 
     #status {
-      padding: 0.5rem 1.5rem;
-      font-size: 0.8rem;
-      color: #666;
-      min-height: 1.8rem;
+      padding: 0.4rem 1.5rem;
+      font-size: 0.75rem;
+      color: #555;
+      min-height: 1.6rem;
     }
 
+    /* Timeline grid */
     .photo-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 4px;
-      padding: 4px 1.5rem 1.5rem;
+      padding: 4px 1.5rem;
     }
 
     .photo-card {
@@ -87,95 +86,218 @@
       transition: opacity 0.15s;
     }
 
-    .photo-card:hover img { opacity: 0.85; }
+    .photo-card:hover img { opacity: 0.8; }
 
     .photo-card .caption {
       position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
+      bottom: 0; left: 0; right: 0;
       padding: 0.4rem 0.5rem;
       font-size: 0.7rem;
       color: #ccc;
-      background: linear-gradient(transparent, rgba(0,0,0,0.7));
+      background: linear-gradient(transparent, rgba(0,0,0,0.75));
       pointer-events: none;
     }
 
-    /* Modal */
-    .modal {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
+    /* A/B buttons on cards */
+    .card-ab {
+      position: absolute;
+      top: 4px; left: 4px;
+      display: flex;
+      gap: 3px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .photo-card:hover .card-ab { opacity: 1; }
+
+    .card-ab button {
+      padding: 0 0.4rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border-radius: 3px;
+      line-height: 1.6;
+    }
+
+    .card-ab button.sel-a { background: #1a2a4a; border-color: #48f; color: #8af; }
+    .card-ab button.sel-b { background: #2a1a4a; border-color: #a4f; color: #c8f; }
+    .card-ab button.sel-a.active { background: #2a4a8a; border-color: #6af; }
+    .card-ab button.sel-b.active { background: #4a2a8a; border-color: #c6f; }
+
+    /* Compare panel */
+    .compare-panel {
+      margin: 1rem 1.5rem;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      background: #161616;
+      overflow: hidden;
+    }
+
+    .compare-header {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid #222;
       display: flex;
       align-items: center;
-      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
     }
 
-    .modal.hidden { display: none; }
+    .compare-header h2 { font-size: 0.85rem; font-weight: 600; color: #aaa; }
 
-    .modal-bg {
-      position: absolute;
-      inset: 0;
-      background: rgba(0,0,0,0.85);
-      cursor: pointer;
+    .compare-slots {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: #222;
     }
 
-    .modal-box {
-      position: relative;
-      z-index: 1;
-      max-width: 92vw;
-      max-height: 90vh;
+    .compare-slot {
+      background: #111;
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      padding: 1rem;
     }
 
-    .modal-box img {
-      max-width: 100%;
-      max-height: 80vh;
-      border-radius: 4px;
+    .compare-slot img {
+      width: 100%;
+      max-height: 50vh;
+      object-fit: contain;
       display: block;
+      border-radius: 4px;
     }
 
-    .modal-caption {
+    .compare-slot .slot-label {
+      font-size: 0.7rem;
+      color: #666;
+      margin-bottom: 0.5rem;
+      align-self: flex-start;
+    }
+
+    .compare-slot .slot-caption {
+      font-size: 0.7rem;
+      color: #666;
+      margin-top: 0.4rem;
+      align-self: flex-start;
+    }
+
+    .compare-slot .slot-empty {
+      color: #444;
       font-size: 0.8rem;
-      color: #aaa;
       text-align: center;
     }
 
-    .modal-close {
-      position: absolute;
-      top: -2rem;
-      right: 0;
-      background: none;
-      border: none;
-      color: #aaa;
-      font-size: 1.4rem;
-      cursor: pointer;
-      line-height: 1;
+    /* Flicker */
+    .flicker-controls {
+      padding: 0.6rem 1rem;
+      border-top: 1px solid #222;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
 
+    .flicker-controls label { font-size: 0.8rem; color: #888; display: flex; align-items: center; gap: 0.4rem; }
+
+    .flicker-controls input[type="range"] { width: 80px; accent-color: #68f; }
+
+    .flicker-view {
+      display: none;
+      position: relative;
+      background: #111;
+    }
+
+    .flicker-view.visible { display: block; }
+
+    .flicker-view img {
+      width: 100%;
+      max-height: 60vh;
+      object-fit: contain;
+      display: block;
+    }
+
+    .flicker-view .flicker-label {
+      position: absolute;
+      top: 8px; left: 8px;
+      background: rgba(0,0,0,0.6);
+      padding: 0.2rem 0.5rem;
+      border-radius: 3px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .flicker-label.a { color: #8af; }
+    .flicker-label.b { color: #c8f; }
+
+    /* Modal */
+    .modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; }
+    .modal.hidden { display: none; }
+    .modal-bg { position: absolute; inset: 0; background: rgba(0,0,0,0.85); cursor: pointer; }
+    .modal-box { position: relative; z-index: 1; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column; gap: 0.5rem; }
+    .modal-box img { max-width: 100%; max-height: 80vh; border-radius: 4px; display: block; }
+    .modal-caption { font-size: 0.8rem; color: #aaa; text-align: center; }
+    .modal-close { position: absolute; top: -2rem; right: 0; background: none; border: none; color: #aaa; font-size: 1.4rem; cursor: pointer; line-height: 1; }
     .modal-close:hover { color: #fff; }
+
+    .pb { padding-bottom: 2rem; }
   </style>
 </head>
 <body>
 
-<header>
-  <h1>Plant Monitor</h1>
-</header>
+<header><h1>Plant Monitor</h1></header>
 
 <div class="filters">
   <label>From <input type="datetime-local" id="start"></label>
-  <label>To <input type="datetime-local" id="end"></label>
+  <label>To   <input type="datetime-local" id="end"></label>
   <button onclick="applyFilter()">Filter</button>
   <button onclick="clearFilter()">Clear</button>
 </div>
 
 <div id="status"></div>
-
 <div id="photo-grid" class="photo-grid"></div>
 
-<div id="modal" class="modal hidden" onkeydown="handleKey(event)">
+<!-- Comparison panel -->
+<div class="compare-panel">
+  <div class="compare-header">
+    <h2>Compare</h2>
+    <span id="compare-hint" style="font-size:0.75rem;color:#555;">
+      Click <strong style="color:#8af">A</strong> / <strong style="color:#c8f">B</strong> on any photo above to select
+    </span>
+  </div>
+
+  <div class="compare-slots">
+    <div class="compare-slot" id="slot-a">
+      <div class="slot-label" style="color:#8af">Photo A</div>
+      <div class="slot-empty" id="slot-a-empty">not selected</div>
+      <img id="img-a" src="" alt="" style="display:none">
+      <div class="slot-caption" id="cap-a"></div>
+    </div>
+    <div class="compare-slot" id="slot-b">
+      <div class="slot-label" style="color:#c8f">Photo B</div>
+      <div class="slot-empty" id="slot-b-empty">not selected</div>
+      <img id="img-b" src="" alt="" style="display:none">
+      <div class="slot-caption" id="cap-b"></div>
+    </div>
+  </div>
+
+  <div class="flicker-controls">
+    <button id="btn-toggle" onclick="flickerToggle()" disabled>Toggle A/B</button>
+    <button id="btn-auto"   onclick="flickerAuto()"   disabled>Auto flicker</button>
+    <label>Speed <input type="range" id="flicker-speed" min="1" max="20" value="4"></label>
+    <span id="flicker-fps" style="font-size:0.75rem;color:#555;"></span>
+  </div>
+
+  <div class="flicker-view" id="flicker-view">
+    <img id="flicker-img" src="" alt="">
+    <div class="flicker-label" id="flicker-label"></div>
+  </div>
+</div>
+
+<div class="pb"></div>
+
+<!-- Modal -->
+<div id="modal" class="modal hidden">
   <div class="modal-bg" onclick="closeModal()"></div>
   <div class="modal-box">
     <button class="modal-close" onclick="closeModal()">&#x2715;</button>
@@ -186,16 +308,20 @@
 
 <script>
   let allPhotos = [];
+  let photoA = null, photoB = null;
+  let flickerShowing = 'a';
+  let flickerTimer = null;
+
+  // ── Timeline ──────────────────────────────────────────────
 
   async function loadPhotos() {
     const start = document.getElementById('start').value;
     const end   = document.getElementById('end').value;
-
     let url = '/photos';
-    const params = [];
-    if (start) params.push('start=' + encodeURIComponent(new Date(start).toISOString()));
-    if (end)   params.push('end='   + encodeURIComponent(new Date(end).toISOString()));
-    if (params.length) url += '?' + params.join('&');
+    const p = [];
+    if (start) p.push('start=' + encodeURIComponent(new Date(start).toISOString()));
+    if (end)   p.push('end='   + encodeURIComponent(new Date(end).toISOString()));
+    if (p.length) url += '?' + p.join('&');
 
     setStatus('Loading…');
     try {
@@ -214,34 +340,139 @@
     grid.innerHTML = '';
     for (let i = 0; i < photos.length; i++) {
       const p = photos[i];
+      const isA = photoA && photoA.id === p.id;
+      const isB = photoB && photoB.id === p.id;
       const card = document.createElement('div');
       card.className = 'photo-card';
-      card.dataset.index = i;
-      card.onclick = () => openModal(i);
+      card.dataset.id = p.id;
       const ts = new Date(p.captured_at).toLocaleString();
       card.innerHTML =
-        '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy">' +
+        '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
+        '<div class="card-ab">' +
+          '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
+          '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
+        '</div>' +
         '<div class="caption">' + ts + '</div>';
       grid.appendChild(card);
     }
   }
 
   function applyFilter() { loadPhotos(); }
-
   function clearFilter() {
     document.getElementById('start').value = '';
     document.getElementById('end').value   = '';
     loadPhotos();
   }
+  function setStatus(msg) { document.getElementById('status').textContent = msg; }
 
-  // Modal
+  // ── A/B selection ────────────────────────────────────────
+
+  function selectA(e, idx) {
+    e.stopPropagation();
+    photoA = allPhotos[idx];
+    updateCompare();
+    renderGrid(allPhotos);
+  }
+
+  function selectB(e, idx) {
+    e.stopPropagation();
+    photoB = allPhotos[idx];
+    updateCompare();
+    renderGrid(allPhotos);
+  }
+
+  function updateCompare() {
+    const ready = photoA && photoB;
+
+    // Slot A
+    if (photoA) {
+      document.getElementById('slot-a-empty').style.display = 'none';
+      const img = document.getElementById('img-a');
+      img.src = photoA.url;
+      img.style.display = 'block';
+      document.getElementById('cap-a').textContent = new Date(photoA.captured_at).toLocaleString();
+    }
+
+    // Slot B
+    if (photoB) {
+      document.getElementById('slot-b-empty').style.display = 'none';
+      const img = document.getElementById('img-b');
+      img.src = photoB.url;
+      img.style.display = 'block';
+      document.getElementById('cap-b').textContent = new Date(photoB.captured_at).toLocaleString();
+    }
+
+    document.getElementById('btn-toggle').disabled = !ready;
+    document.getElementById('btn-auto').disabled   = !ready;
+    updateFlickerFps();
+  }
+
+  // ── Flicker ──────────────────────────────────────────────
+
+  function flickerToggle() {
+    stopAuto();
+    toggleFlickerFrame();
+    showFlickerView();
+  }
+
+  function toggleFlickerFrame() {
+    if (!photoA || !photoB) return;
+    flickerShowing = flickerShowing === 'a' ? 'b' : 'a';
+    const photo = flickerShowing === 'a' ? photoA : photoB;
+    document.getElementById('flicker-img').src = photo.url;
+    const lbl = document.getElementById('flicker-label');
+    lbl.textContent = flickerShowing.toUpperCase();
+    lbl.className = 'flicker-label ' + flickerShowing;
+  }
+
+  function showFlickerView() {
+    if (!document.getElementById('flicker-view').classList.contains('visible')) {
+      flickerShowing = 'b'; // toggleFlickerFrame will flip to 'a' first
+      toggleFlickerFrame();
+      document.getElementById('flicker-view').classList.add('visible');
+    }
+  }
+
+  function flickerAuto() {
+    if (flickerTimer) {
+      stopAuto();
+      return;
+    }
+    showFlickerView();
+    const fps = flickerFps();
+    flickerTimer = setInterval(toggleFlickerFrame, 1000 / fps);
+    document.getElementById('btn-auto').classList.add('active');
+    document.getElementById('btn-auto').textContent = 'Stop';
+  }
+
+  function stopAuto() {
+    if (flickerTimer) { clearInterval(flickerTimer); flickerTimer = null; }
+    document.getElementById('btn-auto').classList.remove('active');
+    document.getElementById('btn-auto').textContent = 'Auto flicker';
+  }
+
+  function flickerFps() {
+    return parseInt(document.getElementById('flicker-speed').value, 10);
+  }
+
+  function updateFlickerFps() {
+    const fps = flickerFps();
+    document.getElementById('flicker-fps').textContent = fps + ' fps';
+  }
+
+  document.getElementById('flicker-speed').addEventListener('input', function() {
+    updateFlickerFps();
+    if (flickerTimer) { stopAuto(); flickerAuto(); }
+  });
+
+  // ── Modal ────────────────────────────────────────────────
+
   let currentIndex = 0;
 
   function openModal(index) {
     currentIndex = index;
     showModalPhoto(index);
     document.getElementById('modal').classList.remove('hidden');
-    document.getElementById('modal').focus();
   }
 
   function showModalPhoto(index) {
@@ -256,18 +487,18 @@
     document.getElementById('modal-img').src = '';
   }
 
-  function handleKey(e) {
-    if (e.key === 'Escape')       closeModal();
-    if (e.key === 'ArrowRight' && currentIndex < allPhotos.length - 1) { currentIndex++; showModalPhoto(currentIndex); }
-    if (e.key === 'ArrowLeft'  && currentIndex > 0)                    { currentIndex--; showModalPhoto(currentIndex); }
-  }
+  document.addEventListener('keydown', function(e) {
+    const modalOpen = !document.getElementById('modal').classList.contains('hidden');
+    if (e.key === 'Escape') { closeModal(); stopAuto(); }
+    if (modalOpen) {
+      if (e.key === 'ArrowRight' && currentIndex < allPhotos.length - 1) { currentIndex++; showModalPhoto(currentIndex); }
+      if (e.key === 'ArrowLeft'  && currentIndex > 0)                    { currentIndex--; showModalPhoto(currentIndex); }
+    }
+    if (e.key === 'f' || e.key === 'F') flickerToggle();
+  });
 
-  document.addEventListener('keydown', handleKey);
-
-  function setStatus(msg) { document.getElementById('status').textContent = msg; }
-
+  updateFlickerFps();
   loadPhotos();
 </script>
-
 </body>
 </html>
