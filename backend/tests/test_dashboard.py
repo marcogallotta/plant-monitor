@@ -37,3 +37,33 @@ def test_dashboard_has_timelapse_controls(client):
 def test_dashboard_has_notes_ui(client):
     resp = client.get("/")
     assert b"note" in resp.content.lower()
+
+
+def test_dashboard_has_manual_upload_form(client):
+    resp = client.get("/")
+    assert b"manual-photos" in resp.content
+
+
+def test_dashboard_has_source_filter(client):
+    resp = client.get("/")
+    assert b"source" in resp.content.lower()
+
+
+def test_dashboard_has_photo_type_filter(client):
+    resp = client.get("/")
+    assert b"photo_type" in resp.content or b"photo-type" in resp.content
+
+
+def test_dashboard_has_location_filter(client):
+    resp = client.get("/")
+    assert b"/locations" in resp.content
+
+
+def test_dashboard_has_growing_unit_filter(client):
+    resp = client.get("/")
+    assert b"/growing-units" in resp.content
+
+
+def test_dashboard_has_identity_panel(client):
+    resp = client.get("/")
+    assert b"identity" in resp.content.lower() or b"growing_units" in resp.content or b"source" in resp.content.lower()

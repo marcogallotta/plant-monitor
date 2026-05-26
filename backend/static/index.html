@@ -332,6 +332,98 @@
     .note-hint { font-size: 0.72rem; color: #555; text-align: center; }
 
     .pb { padding-bottom: 2rem; }
+
+    select {
+      background: #222;
+      border: 1px solid #444;
+      color: #ddd;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+
+    .upload-panel {
+      margin: 0.5rem 1.5rem;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      background: #161616;
+      overflow: hidden;
+    }
+
+    .upload-panel-header {
+      padding: 0.6rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      user-select: none;
+      border-bottom: 1px solid #222;
+    }
+
+    .upload-panel-header h2 { font-size: 0.85rem; font-weight: 600; color: #aaa; flex: 1; }
+
+    .upload-form {
+      padding: 0.75rem 1rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .upload-form.open { display: flex; }
+
+    .upload-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .upload-row label { font-size: 0.8rem; color: #888; min-width: 110px; }
+
+    .upload-row input[type="file"],
+    .upload-row input[type="datetime-local"],
+    .upload-row select,
+    .upload-row textarea {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .upload-row select[multiple] { height: 80px; }
+
+    .upload-row textarea {
+      background: #222;
+      border: 1px solid #444;
+      color: #ddd;
+      border-radius: 3px;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.8rem;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 2.5rem;
+    }
+
+    input[type="file"] {
+      background: #222;
+      border: 1px solid #444;
+      color: #ddd;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+
+    .identity-panel {
+      background: #141414;
+      border-top: 1px solid #222;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .identity-panel.hidden { display: none; }
+
+    .identity-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .identity-label { color: #666; font-size: 0.75rem; min-width: 100px; }
+    .identity-value { color: #ccc; }
+
+    .identity-edit-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
+    .identity-edit-row select { font-size: 0.8rem; }
+    .identity-edit-row select[multiple] { height: 70px; }
   </style>
 </head>
 <body>
@@ -341,11 +433,93 @@
 <div class="filters">
   <label>From <input type="datetime-local" id="start"></label>
   <label>To   <input type="datetime-local" id="end"></label>
+  <label>Source
+    <select id="filter-source">
+      <option value="">All sources</option>
+      <option value="pi">Pi</option>
+      <option value="manual">Manual</option>
+      <option value="seed">Seed</option>
+    </select>
+  </label>
+  <label>Type
+    <select id="filter-photo-type">
+      <option value="">All types</option>
+      <option value="overview">Overview</option>
+      <option value="closeup">Closeup</option>
+      <option value="incident">Incident</option>
+      <option value="comparison">Comparison</option>
+      <option value="harvest">Harvest</option>
+      <option value="propagation">Propagation</option>
+      <option value="other">Other</option>
+    </select>
+  </label>
+  <label>Location
+    <select id="filter-location">
+      <option value="">All locations</option>
+    </select>
+  </label>
+  <label>Unit
+    <select id="filter-unit">
+      <option value="">All units</option>
+    </select>
+  </label>
   <button onclick="applyFilter()">Filter</button>
   <button onclick="clearFilter()">Clear</button>
 </div>
 
 <div id="status"></div>
+
+<!-- Manual upload panel -->
+<div class="upload-panel">
+  <div class="upload-panel-header" onclick="toggleUploadPanel()">
+    <h2>Upload photo</h2>
+    <span id="upload-toggle-label" style="font-size:0.75rem;color:#555;">▸ expand</span>
+  </div>
+  <div class="upload-form" id="upload-form">
+    <div class="upload-row">
+      <label>Image (JPEG)</label>
+      <input type="file" id="upload-image" accept="image/jpeg,image/jpg">
+    </div>
+    <div class="upload-row">
+      <label>Captured at</label>
+      <input type="datetime-local" id="upload-captured-at">
+    </div>
+    <div class="upload-row">
+      <label>Type</label>
+      <select id="upload-photo-type">
+        <option value="">— none —</option>
+        <option value="overview">Overview</option>
+        <option value="closeup">Closeup</option>
+        <option value="incident">Incident</option>
+        <option value="comparison">Comparison</option>
+        <option value="harvest">Harvest</option>
+        <option value="propagation">Propagation</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="upload-row">
+      <label>Location</label>
+      <select id="upload-location">
+        <option value="">— none —</option>
+      </select>
+    </div>
+    <div class="upload-row">
+      <label>Growing units</label>
+      <select id="upload-units" multiple>
+      </select>
+    </div>
+    <div class="upload-row">
+      <label>Initial note</label>
+      <textarea id="upload-note" placeholder="Optional note…" rows="2"></textarea>
+    </div>
+    <div class="upload-row">
+      <label></label>
+      <button onclick="submitManualUpload()">Upload</button>
+      <span id="upload-status" style="font-size:0.8rem;color:#888;"></span>
+    </div>
+  </div>
+</div>
+
 <div id="photo-grid" class="photo-grid"></div>
 
 <!-- Comparison panel -->
@@ -422,6 +596,36 @@
       </div>
     </div>
     <div id="modal-caption" class="modal-caption"></div>
+    <div id="identity-panel" class="identity-panel hidden">
+      <div class="identity-row">
+        <span class="identity-label">Source</span><span class="identity-value" id="id-source">—</span>
+        <span class="identity-label" style="margin-left:1rem;">Type</span>
+        <select id="id-type-select" onchange="identityUpdate()" style="font-size:0.8rem;">
+          <option value="">— none —</option>
+          <option value="overview">Overview</option>
+          <option value="closeup">Closeup</option>
+          <option value="incident">Incident</option>
+          <option value="comparison">Comparison</option>
+          <option value="harvest">Harvest</option>
+          <option value="propagation">Propagation</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="identity-row">
+        <span class="identity-label">Location</span>
+        <select id="id-location-select" onchange="identityUpdate()" style="font-size:0.8rem;">
+          <option value="">— none —</option>
+        </select>
+      </div>
+      <div class="identity-row">
+        <span class="identity-label">Growing units</span>
+        <select id="id-units-select" multiple onchange="identityUpdate()" style="font-size:0.8rem;height:70px;flex:1;">
+        </select>
+      </div>
+      <div class="identity-row" id="id-original-row" style="display:none;">
+        <span class="identity-label">Original file</span><span class="identity-value" id="id-original">—</span>
+      </div>
+    </div>
     <div class="note-hint">Scroll to zoom · drag to pan · click to pin · shift+drag to box</div>
     <div id="note-panel" class="note-panel hidden">
       <div id="note-panel-title" class="note-panel-title">New note</div>
@@ -440,16 +644,59 @@
   let photoA = null, photoB = null;
   let flickerShowing = 'a';
   let flickerTimer = null;
+  let allLocations = [];
+  let allUnits = [];
+
+  // ── Bootstrap: load locations + units for dropdowns ───────
+
+  async function loadDropdownData() {
+    const [locResp, unitResp] = await Promise.all([
+      fetch('/locations'),
+      fetch('/growing-units'),
+    ]);
+    allLocations = locResp.ok ? await locResp.json() : [];
+    allUnits     = unitResp.ok ? await unitResp.json() : [];
+    populateSelect('filter-location', allLocations, 'All locations');
+    populateSelect('filter-unit',     allUnits,     'All units');
+    populateSelect('upload-location', allLocations, '— none —');
+    populateSelect('upload-units',    allUnits,     null);
+    populateSelect('id-location-select', allLocations, '— none —');
+    populateSelect('id-units-select',    allUnits,     null);
+  }
+
+  function populateSelect(id, items, blankLabel) {
+    const sel = document.getElementById(id);
+    const multiple = sel.multiple;
+    if (!multiple) {
+      sel.innerHTML = blankLabel ? '<option value="">' + blankLabel + '</option>' : '';
+    } else {
+      sel.innerHTML = '';
+    }
+    items.forEach(function(item) {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.name;
+      sel.appendChild(opt);
+    });
+  }
 
   // ── Timeline ──────────────────────────────────────────────
 
   async function loadPhotos() {
-    const start = document.getElementById('start').value;
-    const end   = document.getElementById('end').value;
+    const start    = document.getElementById('start').value;
+    const end      = document.getElementById('end').value;
+    const source   = document.getElementById('filter-source').value;
+    const ptype    = document.getElementById('filter-photo-type').value;
+    const location = document.getElementById('filter-location').value;
+    const unit     = document.getElementById('filter-unit').value;
     let url = '/photos';
     const p = [];
-    if (start) p.push('start=' + encodeURIComponent(new Date(start).toISOString()));
-    if (end)   p.push('end='   + encodeURIComponent(new Date(end).toISOString()));
+    if (start)    p.push('start='          + encodeURIComponent(new Date(start).toISOString()));
+    if (end)      p.push('end='            + encodeURIComponent(new Date(end).toISOString()));
+    if (source)   p.push('source='         + encodeURIComponent(source));
+    if (ptype)    p.push('photo_type='     + encodeURIComponent(ptype));
+    if (location) p.push('location_id='   + encodeURIComponent(location));
+    if (unit)     p.push('growing_unit_id=' + encodeURIComponent(unit));
     if (p.length) url += '?' + p.join('&');
 
     setStatus('Loading…');
@@ -491,6 +738,10 @@
   function clearFilter() {
     document.getElementById('start').value = '';
     document.getElementById('end').value   = '';
+    document.getElementById('filter-source').value     = '';
+    document.getElementById('filter-photo-type').value = '';
+    document.getElementById('filter-location').value   = '';
+    document.getElementById('filter-unit').value       = '';
     loadPhotos();
   }
   function setStatus(msg) { document.getElementById('status').textContent = msg; }
@@ -641,6 +892,7 @@
     document.getElementById('modal-img').src = p.url;
     document.getElementById('modal-caption').textContent =
       new Date(p.captured_at).toLocaleString() + ' — ' + p.filename;
+    showIdentityPanel(p);
     loadNotes();
   }
 
@@ -648,6 +900,7 @@
     noteCancel();
     document.getElementById('modal').classList.add('hidden');
     document.getElementById('modal-img').src = '';
+    document.getElementById('identity-panel').classList.add('hidden');
     currentPhotoId = null;
     currentNotes = [];
   }
@@ -786,6 +1039,107 @@ function openEditForm(note) {
     document.getElementById('note-text').value = '';
     document.getElementById('rect-preview').style.display = 'none';
     renderPins();
+  }
+
+  // ── Manual upload ────────────────────────────────────────
+
+  function toggleUploadPanel() {
+    const form = document.getElementById('upload-form');
+    const label = document.getElementById('upload-toggle-label');
+    const open = form.classList.toggle('open');
+    label.textContent = open ? '▾ collapse' : '▸ expand';
+  }
+
+  async function submitManualUpload() {
+    const fileInput = document.getElementById('upload-image');
+    if (!fileInput.files.length) {
+      document.getElementById('upload-status').textContent = 'Choose an image first.';
+      return;
+    }
+    const fd = new FormData();
+    fd.append('image', fileInput.files[0]);
+    const capturedAt = document.getElementById('upload-captured-at').value;
+    if (capturedAt) fd.append('captured_at', new Date(capturedAt).toISOString());
+    const ptype = document.getElementById('upload-photo-type').value;
+    if (ptype) fd.append('photo_type', ptype);
+    const loc = document.getElementById('upload-location').value;
+    if (loc) fd.append('location_id', loc);
+    const unitSel = document.getElementById('upload-units');
+    Array.from(unitSel.selectedOptions).forEach(function(o) { fd.append('growing_unit_ids', o.value); });
+    const note = document.getElementById('upload-note').value.trim();
+    if (note) fd.append('note_text', note);
+
+    document.getElementById('upload-status').textContent = 'Uploading…';
+    try {
+      const resp = await fetch('/manual-photos', {method: 'POST', body: fd});
+      if (!resp.ok) {
+        const err = await resp.json().catch(function() { return {}; });
+        throw new Error(err.detail || 'HTTP ' + resp.status);
+      }
+      document.getElementById('upload-status').textContent = 'Uploaded.';
+      fileInput.value = '';
+      document.getElementById('upload-captured-at').value  = '';
+      document.getElementById('upload-photo-type').value   = '';
+      document.getElementById('upload-location').value     = '';
+      Array.from(document.getElementById('upload-units').options).forEach(function(o) { o.selected = false; });
+      document.getElementById('upload-note').value = '';
+      loadPhotos();
+    } catch (e) {
+      document.getElementById('upload-status').textContent = 'Error: ' + e.message;
+    }
+  }
+
+  // ── Identity panel ───────────────────────────────────────
+
+  function showIdentityPanel(photo) {
+    document.getElementById('identity-panel').classList.remove('hidden');
+    document.getElementById('id-source').textContent = photo.source || '—';
+
+    const typeSelect = document.getElementById('id-type-select');
+    typeSelect.value = photo.photo_type || '';
+
+    const locSelect = document.getElementById('id-location-select');
+    locSelect.value = photo.location_id || '';
+
+    const unitSelect = document.getElementById('id-units-select');
+    const selectedIds = new Set((photo.growing_units || []).map(function(u) { return String(u.id); }));
+    Array.from(unitSelect.options).forEach(function(o) { o.selected = selectedIds.has(o.value); });
+
+    const origRow = document.getElementById('id-original-row');
+    if (photo.original_filename) {
+      origRow.style.display = 'flex';
+      document.getElementById('id-original').textContent = photo.original_filename;
+    } else {
+      origRow.style.display = 'none';
+    }
+  }
+
+  async function identityUpdate() {
+    if (!currentPhotoId) return;
+    const typeSelect = document.getElementById('id-type-select');
+    const locSelect  = document.getElementById('id-location-select');
+    const unitSelect = document.getElementById('id-units-select');
+    const body = {
+      photo_type:       typeSelect.value || null,
+      location_id:      locSelect.value  ? parseInt(locSelect.value) : null,
+      growing_unit_ids: Array.from(unitSelect.selectedOptions).map(function(o) { return parseInt(o.value); }),
+    };
+    try {
+      const resp = await fetch('/photos/' + currentPhotoId, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(function() { return {}; });
+        throw new Error(err.detail || 'HTTP ' + resp.status);
+      }
+      const updated = await resp.json();
+      const idx = allPhotos.findIndex(function(p) { return p.id === currentPhotoId; });
+      if (idx !== -1) allPhotos[idx] = updated;
+      showIdentityPanel(updated);
+      setStatus('Saved.');
+    } catch (e) { setStatus('Identity update failed: ' + e.message); }
   }
 
   // ── Timelapse ────────────────────────────────────────────
@@ -946,7 +1300,7 @@ function openEditForm(note) {
   });
 
   updateFlickerFps();
-  loadPhotos();
+  loadDropdownData().then(loadPhotos);
 </script>
 </body>
 </html>
