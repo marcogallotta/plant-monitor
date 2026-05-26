@@ -11,6 +11,9 @@ test-pi:
 migrate:
 	docker compose run --rm backend alembic upgrade head
 
+seed:
+	docker compose run --rm backend python scripts/seed.py --backend-url http://backend:8000
+
 up:
 	docker compose up
 
