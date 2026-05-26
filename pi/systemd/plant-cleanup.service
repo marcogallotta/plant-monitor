@@ -1,0 +1,8 @@
+[Unit]
+Description=Plant monitoring - clean up old uploaded photos
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/plant-monitoring
+ExecStart=/usr/bin/python3 /home/pi/plant-monitoring/cleanup.py /home/pi/plant-monitoring/uploaded

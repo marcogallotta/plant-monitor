@@ -1,0 +1,9 @@
+[Unit]
+Description=Plant monitoring - upload captured photos
+After=network.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/plant-monitoring
+ExecStart=/usr/bin/python3 /home/pi/plant-monitoring/upload.py /home/pi/plant-monitoring/capture
