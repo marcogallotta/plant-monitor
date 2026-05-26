@@ -10,7 +10,7 @@ from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Photo, PhotoNote
+from .models import GrowingUnit, Location, Photo, PhotoNote
 
 app = FastAPI()
 
@@ -23,6 +23,64 @@ def dashboard():
     return HTMLResponse((_STATIC_DIR / "index.html").read_text())
 
 _STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}Z$")
+
+
+class LocationCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class LocationUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class LocationOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GrowingUnitCreate(BaseModel):
+    name: str
+    unit_type: Optional[str] = None
+    species: Optional[str] = None
+    variety: Optional[str] = None
+    source: Optional[str] = None
+    started_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    current_location_id: Optional[int] = None
+
+
+class GrowingUnitUpdate(BaseModel):
+    name: Optional[str] = None
+    unit_type: Optional[str] = None
+    species: Optional[str] = None
+    variety: Optional[str] = None
+    source: Optional[str] = None
+    started_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    current_location_id: Optional[int] = None
+
+
+class GrowingUnitOut(BaseModel):
+    id: int
+    name: str
+    unit_type: Optional[str] = None
+    species: Optional[str] = None
+    variety: Optional[str] = None
+    source: Optional[str] = None
+    started_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    current_location_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class PhotoOut(BaseModel):
@@ -139,6 +197,85 @@ def _upsert_photo_record(db: Session, stem: str, meta: dict) -> None:
         metadata_path=str(PHOTOS_DIR / f"{stem}.json"),
     ))
     db.flush()
+
+
+@app.post("/locations", response_model=LocationOut, status_code=201)
+def create_location(body: LocationCreate, db: Session = Depends(get_db)):
+    loc = Location(name=body.name, description=body.description)
+    db.add(loc)
+    db.commit()
+    db.refresh(loc)
+    return loc
+
+
+@app.get("/locations", response_model=list[LocationOut])
+def list_locations(db: Session = Depends(get_db)):
+    return db.query(Location).order_by(Location.name).all()
+
+
+@app.get("/locations/{location_id}", response_model=LocationOut)
+def get_location(location_id: int, db: Session = Depends(get_db)):
+    loc = db.query(Location).filter_by(id=location_id).first()
+    if not loc:
+        raise HTTPException(status_code=404, detail="location not found")
+    return loc
+
+
+@app.put("/locations/{location_id}", response_model=LocationOut)
+def update_location(location_id: int, body: LocationUpdate, db: Session = Depends(get_db)):
+    loc = db.query(Location).filter_by(id=location_id).first()
+    if not loc:
+        raise HTTPException(status_code=404, detail="location not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(loc, field, value)
+    loc.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(loc)
+    return loc
+
+
+def _check_location_exists(location_id: Optional[int], db: Session) -> None:
+    if location_id is not None and not db.query(Location).filter_by(id=location_id).first():
+        raise HTTPException(status_code=404, detail="location not found")
+
+
+@app.post("/growing-units", response_model=GrowingUnitOut, status_code=201)
+def create_growing_unit(body: GrowingUnitCreate, db: Session = Depends(get_db)):
+    _check_location_exists(body.current_location_id, db)
+    unit = GrowingUnit(**body.model_dump())
+    db.add(unit)
+    db.commit()
+    db.refresh(unit)
+    return unit
+
+
+@app.get("/growing-units", response_model=list[GrowingUnitOut])
+def list_growing_units(db: Session = Depends(get_db)):
+    return db.query(GrowingUnit).order_by(GrowingUnit.name).all()
+
+
+@app.get("/growing-units/{unit_id}", response_model=GrowingUnitOut)
+def get_growing_unit(unit_id: int, db: Session = Depends(get_db)):
+    unit = db.query(GrowingUnit).filter_by(id=unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="growing unit not found")
+    return unit
+
+
+@app.put("/growing-units/{unit_id}", response_model=GrowingUnitOut)
+def update_growing_unit(unit_id: int, body: GrowingUnitUpdate, db: Session = Depends(get_db)):
+    unit = db.query(GrowingUnit).filter_by(id=unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="growing unit not found")
+    updates = body.model_dump(exclude_unset=True)
+    if "current_location_id" in updates:
+        _check_location_exists(updates["current_location_id"], db)
+    for field, value in updates.items():
+        setattr(unit, field, value)
+    unit.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(unit)
+    return unit
 
 
 @app.post("/photos")

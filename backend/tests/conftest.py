@@ -40,7 +40,7 @@ def db_session(engine):
 def clean_tables(engine):
     yield
     with engine.connect() as conn:
-        conn.execute(text("TRUNCATE TABLE photo_notes, photos RESTART IDENTITY CASCADE"))
+        conn.execute(text("TRUNCATE TABLE photo_notes, photo_growing_units, photos, growing_units, locations RESTART IDENTITY CASCADE"))
         conn.commit()
 
 
