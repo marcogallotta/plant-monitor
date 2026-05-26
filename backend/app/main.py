@@ -2,6 +2,8 @@ import io
 import json
 import os
 import re
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -650,6 +652,27 @@ def list_events(db: Session = Depends(get_db)):
 
 _bearer = HTTPBearer(auto_error=False)
 
+_RATE_LIMIT = 60
+_RATE_WINDOW = 60  # seconds
+_rate_limit_store: dict[str, tuple[int, float]] = {}
+_rate_limit_lock = threading.Lock()
+
+
+def _check_rate_limit(token: str) -> None:
+    now = time.monotonic()
+    with _rate_limit_lock:
+        count, window_start = _rate_limit_store.get(token, (0, now))
+        if now - window_start >= _RATE_WINDOW:
+            count, window_start = 0, now
+        count += 1
+        _rate_limit_store[token] = (count, window_start)
+    if count > _RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="rate limit exceeded",
+            headers={"Retry-After": str(_RATE_WINDOW)},
+        )
+
 
 def _require_assistant_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
@@ -663,6 +686,7 @@ def _require_assistant_token(
             detail="invalid or missing token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    _check_rate_limit(credentials.credentials)
 
 
 _assistant = APIRouter(prefix="/assistant", dependencies=[Depends(_require_assistant_token)])
