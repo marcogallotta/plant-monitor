@@ -18,7 +18,7 @@ seed:
 	docker compose run --rm backend python scripts/seed.py --backend-url http://backend:8000
 
 up:
-	docker compose up
+	docker compose up -d
 
 down:
 	docker compose down
