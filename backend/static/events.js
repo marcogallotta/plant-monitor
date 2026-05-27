@@ -62,7 +62,7 @@ export async function logEvent() {
   const body = {event_type: type};
   if (at)   body.event_at    = new Date(at).toISOString();
   if (loc)  body.location_id = parseInt(loc);
-  const unitIds = Array.from(unitSel.selectedOptions).map(o => parseInt(o.value));
+  const unitIds = Array.from(unitSel.selectedOptions).map(function(o) { return parseInt(o.value); });
   if (unitIds.length) body.growing_unit_ids = unitIds;
   if (note) body.note_text = note;
 
@@ -71,7 +71,7 @@ export async function logEvent() {
     await createEvent(body);
     document.getElementById('new-event-at').value = '';
     document.getElementById('new-event-location').value = '';
-    Array.from(unitSel.options).forEach(o => { o.selected = false; });
+    Array.from(unitSel.options).forEach(function(o) { o.selected = false; });
     document.getElementById('new-event-note').value = '';
     document.getElementById('event-status').textContent = 'Logged.';
     loadEvents();
@@ -86,29 +86,29 @@ async function loadEvents() {
     list.innerHTML = '';
     events.forEach(function(ev) {
       const row = document.createElement('div');
-      row.style.cssText = 'padding:0.35rem 0.5rem;background:#1a1a1a;border-radius:3px;border-left:3px solid #444;';
+      row.className = 'event-row';
 
       const typeSpan = document.createElement('span');
-      typeSpan.style.cssText = 'color:#8af;font-weight:600;';
+      typeSpan.className = 'event-type';
       typeSpan.textContent = ev.event_type.replace(/_/g, ' ');
       row.appendChild(typeSpan);
 
       const metaSpan = document.createElement('span');
-      metaSpan.style.cssText = 'color:#555;margin-left:0.5rem;';
+      metaSpan.className = 'event-meta';
       metaSpan.textContent = formatDate(ev.event_at) + (ev.location_name ? ' @ ' + ev.location_name : '');
       row.appendChild(metaSpan);
 
-      const units = ev.growing_units.map(u => u.name).join(', ');
+      const units = ev.growing_units.map(function(u) { return u.name; }).join(', ');
       if (units) {
         const unitsDiv = document.createElement('div');
-        unitsDiv.style.cssText = 'color:#888;margin-top:0.15rem;';
+        unitsDiv.className = 'event-units';
         unitsDiv.textContent = units;
         row.appendChild(unitsDiv);
       }
 
       if (ev.note_text) {
         const noteDiv = document.createElement('div');
-        noteDiv.style.cssText = 'color:#aaa;margin-top:0.15rem;font-style:italic;';
+        noteDiv.className = 'event-note';
         noteDiv.textContent = ev.note_text;
         row.appendChild(noteDiv);
       }

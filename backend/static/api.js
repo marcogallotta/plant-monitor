@@ -15,15 +15,8 @@ function apiJson(url, method, body) {
   });
 }
 
-export async function getLocations() {
-  const resp = await fetch('/locations');
-  return resp.ok ? resp.json() : [];
-}
-
-export async function getGrowingUnits() {
-  const resp = await fetch('/growing-units');
-  return resp.ok ? resp.json() : [];
-}
+export function getLocations()    { return apiRequest('/locations'); }
+export function getGrowingUnits() { return apiRequest('/growing-units'); }
 
 export async function getPhotos(params) {
   const p = [];

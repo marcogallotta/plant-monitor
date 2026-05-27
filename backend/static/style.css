@@ -163,7 +163,12 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .upload-row select[multiple] { height: 80px; }
 
 /* Event list */
-.event-list { font-size: 0.8rem; color: #aaa; display: flex; flex-direction: column; gap: 0.4rem; max-height: 260px; overflow-y: auto; }
+.event-list  { font-size: 0.8rem; color: #aaa; display: flex; flex-direction: column; gap: 0.4rem; max-height: 260px; overflow-y: auto; }
+.event-row   { padding: 0.35rem 0.5rem; background: #1a1a1a; border-radius: 3px; border-left: 3px solid #444; }
+.event-type  { color: #8af; font-weight: 600; }
+.event-meta  { color: #555; margin-left: 0.5rem; }
+.event-units { color: #888; margin-top: 0.15rem; }
+.event-note  { color: #aaa; margin-top: 0.15rem; font-style: italic; }
 
 /* Identity panel */
 .identity-panel        { background: #141414; border-top: 1px solid #222; padding: 0.6rem 0.75rem; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
