@@ -1,8 +1,5 @@
 import { state } from './state.js';
-import {
-  getLocations, getGrowingUnits, getPhotos,
-  updatePhoto, createEvent,
-} from './api.js';
+import { getLocations, getGrowingUnits, getPhotos } from './api.js';
 import {
   initSdImport,
   toggleSdPanel, handleSdFolderInput,
@@ -13,15 +10,16 @@ import {
   toggleManagePanel, createLocation, createUnit,
   toggleEventsPanel, logEvent,
 } from './events.js';
-import {
-  initNotes,
-  loadNotes, renderPins, modalImgClick,
-  openCreateForm, noteSave, noteDelete, noteCancel,
-} from './notes.js';
+import { initNotes, modalImgClick, noteSave, noteDelete, noteCancel } from './notes.js';
 import { setStatus, populateSelect } from './utils.js';
 import { tlInit, tlPlayPause, tlPrev, tlNext } from './timelapse.js';
 import { initUpload, toggleUploadPanel, submitManualUpload } from './upload.js';
-import { applyTransform, visualToStored, resetZoom } from './zoom.js';
+import { visualToStored } from './zoom.js';
+import {
+  openModal, closeModal, showModalPhoto,
+  rotatePhoto, toggleModalLogEvent, modalLogEvent,
+  identityUpdate,
+} from './modal.js';
 
   // ── Bootstrap: load locations + units for dropdowns ───────
 
@@ -200,79 +198,7 @@ import { applyTransform, visualToStored, resetZoom } from './zoom.js';
     if (state.flickerTimer) { stopAuto(); flickerAuto(); }
   });
 
-  // ── Modal ────────────────────────────────────────────────
-
-  // ── Zoom / pan / rect draw — see zoom.js ─────────────────
-
-  async function rotatePhoto(delta) {
-    state.currentRotation = ((state.currentRotation + delta) % 360 + 360) % 360;
-    resetZoom();
-    const photo = state.allPhotos[state.currentIndex];
-    photo.rotation = state.currentRotation;
-    const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
-    if (card) {
-      var img = card.querySelector('img');
-      if (img) {
-        const needsScale = state.currentRotation === 90 || state.currentRotation === 270;
-        img.style.transform = state.currentRotation ? 'rotate(' + state.currentRotation + 'deg)' + (needsScale ? ' scale(1.778)' : '') : '';
-      }
-    }
-    try {
-      await updatePhoto(state.currentPhotoId, {rotation: state.currentRotation});
-    } catch (e) { setStatus('Rotation save failed: ' + e.message); }
-  }
-
-  function openModal(index) {
-    showModalPhoto(index);
-    document.getElementById('modal').classList.remove('hidden');
-  }
-
-  function showModalPhoto(index) {
-    state.currentIndex = index;
-    const p = state.allPhotos[index];
-    state.currentRotation = p.rotation || 0;
-    resetZoom();
-    noteCancel();
-    document.getElementById('modal-log-event-panel').style.display = 'none';
-    document.getElementById('modal-event-status').textContent = '';
-    state.currentPhotoId = p.id;
-    document.getElementById('modal-img').src = p.url;
-    document.getElementById('modal-caption').textContent =
-      new Date(p.captured_at).toLocaleString() + ' — ' + p.filename;
-    showIdentityPanel(p);
-    loadNotes();
-  }
-
-  function closeModal() {
-    noteCancel();
-    document.getElementById('modal').classList.add('hidden');
-    document.getElementById('modal-img').src = '';
-    document.getElementById('identity-panel').classList.add('hidden');
-    document.getElementById('modal-log-event-panel').style.display = 'none';
-    state.currentPhotoId = null;
-    state.currentNotes = [];
-  }
-
-  function toggleModalLogEvent() {
-    var panel = document.getElementById('modal-log-event-panel');
-    panel.style.display = panel.style.display === 'none' ? '' : 'none';
-    document.getElementById('modal-event-status').textContent = '';
-  }
-
-  async function modalLogEvent() {
-    if (!state.currentPhotoId) return;
-    var type = document.getElementById('modal-event-type').value;
-    var note = document.getElementById('modal-event-note').value.trim();
-    var status = document.getElementById('modal-event-status');
-    var body = {event_type: type, photo_ids: [state.currentPhotoId]};
-    if (note) body.note_text = note;
-    status.textContent = 'Saving…';
-    try {
-      await createEvent(body);
-      document.getElementById('modal-event-note').value = '';
-      status.textContent = 'Logged.';
-    } catch (e) { status.textContent = 'Error: ' + e.message; }
-  }
+  // ── Modal — see modal.js ─────────────────────────────────
 
   document.addEventListener('keydown', function(e) {
     const modalOpen = !document.getElementById('modal').classList.contains('hidden');
@@ -283,56 +209,6 @@ import { applyTransform, visualToStored, resetZoom } from './zoom.js';
     }
     if (e.key === 'f' || e.key === 'F') flickerToggle();
   });
-
-  // ── Notes — see notes.js ─────────────────────────────────
-
-  // ── Manage locations + units + Events — see events.js ────
-
-  // ── Manual upload — see upload.js ────────────────────────
-
-  // ── Identity panel ───────────────────────────────────────
-
-  function showIdentityPanel(photo) {
-    document.getElementById('identity-panel').classList.remove('hidden');
-    document.getElementById('id-source').textContent = photo.source || '—';
-
-    const typeSelect = document.getElementById('id-type-select');
-    typeSelect.value = photo.photo_type || '';
-
-    const locSelect = document.getElementById('id-location-select');
-    locSelect.value = photo.location_id || '';
-
-    const unitSelect = document.getElementById('id-units-select');
-    const selectedIds = new Set((photo.growing_units || []).map(function(u) { return String(u.id); }));
-    Array.from(unitSelect.options).forEach(function(o) { o.selected = selectedIds.has(o.value); });
-
-    const origRow = document.getElementById('id-original-row');
-    if (photo.original_filename) {
-      origRow.style.display = 'flex';
-      document.getElementById('id-original').textContent = photo.original_filename;
-    } else {
-      origRow.style.display = 'none';
-    }
-  }
-
-  async function identityUpdate() {
-    if (!state.currentPhotoId) return;
-    const typeSelect = document.getElementById('id-type-select');
-    const locSelect  = document.getElementById('id-location-select');
-    const unitSelect = document.getElementById('id-units-select');
-    const body = {
-      photo_type:       typeSelect.value || null,
-      location_id:      locSelect.value  ? parseInt(locSelect.value) : null,
-      growing_unit_ids: Array.from(unitSelect.selectedOptions).map(function(o) { return parseInt(o.value); }),
-    };
-    try {
-      const updated = await updatePhoto(state.currentPhotoId, body);
-      const idx = state.allPhotos.findIndex(function(p) { return p.id === state.currentPhotoId; });
-      if (idx !== -1) state.allPhotos[idx] = updated;
-      showIdentityPanel(updated);
-      setStatus('Saved.');
-    } catch (e) { setStatus('Identity update failed: ' + e.message); }
-  }
 
   // ── Timelapse — see timelapse.js ─────────────────────────
 
