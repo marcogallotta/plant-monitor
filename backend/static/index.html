@@ -973,7 +973,8 @@
       card.className = 'photo-card';
       card.dataset.id = p.id;
       const ts = new Date(p.captured_at).toLocaleString();
-      const rotStyle = p.rotation ? ' style="transform:rotate(' + p.rotation + 'deg)"' : '';
+      const needsScale = p.rotation === 90 || p.rotation === 270;
+      const rotStyle = p.rotation ? ' style="transform:rotate(' + p.rotation + 'deg)' + (needsScale ? ' scale(1.778)' : '') + '"' : '';
       card.innerHTML =
         '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')"' + rotStyle + '>' +
         '<div class="card-ab">' +
@@ -1132,7 +1133,10 @@
     const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
     if (card) {
       var img = card.querySelector('img');
-      if (img) img.style.transform = currentRotation ? 'rotate(' + currentRotation + 'deg)' : '';
+      if (img) {
+        const needsScale = currentRotation === 90 || currentRotation === 270;
+        img.style.transform = currentRotation ? 'rotate(' + currentRotation + 'deg)' + (needsScale ? ' scale(1.778)' : '') : '';
+      }
     }
     try {
       await fetch('/photos/' + currentPhotoId, {
@@ -1874,43 +1878,50 @@ function openEditForm(note) {
   }
 
   // Scan a Uint8Array for the largest complete embedded JPEG (FF D8 FF ... FF D9).
+  // Returns {jpeg: Uint8Array, truncated: bool}.
+  // truncated=true means a JPEG started but its FFD9 end marker wasn't found —
+  // caller should re-scan a larger buffer before trusting the result.
   function scanForJpeg(bytes) {
     var best = null;
+    var truncated = false;
     var i = 0;
     while (i < bytes.length - 3) {
       if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
         var j = i + 2;
+        var found = false;
         while (j < bytes.length - 1) {
           if (bytes[j] === 0xFF && bytes[j+1] === 0xD9) {
             var size = j + 2 - i;
             if (!best || size > best.size) best = {start: i, size: size};
             i = j + 2;
+            found = true;
             break;
           }
           j++;
         }
-        if (j >= bytes.length - 1) break;
+        if (!found) { truncated = true; break; }
       } else {
         i++;
       }
     }
-    return best ? bytes.slice(best.start, best.start + best.size) : null;
+    var jpeg = best ? bytes.slice(best.start, best.start + best.size) : null;
+    return {jpeg: jpeg, truncated: truncated};
   }
 
-  // Extract embedded JPEG from a raw camera file.
-  // ARW (Sony): full preview starts at ~144 KB and is ~548 KB; read 768 KB to be safe.
-  // ORF (Olympus): preview can be at 11 MB+, so always do a full read.
+  // Extract the largest embedded JPEG from a raw camera file.
+  // Try a 768 KB slice first for speed; if a JPEG was cut off (FFD9 not found),
+  // fall through to a full read so the complete preview isn't missed.
   async function extractEmbeddedJpeg(file) {
     var isOrf = file.name.toLowerCase().endsWith('.orf');
     if (!isOrf && file.size > 786432) {
       var slice  = file.slice(0, 786432);
       var bytes  = new Uint8Array(await slice.arrayBuffer());
       var result = scanForJpeg(bytes);
-      if (result) return result;
-      // preview not in first 768 KB — fall through to full read
+      if (result.jpeg && !result.truncated) return result.jpeg;
+      // a JPEG was cut off — fall through to full read to get the complete preview
     }
     var bytes = new Uint8Array(await file.arrayBuffer());
-    return scanForJpeg(bytes);
+    return scanForJpeg(bytes).jpeg;
   }
 
   async function sdExtractRawThumbs(from, to) {
