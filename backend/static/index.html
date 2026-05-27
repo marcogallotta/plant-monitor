@@ -626,7 +626,18 @@
       <button onclick="sdLoadMore()">Load more</button>
       <span id="sd-load-more-label" style="font-size:0.8rem;color:#555;margin-left:0.5rem;"></span>
     </div>
-    <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;">
+    <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;align-items:center;">
+      <label style="font-size:0.8rem;color:#888;">Type:</label>
+      <select id="sd-photo-type" style="font-size:0.8rem;">
+        <option value="">— none —</option>
+        <option value="overview">overview</option>
+        <option value="closeup">closeup</option>
+        <option value="incident">incident</option>
+        <option value="comparison">comparison</option>
+        <option value="harvest">harvest</option>
+        <option value="propagation">propagation</option>
+        <option value="other">other</option>
+      </select>
       <button id="sd-upload-btn" onclick="sdUploadSelected()">Import selected</button>
       <span id="sd-upload-status" style="font-size:0.8rem;color:#888;"></span>
     </div>
@@ -2041,6 +2052,8 @@ function openEditForm(note) {
       var fd = new FormData();
       fd.append('image', entry.uploadFile, entry.file.name);
       fd.append('captured_at', ts);
+      var ptype = document.getElementById('sd-photo-type').value;
+      if (ptype) fd.append('photo_type', ptype);
 
       try {
         var resp = await fetch('/manual-photos', {method: 'POST', body: fd});
