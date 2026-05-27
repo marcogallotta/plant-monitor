@@ -13,7 +13,7 @@ export async function loadNotes() {
   try {
     state.currentNotes = await getNotes(state.currentPhotoId);
     renderPins();
-  } catch (e) { _setStatus('Failed to load notes: ' + e.message); }
+  } catch (e) { setStatus('Failed to load notes: ' + e.message); }
 }
 
 export function renderPins() {
@@ -100,7 +100,7 @@ export async function noteSave() {
     } else {
       await createNote(state.currentPhotoId, Object.assign({note_text: text}, coords));
     }
-  } catch (e) { _setStatus('Note save failed: ' + e.message); return; }
+  } catch (e) { setStatus('Note save failed: ' + e.message); return; }
   noteCancel();
   loadNotes();
 }
@@ -109,7 +109,7 @@ export async function noteDelete() {
   if (!state.pendingNote || !state.pendingNote.noteId) return;
   try {
     await deleteNote(state.pendingNote.noteId);
-  } catch (e) { _setStatus('Note delete failed: ' + e.message); return; }
+  } catch (e) { setStatus('Note delete failed: ' + e.message); return; }
   noteCancel();
   loadNotes();
 }
