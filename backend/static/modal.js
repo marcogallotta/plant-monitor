@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { updatePhoto, createEvent } from './api.js';
 import { resetZoom } from './zoom.js';
 import { noteCancel, loadNotes } from './notes.js';
-import { setStatus } from './utils.js';
+import { setStatus, formatDate, rotTransform } from './utils.js';
 
 export async function rotatePhoto(delta) {
   state.currentRotation = ((state.currentRotation + delta) % 360 + 360) % 360;
@@ -13,8 +13,7 @@ export async function rotatePhoto(delta) {
   if (card) {
     var img = card.querySelector('img');
     if (img) {
-      const needsScale = state.currentRotation === 90 || state.currentRotation === 270;
-      img.style.transform = state.currentRotation ? 'rotate(' + state.currentRotation + 'deg)' + (needsScale ? ' scale(1.778)' : '') : '';
+      img.style.transform = rotTransform(state.currentRotation);
     }
   }
   try {
@@ -38,7 +37,7 @@ export function showModalPhoto(index) {
   state.currentPhotoId = p.id;
   document.getElementById('modal-img').src = p.url;
   document.getElementById('modal-caption').textContent =
-    new Date(p.captured_at).toLocaleString() + ' — ' + p.filename;
+    formatDate(p.captured_at) + ' — ' + p.filename;
   showIdentityPanel(p);
   loadNotes();
 }

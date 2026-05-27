@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { formatDate } from './utils.js';
 
 export function tlInit() {
   tlStop();
@@ -19,7 +20,7 @@ export function tlInit() {
 function tlShowFrame() {
   const p = state.allPhotos[state.tlIndex];
   document.getElementById('tl-img').src = p.url;
-  document.getElementById('tl-label').textContent = new Date(p.captured_at).toLocaleString();
+  document.getElementById('tl-label').textContent = formatDate(p.captured_at);
   document.getElementById('tl-counter').textContent = (state.tlIndex + 1) + ' / ' + state.allPhotos.length;
 }
 

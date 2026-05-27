@@ -1,4 +1,5 @@
 import { createEvent, getEvents, createLocation as apiCreateLocation, createGrowingUnit } from './api.js';
+import { formatDate } from './utils.js';
 
 let _reloadDropdowns = null;
 
@@ -94,7 +95,7 @@ async function loadEvents() {
 
       const metaSpan = document.createElement('span');
       metaSpan.style.cssText = 'color:#555;margin-left:0.5rem;';
-      metaSpan.textContent = new Date(ev.event_at).toLocaleString() + (ev.location_name ? ' @ ' + ev.location_name : '');
+      metaSpan.textContent = formatDate(ev.event_at) + (ev.location_name ? ' @ ' + ev.location_name : '');
       row.appendChild(metaSpan);
 
       const units = ev.growing_units.map(u => u.name).join(', ');

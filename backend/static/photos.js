@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { getPhotos } from './api.js';
-import { setStatus } from './utils.js';
+import { setStatus, formatDate, rotTransform } from './utils.js';
 import { tlInit } from './timelapse.js';
 
 export async function loadPhotos() {
@@ -36,9 +36,9 @@ function renderGrid(photos) {
     const card = document.createElement('div');
     card.className = 'photo-card';
     card.dataset.id = p.id;
-    const ts = new Date(p.captured_at).toLocaleString();
-    const needsScale = p.rotation === 90 || p.rotation === 270;
-    const rotStyle = p.rotation ? ' style="transform:rotate(' + p.rotation + 'deg)' + (needsScale ? ' scale(1.778)' : '') + '"' : '';
+    const ts = formatDate(p.captured_at);
+    const t = rotTransform(p.rotation);
+    const rotStyle = t ? ' style="transform:' + t + '"' : '';
     card.innerHTML =
       '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')"' + rotStyle + '>' +
       '<div class="card-ab">' +
@@ -85,7 +85,7 @@ function updateCompare() {
     const img = document.getElementById('img-a');
     img.src = state.photoA.url;
     img.style.display = 'block';
-    document.getElementById('cap-a').textContent = new Date(state.photoA.captured_at).toLocaleString();
+    document.getElementById('cap-a').textContent = formatDate(state.photoA.captured_at);
   }
 
   if (state.photoB) {
@@ -93,7 +93,7 @@ function updateCompare() {
     const img = document.getElementById('img-b');
     img.src = state.photoB.url;
     img.style.display = 'block';
-    document.getElementById('cap-b').textContent = new Date(state.photoB.captured_at).toLocaleString();
+    document.getElementById('cap-b').textContent = formatDate(state.photoB.captured_at);
   }
 
   document.getElementById('btn-toggle').disabled = !ready;
