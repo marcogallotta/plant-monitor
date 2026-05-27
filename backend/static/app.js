@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import {
   getLocations, getGrowingUnits, getPhotos,
-  updatePhoto, uploadPhoto,
+  updatePhoto, uploadPhoto, createEvent,
 } from './api.js';
 import {
   initSdImport,

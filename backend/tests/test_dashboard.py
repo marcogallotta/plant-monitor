@@ -17,7 +17,7 @@ def test_app_js_returns_200(client):
 
 
 def test_app_js_contains_photos_api_call(client):
-    resp = client.get("/static/app.js")
+    resp = client.get("/static/api.js")
     assert b"/photos" in resp.content
 
 
@@ -49,7 +49,7 @@ def test_dashboard_has_notes_ui(client):
 
 
 def test_dashboard_has_manual_upload_form(client):
-    resp = client.get("/")
+    resp = client.get("/static/api.js")
     assert b"manual-photos" in resp.content
 
 
@@ -64,12 +64,12 @@ def test_dashboard_has_photo_type_filter(client):
 
 
 def test_dashboard_has_location_filter(client):
-    resp = client.get("/static/app.js")
+    resp = client.get("/static/api.js")
     assert b"/locations" in resp.content
 
 
 def test_dashboard_has_growing_unit_filter(client):
-    resp = client.get("/static/app.js")
+    resp = client.get("/static/api.js")
     assert b"/growing-units" in resp.content
 
 
@@ -96,6 +96,5 @@ def test_dashboard_has_add_unit_form(client):
 
 
 def test_dashboard_has_events_ui(client):
-    resp = client.get("/static/app.js")
-    assert b"/events" in resp.content
-    assert b"Log event" in resp.content
+    assert b"/events" in client.get("/static/api.js").content
+    assert b"Log event" in client.get("/static/index.html").content
