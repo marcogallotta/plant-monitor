@@ -1,0 +1,393 @@
+import { state } from './state.js';
+import { uploadPhoto } from './api.js';
+
+const SD_PAGE = 20;
+const SD_TZ   = 'Europe/Rome';
+const SD_TIME_GAP = 60 * 60 * 1000;
+
+let sdFiles = [];
+let sdShown = 0;
+let _loadPhotos = null;
+
+export function initSdImport(loadPhotos) {
+  _loadPhotos = loadPhotos;
+}
+
+export function toggleSdPanel() {
+  var form  = document.getElementById('sd-form');
+  var label = document.getElementById('sd-toggle-label');
+  var open  = form.classList.toggle('open');
+  label.textContent = open ? '▾ collapse' : '▸ expand';
+}
+
+export async function handleSdFolderInput(event) {
+  var status = document.getElementById('sd-folder-status');
+  status.textContent = 'Loading…';
+
+  // Ensure state.allPhotos is current before computing already-uploaded set
+  if (_loadPhotos) await _loadPhotos();
+
+  sdFiles.forEach(function(e) { if (e.thumbUrl) URL.revokeObjectURL(e.thumbUrl); });
+  sdFiles = [];
+  sdShown = 0;
+  document.getElementById('sd-grid-controls').style.display = 'none';
+  document.getElementById('sd-load-more-row').style.display = 'none';
+  document.getElementById('sd-grid').innerHTML = '';
+
+  var uploaded = new Set(state.allPhotos.map(function(p) { return p.original_filename; }).filter(Boolean));
+
+  var all = Array.from(event.target.files);
+  var photos = all.filter(function(f) {
+    var lower = f.name.toLowerCase();
+    if (!lower.endsWith('.jpg') && !lower.endsWith('.jpeg') && !lower.endsWith('.orf') && !lower.endsWith('.arw')) return false;
+    return !uploaded.has(f.name);
+  });
+
+  var skipped = all.filter(function(f) {
+    var lower = f.name.toLowerCase();
+    return (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.orf') || lower.endsWith('.arw')) && uploaded.has(f.name);
+  }).length;
+
+  if (photos.length === 0) {
+    status.textContent = skipped > 0 ? 'All ' + skipped + ' already imported.' : 'No photos found.';
+    return;
+  }
+
+  // most recently shot first — sort by filename descending (sequential camera numbering)
+  photos.sort(function(a, b) { return b.name.localeCompare(a.name); });
+
+  sdFiles = photos.map(function(f) {
+    var lower  = f.name.toLowerCase();
+    var isRaw  = lower.endsWith('.orf') || lower.endsWith('.arw');
+    return {
+      file:        f,
+      selected:    false,
+      isRaw:       isRaw,
+      thumbUrl:    isRaw ? null : URL.createObjectURL(f),
+      uploadFile:  isRaw ? null : f,
+      capturedAt:  null,
+      tsBadge:     null,
+      sessionBreak: false,
+    };
+  });
+
+  // detect session boundary: first time gap > 1 hour between consecutive files
+  var batchEnd = -1;
+  for (var i = 0; i < sdFiles.length - 1; i++) {
+    var tA = sdFiles[i].file.lastModified;
+    var tB = sdFiles[i+1].file.lastModified;
+    if (tA > 0 && tB > 0 && (tA - tB) > SD_TIME_GAP) {
+      sdFiles[i+1].sessionBreak = true;
+      batchEnd = i + 1;
+      break;
+    }
+  }
+
+  // auto-select only if a clear boundary was found
+  if (batchEnd > 0) {
+    for (var i = 0; i < batchEnd; i++) sdFiles[i].selected = true;
+  }
+
+  var batchLabel  = batchEnd > 0 ? ' — ' + batchEnd + ' in latest batch' : '';
+  var skipLabel   = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
+  status.textContent = sdFiles.length + ' photo' + (sdFiles.length === 1 ? '' : 's') + batchLabel + skipLabel;
+  document.getElementById('sd-grid-controls').style.display = 'flex';
+  sdAppendThumbs(batchEnd > 0 ? batchEnd + 3 : SD_PAGE);
+}
+
+function sdAppendThumbs(count) {
+  var grid = document.getElementById('sd-grid');
+  var from = sdShown;
+  var end  = Math.min(sdShown + count, sdFiles.length);
+  for (var i = from; i < end; i++) {
+    if (sdFiles[i].sessionBreak) grid.appendChild(sdMakeSeparator());
+    grid.appendChild(sdMakeThumb(i));
+  }
+  sdShown = end;
+  sdUpdateLoadMore();
+  sdUpdateCount();
+  sdExtractRawThumbs(from, end);
+  sdParseExif(from, end);
+}
+
+function sdMakeSeparator() {
+  var div = document.createElement('div');
+  div.className   = 'sd-session-break';
+  div.textContent = '— older —';
+  return div;
+}
+
+function sdMakeThumb(i) {
+  var entry = sdFiles[i];
+  var wrap  = document.createElement('div');
+  wrap.className   = 'sd-thumb-wrap' + (entry.selected ? ' selected' : '');
+  wrap.dataset.idx = i;
+  wrap.addEventListener('click', function() { sdToggle(i); });
+
+  var img = document.createElement('img');
+  img.alt     = entry.file.name;
+  img.loading = 'lazy';
+  if (entry.thumbUrl) {
+    img.src = entry.thumbUrl;
+  } else {
+    img.style.display = 'none';
+    var lbl = document.createElement('div');
+    lbl.className = 'sd-orf-label';
+    lbl.id        = 'sd-orf-lbl-' + i;
+    lbl.textContent = 'RAW';
+    wrap.appendChild(lbl);
+  }
+
+  var caption = document.createElement('div');
+  caption.className = 'sd-thumb-caption';
+  var nameSpan = document.createElement('div');
+  nameSpan.textContent = entry.file.name;
+  var tsSpan = document.createElement('div');
+  tsSpan.className = 'sd-ts-line';
+  tsSpan.id        = 'sd-ts-line-' + i;
+  if (entry.tsBadge) tsSpan.dataset.badge = entry.tsBadge;
+  tsSpan.textContent = entry.capturedAt ? sdFmtTs(entry.capturedAt) : '';
+  caption.appendChild(nameSpan);
+  caption.appendChild(tsSpan);
+
+  var check = document.createElement('div');
+  check.className = 'sd-thumb-check';
+
+  wrap.appendChild(img);
+  wrap.appendChild(caption);
+  wrap.appendChild(check);
+  return wrap;
+}
+
+// Scan a Uint8Array for the largest complete embedded JPEG (FF D8 FF ... FF D9).
+// Returns {jpeg: Uint8Array, truncated: bool}.
+// truncated=true means a JPEG started but its FFD9 end marker wasn't found —
+// caller should re-scan a larger buffer before trusting the result.
+function scanForJpeg(bytes) {
+  var best = null;
+  var truncated = false;
+  var i = 0;
+  while (i < bytes.length - 3) {
+    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
+      var j = i + 2;
+      var found = false;
+      while (j < bytes.length - 1) {
+        if (bytes[j] === 0xFF && bytes[j+1] === 0xD9) {
+          var size = j + 2 - i;
+          if (!best || size > best.size) best = {start: i, size: size};
+          i = j + 2;
+          found = true;
+          break;
+        }
+        j++;
+      }
+      if (!found) { truncated = true; break; }
+    } else {
+      i++;
+    }
+  }
+  var jpeg = best ? bytes.slice(best.start, best.start + best.size) : null;
+  return {jpeg: jpeg, truncated: truncated};
+}
+
+// Extract the largest embedded JPEG from a raw camera file.
+// Try a 768 KB slice first for speed; if a JPEG was cut off (FFD9 not found),
+// fall through to a full read so the complete preview isn't missed.
+async function extractEmbeddedJpeg(file) {
+  var isOrf = file.name.toLowerCase().endsWith('.orf');
+  if (!isOrf && file.size > 786432) {
+    var slice  = file.slice(0, 786432);
+    var bytes  = new Uint8Array(await slice.arrayBuffer());
+    var result = scanForJpeg(bytes);
+    if (result.jpeg && !result.truncated) return result.jpeg;
+  }
+  var bytes = new Uint8Array(await file.arrayBuffer());
+  return scanForJpeg(bytes).jpeg;
+}
+
+async function sdExtractRawThumbs(from, to) {
+  for (var i = from; i < to; i++) {
+    var entry = sdFiles[i];
+    if (!entry.isRaw || entry.thumbUrl) continue;
+    try {
+      var jpegBytes = await extractEmbeddedJpeg(entry.file);
+      if (!jpegBytes) continue;
+      var blob = new Blob([jpegBytes], {type: 'image/jpeg'});
+      entry.thumbUrl   = URL.createObjectURL(blob);
+      // keep raw filename so backend stores original_filename = DSC01349.ARW
+      entry.uploadFile = new File([blob], entry.file.name, {type: 'image/jpeg'});
+      var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+      if (wrap) {
+        var img = wrap.querySelector('img');
+        if (img) { img.src = entry.thumbUrl; img.style.display = ''; }
+        var lbl = document.getElementById('sd-orf-lbl-' + i);
+        if (lbl) lbl.remove();
+      }
+    } catch(e) { console.warn('RAW thumb failed', entry.file.name, e); }
+  }
+}
+
+function sdFmtTs(iso) {
+  try {
+    return new Date(iso).toLocaleString('sv-SE', {timeZone: SD_TZ,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'}).replace('T', ' ');
+  } catch(e) { return iso.slice(0, 16); }
+}
+
+// Derive captured_at ISO string from EXIF data using the priority chain.
+// Returns {iso, badge} where badge is 'ok' | 'assumed' | 'fallback'.
+//
+// exifr parses DateTimeOriginal into a JS Date. When OffsetTimeOriginal is
+// present exifr applies it, so the Date is already correct UTC — toISOString()
+// is safe. When there is no offset exifr treats the raw values as local browser
+// time, which is good enough given the browser runs in the camera's timezone.
+function sdDeriveTs(exif, file) {
+  var dto = exif && (exif.DateTimeOriginal || exif.CreateDate);
+  if (dto) {
+    var d = dto instanceof Date ? dto : new Date(dto);
+    if (!isNaN(d.getTime())) {
+      var hasOffset = !!(exif && exif.OffsetTimeOriginal);
+      return {iso: d.toISOString(), badge: hasOffset ? 'ok' : 'assumed'};
+    }
+  }
+  return {iso: new Date(file.lastModified).toISOString(), badge: 'fallback'};
+}
+
+async function sdParseExif(from, to) {
+  for (var i = from; i < to; i++) {
+    var entry = sdFiles[i];
+    if (entry.capturedAt) continue;
+    var exif = null;
+    try {
+      // exifr can read JPEG and ARW; ORF is not supported — will return null
+      exif = await window.exifr.parse(entry.file, ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal']);
+    } catch(e) { /* unsupported format — fallback below */ }
+    var result      = sdDeriveTs(exif, entry.file);
+    entry.capturedAt = result.iso;
+    entry.tsBadge    = result.badge;
+    var tsEl = document.getElementById('sd-ts-line-' + i);
+    if (tsEl) { tsEl.textContent = sdFmtTs(result.iso); tsEl.dataset.badge = result.badge; }
+  }
+}
+
+function sdToggle(i) {
+  sdFiles[i].selected = !sdFiles[i].selected;
+  var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+  if (wrap) wrap.className = 'sd-thumb-wrap' + (sdFiles[i].selected ? ' selected' : '');
+  sdUpdateCount();
+}
+
+function sdUpdateCount() {
+  var n = sdFiles.filter(function(f) { return f.selected; }).length;
+  document.getElementById('sd-selected-count').textContent = n + ' selected';
+  var row = document.getElementById('sd-upload-row');
+  var btn = document.getElementById('sd-upload-btn');
+  if (n > 0) {
+    row.style.display = 'flex';
+    btn.textContent = 'Import ' + n + ' selected';
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+function sdUpdateLoadMore() {
+  var row       = document.getElementById('sd-load-more-row');
+  var remaining = sdFiles.length - sdShown;
+  if (remaining > 0) {
+    row.style.display = 'flex';
+    document.getElementById('sd-load-more-label').textContent = remaining + ' more';
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+export function sdLoadMore() { sdAppendThumbs(SD_PAGE); }
+
+export function sdSelectAllVisible() {
+  for (var i = 0; i < sdShown; i++) {
+    sdFiles[i].selected = true;
+    var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+    if (wrap) wrap.className = 'sd-thumb-wrap selected';
+  }
+  sdUpdateCount();
+}
+
+export function sdDeselectAll() {
+  sdFiles.forEach(function(f, i) {
+    f.selected = false;
+    var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+    if (wrap) wrap.className = 'sd-thumb-wrap';
+  });
+  sdUpdateCount();
+}
+
+function sdSetThumbStatus(i, thumbStatus, detail) {
+  var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+  if (!wrap) return;
+  var existing = wrap.querySelector('.sd-status-overlay');
+  if (existing) existing.remove();
+  var ov = document.createElement('div');
+  ov.className = 'sd-status-overlay';
+  ov.dataset.state = thumbStatus;
+  ov.textContent = thumbStatus === 'uploading' ? '…' : thumbStatus === 'done' ? '✓' : '✗';
+  if (detail) ov.title = detail;
+  wrap.appendChild(ov);
+}
+
+export async function sdUploadSelected() {
+  var btn    = document.getElementById('sd-upload-btn');
+  var status = document.getElementById('sd-upload-status');
+  var queue  = sdFiles.map(function(e, i) { return {entry: e, idx: i}; })
+                      .filter(function(x) { return x.entry.selected; });
+  if (queue.length === 0) return;
+
+  btn.disabled = true;
+  var done = 0, failed = 0;
+
+  for (var q = 0; q < queue.length; q++) {
+    var idx   = queue[q].idx;
+    var entry = queue[q].entry;
+    status.textContent = (q + 1) + ' / ' + queue.length + '…';
+    sdSetThumbStatus(idx, 'uploading');
+
+    // For RAW files, wait for extraction if not done yet
+    if (entry.isRaw && !entry.uploadFile) {
+      try {
+        var jpegBytes = await extractEmbeddedJpeg(entry.file);
+        if (jpegBytes) {
+          var blob = new Blob([jpegBytes], {type: 'image/jpeg'});
+          entry.uploadFile = new File([blob], entry.file.name, {type: 'image/jpeg'});
+          if (!entry.thumbUrl) {
+            entry.thumbUrl = URL.createObjectURL(blob);
+            var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + idx + '"]');
+            if (wrap) {
+              var img = wrap.querySelector('img');
+              if (img) { img.src = entry.thumbUrl; img.style.display = ''; }
+              var lbl = document.getElementById('sd-orf-lbl-' + idx);
+              if (lbl) lbl.remove();
+            }
+          }
+        }
+      } catch(e) { console.warn('RAW extract failed for upload', entry.file.name, e); }
+    }
+
+    if (!entry.uploadFile) { sdSetThumbStatus(idx, 'error'); failed++; continue; }
+
+    var ts = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
+    var fd = new FormData();
+    fd.append('image', entry.uploadFile, entry.file.name);
+    fd.append('captured_at', ts);
+    var ptype = document.getElementById('sd-photo-type').value;
+    if (ptype) fd.append('photo_type', ptype);
+
+    try {
+      await uploadPhoto(fd);
+      sdSetThumbStatus(idx, 'done'); done++;
+    } catch(e) { sdSetThumbStatus(idx, 'error', String(e)); failed++; console.warn('Upload error', entry.file.name, e); }
+  }
+
+  btn.disabled = false;
+  status.textContent = done + ' uploaded' + (failed > 0 ? ', ' + failed + ' failed' : '');
+  if (done > 0 && _loadPhotos) _loadPhotos();
+}
