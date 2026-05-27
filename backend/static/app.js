@@ -1,14 +1,19 @@
 import { state } from './state.js';
+import {
+  getLocations, getGrowingUnits, getPhotos,
+  updatePhoto, getNotes, createNote, updateNote, deleteNote,
+  createLocation as apiCreateLocation, createGrowingUnit,
+  createEvent, getEvents,
+  uploadPhoto,
+} from './api.js';
 
   // ── Bootstrap: load locations + units for dropdowns ───────
 
   async function loadDropdownData() {
-    const [locResp, unitResp] = await Promise.all([
-      fetch('/locations'),
-      fetch('/growing-units'),
+    [state.allLocations, state.allUnits] = await Promise.all([
+      getLocations(),
+      getGrowingUnits(),
     ]);
-    state.allLocations = locResp.ok ? await locResp.json() : [];
-    state.allUnits     = unitResp.ok ? await unitResp.json() : [];
     populateSelect('filter-location', state.allLocations, 'All locations');
     populateSelect('filter-unit',     state.allUnits,     'All units');
     populateSelect('upload-location', state.allLocations, '— none —');
@@ -44,21 +49,14 @@ import { state } from './state.js';
     const ptype    = document.getElementById('filter-photo-type').value;
     const location = document.getElementById('filter-location').value;
     const unit     = document.getElementById('filter-unit').value;
-    let url = '/photos';
-    const p = [];
-    if (start)    p.push('start='          + encodeURIComponent(new Date(start).toISOString()));
-    if (end)      p.push('end='            + encodeURIComponent(new Date(end).toISOString()));
-    if (source)   p.push('source='         + encodeURIComponent(source));
-    if (ptype)    p.push('photo_type='     + encodeURIComponent(ptype));
-    if (location) p.push('location_id='   + encodeURIComponent(location));
-    if (unit)     p.push('growing_unit_id=' + encodeURIComponent(unit));
-    if (p.length) url += '?' + p.join('&');
 
     setStatus('Loading…');
     try {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      state.allPhotos = await resp.json();
+      state.allPhotos = await getPhotos({
+        start:    start    ? new Date(start).toISOString() : null,
+        end:      end      ? new Date(end).toISOString()   : null,
+        source, ptype, location, unit,
+      });
       renderGrid(state.allPhotos);
       setStatus(state.allPhotos.length === 0 ? 'No photos found.' : state.allPhotos.length + ' photo' + (state.allPhotos.length === 1 ? '' : 's'));
     } catch (e) {
@@ -235,11 +233,7 @@ import { state } from './state.js';
       }
     }
     try {
-      await fetch('/photos/' + state.currentPhotoId, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({rotation: state.currentRotation}),
-      });
+      await updatePhoto(state.currentPhotoId, {rotation: state.currentRotation});
     } catch (e) { setStatus('Rotation save failed: ' + e.message); }
   }
 
@@ -304,15 +298,7 @@ import { state } from './state.js';
     if (note) body.note_text = note;
     status.textContent = 'Saving…';
     try {
-      var resp = await fetch('/events', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        var err = await resp.json().catch(function() { return {}; });
-        throw new Error(err.detail || 'HTTP ' + resp.status);
-      }
+      await createEvent(body);
       document.getElementById('modal-event-note').value = '';
       status.textContent = 'Logged.';
     } catch (e) { status.textContent = 'Error: ' + e.message; }
@@ -333,9 +319,7 @@ import { state } from './state.js';
   async function loadNotes() {
     if (!state.currentPhotoId) return;
     try {
-      const resp = await fetch('/photos/' + state.currentPhotoId + '/notes');
-      if (!resp.ok) return;
-      state.currentNotes = await resp.json();
+      state.currentNotes = await getNotes(state.currentPhotoId);
       renderPins();
     } catch (e) { setStatus('Failed to load notes: ' + e.message); }
   }
@@ -420,17 +404,9 @@ function openEditForm(note) {
         coords.y2 = state.pendingNote.y2;
       }
       if (state.pendingNote.noteId) {
-        await fetch('/notes/' + state.pendingNote.noteId, {
-          method: 'PUT',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(Object.assign({note_text: text}, coords)),
-        });
+        await updateNote(state.pendingNote.noteId, Object.assign({note_text: text}, coords));
       } else {
-        await fetch('/photos/' + state.currentPhotoId + '/notes', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(Object.assign({note_text: text}, coords)),
-        });
+        await createNote(state.currentPhotoId, Object.assign({note_text: text}, coords));
       }
     } catch (e) { setStatus('Note save failed: ' + e.message); return; }
     noteCancel();
@@ -440,7 +416,7 @@ function openEditForm(note) {
   async function noteDelete() {
     if (!state.pendingNote || !state.pendingNote.noteId) return;
     try {
-      await fetch('/notes/' + state.pendingNote.noteId, {method: 'DELETE'});
+      await deleteNote(state.pendingNote.noteId);
     } catch (e) { setStatus('Note delete failed: ' + e.message); return; }
     noteCancel();
     loadNotes();
@@ -468,15 +444,7 @@ function openEditForm(note) {
     if (!name) { document.getElementById('loc-status').textContent = 'Name required.'; return; }
     const desc = document.getElementById('new-loc-desc').value.trim();
     try {
-      const resp = await fetch('/locations', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: name, description: desc || null}),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(function() { return {}; });
-        throw new Error(err.detail || 'HTTP ' + resp.status);
-      }
+      await apiCreateLocation({name: name, description: desc || null});
       document.getElementById('new-loc-name').value = '';
       document.getElementById('new-loc-desc').value = '';
       document.getElementById('loc-status').textContent = 'Added.';
@@ -489,15 +457,7 @@ function openEditForm(note) {
     if (!name) { document.getElementById('unit-status').textContent = 'Name required.'; return; }
     const type = document.getElementById('new-unit-type').value;
     try {
-      const resp = await fetch('/growing-units', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: name, unit_type: type || null}),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(function() { return {}; });
-        throw new Error(err.detail || 'HTTP ' + resp.status);
-      }
+      await createGrowingUnit({name: name, unit_type: type || null});
       document.getElementById('new-unit-name').value = '';
       document.getElementById('new-unit-type').value = '';
       document.getElementById('unit-status').textContent = 'Added.';
@@ -531,15 +491,7 @@ function openEditForm(note) {
 
     document.getElementById('event-status').textContent = 'Saving…';
     try {
-      const resp = await fetch('/events', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(function() { return {}; });
-        throw new Error(err.detail || 'HTTP ' + resp.status);
-      }
+      await createEvent(body);
       document.getElementById('new-event-at').value = '';
       document.getElementById('new-event-location').value = '';
       Array.from(unitSel.options).forEach(function(o) { o.selected = false; });
@@ -551,9 +503,7 @@ function openEditForm(note) {
 
   async function loadEvents() {
     try {
-      const resp = await fetch('/events');
-      if (!resp.ok) return;
-      const events = await resp.json();
+      const events = await getEvents();
       const list = document.getElementById('event-list');
       if (!events.length) { list.textContent = 'No events yet.'; return; }
       list.innerHTML = '';
@@ -622,11 +572,7 @@ function openEditForm(note) {
 
     document.getElementById('upload-status').textContent = 'Uploading…';
     try {
-      const resp = await fetch('/manual-photos', {method: 'POST', body: fd});
-      if (!resp.ok) {
-        const err = await resp.json().catch(function() { return {}; });
-        throw new Error(err.detail || 'HTTP ' + resp.status);
-      }
+      await uploadPhoto(fd);
       document.getElementById('upload-status').textContent = 'Uploaded.';
       fileInput.value = '';
       document.getElementById('upload-captured-at').value  = '';
@@ -676,16 +622,7 @@ function openEditForm(note) {
       growing_unit_ids: Array.from(unitSelect.selectedOptions).map(function(o) { return parseInt(o.value); }),
     };
     try {
-      const resp = await fetch('/photos/' + state.currentPhotoId, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(function() { return {}; });
-        throw new Error(err.detail || 'HTTP ' + resp.status);
-      }
-      const updated = await resp.json();
+      const updated = await updatePhoto(state.currentPhotoId, body);
       const idx = state.allPhotos.findIndex(function(p) { return p.id === state.currentPhotoId; });
       if (idx !== -1) state.allPhotos[idx] = updated;
       showIdentityPanel(updated);
@@ -1231,10 +1168,9 @@ function openEditForm(note) {
       if (ptype) fd.append('photo_type', ptype);
 
       try {
-        var resp = await fetch('/manual-photos', {method: 'POST', body: fd});
-        if (resp.ok) { sdSetThumbStatus(idx, 'done'); done++; }
-        else         { sdSetThumbStatus(idx, 'error', 'HTTP ' + resp.status); failed++; console.warn('Upload failed', entry.file.name, resp.status); }
-      } catch(e)   { sdSetThumbStatus(idx, 'error', String(e)); failed++; console.warn('Upload error', entry.file.name, e); }
+        await uploadPhoto(fd);
+        sdSetThumbStatus(idx, 'done'); done++;
+      } catch(e) { sdSetThumbStatus(idx, 'error', String(e)); failed++; console.warn('Upload error', entry.file.name, e); }
     }
 
     btn.disabled = false;

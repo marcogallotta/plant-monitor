@@ -18,7 +18,10 @@ backend/
   scripts/
     seed.py         # dev seed: downloads Picsum images, uploads via POST /photos
   static/
-    index.html      # single-file dashboard (inline CSS + JS, no build step)
+    index.html      # dashboard HTML (no build step)
+    style.css       # dashboard styles
+    app.js          # dashboard JS (ES module)
+    state.js        # shared JS state
   tests/
     conftest.py     # all shared fixtures
     test_schema.py  # DB schema assertions (tables, columns, constraints, indexes)
@@ -156,7 +159,7 @@ The `Makefile` passes `-p plant-monitoring-test` when invoking the test compose 
 
 ## Dashboard
 
-`static/index.html` is a single file with inline CSS and JS — no build step, no npm, no bundler. FastAPI reads and serves it directly from `_STATIC_DIR`.
+`static/index.html` links `style.css` and `app.js` — no build step, no npm, no bundler. FastAPI serves all three files from `_STATIC_DIR`.
 
 Key JS state:
 
