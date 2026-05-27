@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import {
   getLocations, getGrowingUnits, getPhotos,
-  updatePhoto, uploadPhoto, createEvent,
+  updatePhoto, createEvent,
 } from './api.js';
 import {
   initSdImport,
@@ -20,6 +20,7 @@ import {
 } from './notes.js';
 import { setStatus, populateSelect } from './utils.js';
 import { tlInit, tlPlayPause, tlPrev, tlNext } from './timelapse.js';
+import { initUpload, toggleUploadPanel, submitManualUpload } from './upload.js';
 
   // ── Bootstrap: load locations + units for dropdowns ───────
 
@@ -315,49 +316,7 @@ import { tlInit, tlPlayPause, tlPrev, tlNext } from './timelapse.js';
 
   // ── Manage locations + units + Events — see events.js ────
 
-  // ── Manual upload ────────────────────────────────────────
-
-  function toggleUploadPanel() {
-    const form = document.getElementById('upload-form');
-    const label = document.getElementById('upload-toggle-label');
-    const open = form.classList.toggle('open');
-    label.textContent = open ? '▾ collapse' : '▸ expand';
-  }
-
-  async function submitManualUpload() {
-    const fileInput = document.getElementById('upload-image');
-    if (!fileInput.files.length) {
-      document.getElementById('upload-status').textContent = 'Choose an image first.';
-      return;
-    }
-    const fd = new FormData();
-    fd.append('image', fileInput.files[0]);
-    const capturedAt = document.getElementById('upload-captured-at').value;
-    if (capturedAt) fd.append('captured_at', new Date(capturedAt).toISOString());
-    const ptype = document.getElementById('upload-photo-type').value;
-    if (ptype) fd.append('photo_type', ptype);
-    const loc = document.getElementById('upload-location').value;
-    if (loc) fd.append('location_id', loc);
-    const unitSel = document.getElementById('upload-units');
-    Array.from(unitSel.selectedOptions).forEach(function(o) { fd.append('growing_unit_ids', o.value); });
-    const note = document.getElementById('upload-note').value.trim();
-    if (note) fd.append('note_text', note);
-
-    document.getElementById('upload-status').textContent = 'Uploading…';
-    try {
-      await uploadPhoto(fd);
-      document.getElementById('upload-status').textContent = 'Uploaded.';
-      fileInput.value = '';
-      document.getElementById('upload-captured-at').value  = '';
-      document.getElementById('upload-photo-type').value   = '';
-      document.getElementById('upload-location').value     = '';
-      Array.from(document.getElementById('upload-units').options).forEach(function(o) { o.selected = false; });
-      document.getElementById('upload-note').value = '';
-      loadPhotos();
-    } catch (e) {
-      document.getElementById('upload-status').textContent = 'Error: ' + e.message;
-    }
-  }
+  // ── Manual upload — see upload.js ────────────────────────
 
   // ── Identity panel ───────────────────────────────────────
 
@@ -501,6 +460,7 @@ import { tlInit, tlPlayPause, tlPrev, tlNext } from './timelapse.js';
 
   updateFlickerFps();
   initNotes(visualToStored);
+  initUpload(loadPhotos);
   initSdImport(loadPhotos);
   initEvents(loadDropdownData);
   loadDropdownData().then(loadPhotos);
