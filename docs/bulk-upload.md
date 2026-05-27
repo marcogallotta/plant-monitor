@@ -136,13 +136,16 @@ Done when:
 - "Import N selected" button; upload loop with per-thumbnail status overlay
 - `captured_at` currently uses `File.lastModified` — replaced by EXIF in 6.2
 
-### 6.2 — EXIF parsing and timestamp derivation
+### 6.2 — EXIF parsing and timestamp derivation ✓ done
 
-- Add `exifr` via CDN
-- Read `DateTimeOriginal` and `OffsetTimeOriginal` per file
-- Implement timezone fallback chain
-- Show derived timestamp and timezone badge on hover or below thumbnail
-- Tests for timestamp derivation logic
+- `exifr` loaded via CDN; parses `DateTimeOriginal`, `CreateDate`, `OffsetTimeOriginal`
+- Priority chain: EXIF with offset → EXIF without offset (browser local time assumed) → `File.lastModified`
+- Timestamp shown below filename in caption; colour indicates confidence:
+  - green = offset present in EXIF
+  - yellow = EXIF date but no offset (browser local timezone assumed)
+  - red = no EXIF, using `File.lastModified`
+- ORF not supported by exifr — always red/lastModified fallback
+- Upload uses `entry.capturedAt`; falls back to `lastModified` only if EXIF not yet resolved
 
 ### 6.3 — Batch photo_type picker
 

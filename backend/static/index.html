@@ -477,6 +477,14 @@
       text-align: center;
       border-top: 1px solid #2a2a2a;
     }
+    .sd-ts-line {
+      font-size: 0.55rem;
+      margin-top: 1px;
+    }
+    .sd-ts-line[data-badge="ok"]       { color: #4a8; }
+    .sd-ts-line[data-badge="assumed"]  { color: #ca4; }
+    .sd-ts-line[data-badge="fallback"] { color: #e44; }
+    .sd-ts-line:not([data-badge])      { color: #888; }
     .sd-orf-label {
       position: absolute;
       top: 50%; left: 50%;
@@ -1714,12 +1722,14 @@ function openEditForm(note) {
       var lower  = f.name.toLowerCase();
       var isRaw  = lower.endsWith('.orf') || lower.endsWith('.arw');
       return {
-        file:       f,
-        selected:   false,
-        isRaw:      isRaw,
-        thumbUrl:   isRaw ? null : URL.createObjectURL(f),
-        uploadFile: isRaw ? null : f,
-        sessionBreak: false, // set below
+        file:        f,
+        selected:    false,
+        isRaw:       isRaw,
+        thumbUrl:    isRaw ? null : URL.createObjectURL(f),
+        uploadFile:  isRaw ? null : f,
+        capturedAt:  null,  // filled async by sdParseExif
+        tsBadge:     null,
+        sessionBreak: false,
       };
     });
 
@@ -1761,6 +1771,7 @@ function openEditForm(note) {
     sdUpdateLoadMore();
     sdUpdateCount();
     sdExtractRawThumbs(from, end);
+    sdParseExif(from, end);
   }
 
   function sdMakeSeparator() {
@@ -1792,8 +1803,16 @@ function openEditForm(note) {
     }
 
     var caption = document.createElement('div');
-    caption.className   = 'sd-thumb-caption';
-    caption.textContent = entry.file.name;
+    caption.className = 'sd-thumb-caption';
+    var nameSpan = document.createElement('div');
+    nameSpan.textContent = entry.file.name;
+    var tsSpan = document.createElement('div');
+    tsSpan.className = 'sd-ts-line';
+    tsSpan.id        = 'sd-ts-line-' + i;
+    if (entry.tsBadge) tsSpan.dataset.badge = entry.tsBadge;
+    tsSpan.textContent = entry.capturedAt ? sdFmtTs(entry.capturedAt) : '';
+    caption.appendChild(nameSpan);
+    caption.appendChild(tsSpan);
 
     var check = document.createElement('div');
     check.className = 'sd-thumb-check';
@@ -1829,17 +1848,16 @@ function openEditForm(note) {
   }
 
   // Extract embedded JPEG from a raw camera file.
-  // ARW (Sony): preview is typically within the first 512 KB — try that first to
-  // avoid reading 25 MB from the SD card. ORF (Olympus): preview can be at 11 MB+,
-  // so always do a full read for ORF.
+  // ARW (Sony): full preview starts at ~144 KB and is ~548 KB; read 768 KB to be safe.
+  // ORF (Olympus): preview can be at 11 MB+, so always do a full read.
   async function extractEmbeddedJpeg(file) {
     var isOrf = file.name.toLowerCase().endsWith('.orf');
-    if (!isOrf && file.size > 524288) {
-      var slice  = file.slice(0, 524288);
+    if (!isOrf && file.size > 786432) {
+      var slice  = file.slice(0, 786432);
       var bytes  = new Uint8Array(await slice.arrayBuffer());
       var result = scanForJpeg(bytes);
       if (result) return result;
-      // preview not in first 512 KB — fall through to full read
+      // preview not in first 768 KB — fall through to full read
     }
     var bytes = new Uint8Array(await file.arrayBuffer());
     return scanForJpeg(bytes);
@@ -1864,6 +1882,53 @@ function openEditForm(note) {
           if (lbl) lbl.remove();
         }
       } catch(e) { console.warn('RAW thumb failed', entry.file.name, e); }
+    }
+  }
+
+  var SD_TZ = 'Europe/Rome';
+
+  // Format an ISO timestamp for display in the caption (date + time, no seconds).
+  function sdFmtTs(iso) {
+    try {
+      return new Date(iso).toLocaleString('sv-SE', {timeZone: 'Europe/Rome',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'}).replace('T', ' ');
+    } catch(e) { return iso.slice(0, 16); }
+  }
+
+  // Derive captured_at ISO string from EXIF data using the priority chain.
+  // Returns {iso, badge} where badge is 'ok' | 'assumed' | 'fallback'.
+  //
+  // exifr parses DateTimeOriginal into a JS Date. When OffsetTimeOriginal is
+  // present exifr applies it, so the Date is already correct UTC — toISOString()
+  // is safe. When there is no offset exifr treats the raw values as local browser
+  // time, which is good enough given the browser runs in the camera's timezone.
+  function sdDeriveTs(exif, file) {
+    var dto = exif && (exif.DateTimeOriginal || exif.CreateDate);
+    if (dto) {
+      var d = dto instanceof Date ? dto : new Date(dto);
+      if (!isNaN(d.getTime())) {
+        var hasOffset = !!(exif && exif.OffsetTimeOriginal);
+        return {iso: d.toISOString(), badge: hasOffset ? 'ok' : 'assumed'};
+      }
+    }
+    return {iso: new Date(file.lastModified).toISOString(), badge: 'fallback'};
+  }
+
+  async function sdParseExif(from, to) {
+    for (var i = from; i < to; i++) {
+      var entry = sdFiles[i];
+      if (entry.capturedAt) continue;
+      var exif = null;
+      try {
+        // exifr can read JPEG and ARW; ORF is not supported — will return null
+        exif = await exifr.parse(entry.file, ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal']);
+      } catch(e) { /* unsupported format — fallback below */ }
+      var result      = sdDeriveTs(exif, entry.file);
+      entry.capturedAt = result.iso;
+      entry.tsBadge    = result.badge;
+      var tsEl = document.getElementById('sd-ts-line-' + i);
+      if (tsEl) { tsEl.textContent = sdFmtTs(result.iso); tsEl.dataset.badge = result.badge; }
     }
   }
 
@@ -1971,8 +2036,7 @@ function openEditForm(note) {
 
       if (!entry.uploadFile) { sdSetThumbStatus(idx, 'error'); failed++; continue; }
 
-      // captured_at: use lastModified as fallback (EXIF parsing comes in stage 6.2)
-      var ts = new Date(entry.file.lastModified).toISOString();
+      var ts = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
 
       var fd = new FormData();
       fd.append('image', entry.uploadFile, entry.file.name);
