@@ -424,6 +424,82 @@
     .identity-edit-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
     .identity-edit-row select { font-size: 0.8rem; }
     .identity-edit-row select[multiple] { height: 70px; }
+
+    /* SD card import */
+    .sd-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 4px;
+      padding: 4px 0;
+    }
+    .sd-thumb-wrap {
+      position: relative;
+      cursor: pointer;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #1a1a1a;
+      border: 2px solid transparent;
+      aspect-ratio: 1;
+    }
+    .sd-thumb-wrap.selected { border-color: #4a8; }
+    .sd-thumb-wrap img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+      transition: opacity 0.1s;
+    }
+    .sd-thumb-wrap:hover img { opacity: 0.85; }
+    .sd-thumb-caption {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 0.2rem 0.3rem;
+      font-size: 0.6rem;
+      color: #ccc;
+      background: linear-gradient(transparent, rgba(0,0,0,0.75));
+      pointer-events: none;
+    }
+    .sd-thumb-check {
+      position: absolute;
+      top: 4px; right: 4px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #4a8;
+      border: 2px solid #fff;
+      display: none;
+    }
+    .sd-thumb-wrap.selected .sd-thumb-check { display: block; }
+    .sd-session-break {
+      grid-column: 1 / -1;
+      padding: 0.4rem 0;
+      font-size: 0.7rem;
+      color: #444;
+      text-align: center;
+      border-top: 1px solid #2a2a2a;
+    }
+    .sd-orf-label {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #555;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+    }
+    .sd-status-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      font-weight: 700;
+      pointer-events: none;
+    }
+    .sd-status-overlay[data-state="uploading"] { background: rgba(0,0,0,0.45); color: #aaa; }
+    .sd-status-overlay[data-state="done"]      { background: rgba(0,50,20,0.55); color: #4e8; }
+    .sd-status-overlay[data-state="error"]     { background: rgba(50,0,0,0.55); color: #e44; }
   </style>
 </head>
 <body>
@@ -516,6 +592,35 @@
       <label></label>
       <button onclick="submitManualUpload()">Upload</button>
       <span id="upload-status" style="font-size:0.8rem;color:#888;"></span>
+    </div>
+  </div>
+</div>
+
+<!-- SD card import panel -->
+<div class="upload-panel">
+  <div class="upload-panel-header" onclick="toggleSdPanel()">
+    <h2>SD card import</h2>
+    <span id="sd-toggle-label" style="font-size:0.75rem;color:#555;">▸ expand</span>
+  </div>
+  <div class="upload-form" id="sd-form">
+    <div class="upload-row">
+      <input type="file" id="sd-folder-input" webkitdirectory accept=".jpg,.jpeg,.orf,.arw" style="display:none" onchange="handleSdFolderInput(event)">
+      <button onclick="document.getElementById('sd-folder-input').click()">Choose folder</button>
+      <span id="sd-folder-status" style="font-size:0.8rem;color:#888;margin-left:0.5rem;"></span>
+    </div>
+    <div class="upload-row" id="sd-grid-controls" style="display:none;">
+      <span id="sd-selected-count" style="font-size:0.8rem;color:#888;flex:1;"></span>
+      <button onclick="sdSelectAllVisible()">Select all visible</button>
+      <button onclick="sdDeselectAll()">Deselect all</button>
+    </div>
+    <div class="sd-grid" id="sd-grid"></div>
+    <div class="upload-row" id="sd-load-more-row" style="display:none;justify-content:center;">
+      <button onclick="sdLoadMore()">Load more</button>
+      <span id="sd-load-more-label" style="font-size:0.8rem;color:#555;margin-left:0.5rem;"></span>
+    </div>
+    <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;">
+      <button id="sd-upload-btn" onclick="sdUploadSelected()">Import selected</button>
+      <span id="sd-upload-status" style="font-size:0.8rem;color:#888;"></span>
     </div>
   </div>
 </div>
@@ -757,6 +862,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/exifr@7/dist/full.umd.js"></script>
 <script>
   let allPhotos = [];
   let photoA = null, photoB = null;
@@ -1556,6 +1662,333 @@ function openEditForm(note) {
     isPanning = false;
     document.getElementById('zoom-viewport').classList.remove('grabbing');
   });
+
+  // ── SD card import ───────────────────────────────────────
+
+  var SD_PAGE = 20;
+  // [{file, selected, thumbUrl, uploadFile, isRaw}]
+  // thumbUrl/uploadFile are null for ORF until extracted async
+  var sdFiles = [];
+  var sdShown = 0;
+
+  function toggleSdPanel() {
+    var form  = document.getElementById('sd-form');
+    var label = document.getElementById('sd-toggle-label');
+    var open  = form.classList.toggle('open');
+    label.textContent = open ? '▾ collapse' : '▸ expand';
+  }
+
+  function handleSdFolderInput(event) {
+    var status = document.getElementById('sd-folder-status');
+
+    sdFiles.forEach(function(e) { if (e.thumbUrl) URL.revokeObjectURL(e.thumbUrl); });
+    sdFiles = [];
+    sdShown = 0;
+    document.getElementById('sd-grid-controls').style.display = 'none';
+    document.getElementById('sd-load-more-row').style.display = 'none';
+    document.getElementById('sd-grid').innerHTML = '';
+
+    var uploaded = new Set(allPhotos.map(function(p) { return p.original_filename; }).filter(Boolean));
+
+    var all = Array.from(event.target.files);
+    var photos = all.filter(function(f) {
+      var lower = f.name.toLowerCase();
+      if (!lower.endsWith('.jpg') && !lower.endsWith('.jpeg') && !lower.endsWith('.orf') && !lower.endsWith('.arw')) return false;
+      return !uploaded.has(f.name);
+    });
+
+    var skipped = all.filter(function(f) {
+      var lower = f.name.toLowerCase();
+      return (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.orf') || lower.endsWith('.arw')) && uploaded.has(f.name);
+    }).length;
+
+    if (photos.length === 0) {
+      status.textContent = skipped > 0 ? 'All ' + skipped + ' already imported.' : 'No photos found.';
+      return;
+    }
+
+    // most recently shot first — sort by filename descending (sequential camera numbering)
+    photos.sort(function(a, b) { return b.name.localeCompare(a.name); });
+
+    sdFiles = photos.map(function(f) {
+      var lower  = f.name.toLowerCase();
+      var isRaw  = lower.endsWith('.orf') || lower.endsWith('.arw');
+      return {
+        file:       f,
+        selected:   false,
+        isRaw:      isRaw,
+        thumbUrl:   isRaw ? null : URL.createObjectURL(f),
+        uploadFile: isRaw ? null : f,
+        sessionBreak: false, // set below
+      };
+    });
+
+    // detect session boundary: first time gap > 1 hour between consecutive files
+    var SD_TIME_GAP = 60 * 60 * 1000;
+    var batchEnd = -1; // -1 = no clear boundary found
+    for (var i = 0; i < sdFiles.length - 1; i++) {
+      var tA = sdFiles[i].file.lastModified;
+      var tB = sdFiles[i+1].file.lastModified;
+      if (tA > 0 && tB > 0 && (tA - tB) > SD_TIME_GAP) {
+        sdFiles[i+1].sessionBreak = true;
+        batchEnd = i + 1;
+        break;
+      }
+    }
+
+    // auto-select only if a clear boundary was found
+    if (batchEnd > 0) {
+      for (var i = 0; i < batchEnd; i++) sdFiles[i].selected = true;
+    }
+
+    var batchLabel  = batchEnd > 0 ? ' — ' + batchEnd + ' in latest batch' : '';
+    var skipLabel   = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
+    status.textContent = sdFiles.length + ' photo' + (sdFiles.length === 1 ? '' : 's') + batchLabel + skipLabel;
+    document.getElementById('sd-grid-controls').style.display = 'flex';
+    // load full batch + 3 past the break so the cutoff is visible; else show first page
+    sdAppendThumbs(batchEnd > 0 ? batchEnd + 3 : SD_PAGE);
+  }
+
+  function sdAppendThumbs(count) {
+    var grid = document.getElementById('sd-grid');
+    var from = sdShown;
+    var end  = Math.min(sdShown + count, sdFiles.length);
+    for (var i = from; i < end; i++) {
+      if (sdFiles[i].sessionBreak) grid.appendChild(sdMakeSeparator());
+      grid.appendChild(sdMakeThumb(i));
+    }
+    sdShown = end;
+    sdUpdateLoadMore();
+    sdUpdateCount();
+    sdExtractRawThumbs(from, end);
+  }
+
+  function sdMakeSeparator() {
+    var div = document.createElement('div');
+    div.className   = 'sd-session-break';
+    div.textContent = '— older —';
+    return div;
+  }
+
+  function sdMakeThumb(i) {
+    var entry = sdFiles[i];
+    var wrap  = document.createElement('div');
+    wrap.className   = 'sd-thumb-wrap' + (entry.selected ? ' selected' : '');
+    wrap.dataset.idx = i;
+    wrap.addEventListener('click', function() { sdToggle(i); });
+
+    var img = document.createElement('img');
+    img.alt     = entry.file.name;
+    img.loading = 'lazy';
+    if (entry.thumbUrl) {
+      img.src = entry.thumbUrl;
+    } else {
+      img.style.display = 'none';
+      var lbl = document.createElement('div');
+      lbl.className = 'sd-orf-label';
+      lbl.id        = 'sd-orf-lbl-' + i;
+      lbl.textContent = 'RAW';
+      wrap.appendChild(lbl);
+    }
+
+    var caption = document.createElement('div');
+    caption.className   = 'sd-thumb-caption';
+    caption.textContent = entry.file.name;
+
+    var check = document.createElement('div');
+    check.className = 'sd-thumb-check';
+
+    wrap.appendChild(img);
+    wrap.appendChild(caption);
+    wrap.appendChild(check);
+    return wrap;
+  }
+
+  // Scan a Uint8Array for the largest complete embedded JPEG (FF D8 FF ... FF D9).
+  function scanForJpeg(bytes) {
+    var best = null;
+    var i = 0;
+    while (i < bytes.length - 3) {
+      if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
+        var j = i + 2;
+        while (j < bytes.length - 1) {
+          if (bytes[j] === 0xFF && bytes[j+1] === 0xD9) {
+            var size = j + 2 - i;
+            if (!best || size > best.size) best = {start: i, size: size};
+            i = j + 2;
+            break;
+          }
+          j++;
+        }
+        if (j >= bytes.length - 1) break;
+      } else {
+        i++;
+      }
+    }
+    return best ? bytes.slice(best.start, best.start + best.size) : null;
+  }
+
+  // Extract embedded JPEG from a raw camera file.
+  // ARW (Sony): preview is typically within the first 512 KB — try that first to
+  // avoid reading 25 MB from the SD card. ORF (Olympus): preview can be at 11 MB+,
+  // so always do a full read for ORF.
+  async function extractEmbeddedJpeg(file) {
+    var isOrf = file.name.toLowerCase().endsWith('.orf');
+    if (!isOrf && file.size > 524288) {
+      var slice  = file.slice(0, 524288);
+      var bytes  = new Uint8Array(await slice.arrayBuffer());
+      var result = scanForJpeg(bytes);
+      if (result) return result;
+      // preview not in first 512 KB — fall through to full read
+    }
+    var bytes = new Uint8Array(await file.arrayBuffer());
+    return scanForJpeg(bytes);
+  }
+
+  async function sdExtractRawThumbs(from, to) {
+    for (var i = from; i < to; i++) {
+      var entry = sdFiles[i];
+      if (!entry.isRaw || entry.thumbUrl) continue;
+      try {
+        var jpegBytes = await extractEmbeddedJpeg(entry.file);
+        if (!jpegBytes) continue;
+        var blob = new Blob([jpegBytes], {type: 'image/jpeg'});
+        entry.thumbUrl   = URL.createObjectURL(blob);
+        // keep raw filename so backend stores original_filename = DSC01349.ARW
+        entry.uploadFile = new File([blob], entry.file.name, {type: 'image/jpeg'});
+        var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+        if (wrap) {
+          var img = wrap.querySelector('img');
+          if (img) { img.src = entry.thumbUrl; img.style.display = ''; }
+          var lbl = document.getElementById('sd-orf-lbl-' + i);
+          if (lbl) lbl.remove();
+        }
+      } catch(e) { console.warn('RAW thumb failed', entry.file.name, e); }
+    }
+  }
+
+  function sdToggle(i) {
+    sdFiles[i].selected = !sdFiles[i].selected;
+    var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+    if (wrap) wrap.className = 'sd-thumb-wrap' + (sdFiles[i].selected ? ' selected' : '');
+    sdUpdateCount();
+  }
+
+  function sdUpdateCount() {
+    var n = sdFiles.filter(function(f) { return f.selected; }).length;
+    document.getElementById('sd-selected-count').textContent = n + ' selected';
+    var row = document.getElementById('sd-upload-row');
+    var btn = document.getElementById('sd-upload-btn');
+    if (n > 0) {
+      row.style.display = 'flex';
+      btn.textContent = 'Import ' + n + ' selected';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+
+  function sdUpdateLoadMore() {
+    var row       = document.getElementById('sd-load-more-row');
+    var remaining = sdFiles.length - sdShown;
+    if (remaining > 0) {
+      row.style.display = 'flex';
+      document.getElementById('sd-load-more-label').textContent = remaining + ' more';
+    } else {
+      row.style.display = 'none';
+    }
+  }
+
+  function sdLoadMore() { sdAppendThumbs(SD_PAGE); }
+
+  function sdSelectAllVisible() {
+    for (var i = 0; i < sdShown; i++) {
+      sdFiles[i].selected = true;
+      var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+      if (wrap) wrap.className = 'sd-thumb-wrap selected';
+    }
+    sdUpdateCount();
+  }
+
+  function sdDeselectAll() {
+    sdFiles.forEach(function(f, i) {
+      f.selected = false;
+      var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+      if (wrap) wrap.className = 'sd-thumb-wrap';
+    });
+    sdUpdateCount();
+  }
+
+  function sdSetThumbStatus(i, state, detail) {
+    // state: 'uploading' | 'done' | 'error'
+    var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+    if (!wrap) return;
+    var existing = wrap.querySelector('.sd-status-overlay');
+    if (existing) existing.remove();
+    var ov = document.createElement('div');
+    ov.className = 'sd-status-overlay';
+    ov.dataset.state = state;
+    ov.textContent = state === 'uploading' ? '…' : state === 'done' ? '✓' : '✗';
+    if (detail) ov.title = detail;
+    wrap.appendChild(ov);
+  }
+
+  async function sdUploadSelected() {
+    var btn    = document.getElementById('sd-upload-btn');
+    var status = document.getElementById('sd-upload-status');
+    var queue  = sdFiles.map(function(e, i) { return {entry: e, idx: i}; })
+                        .filter(function(x) { return x.entry.selected; });
+    if (queue.length === 0) return;
+
+    btn.disabled = true;
+    var done = 0, failed = 0;
+
+    for (var q = 0; q < queue.length; q++) {
+      var idx   = queue[q].idx;
+      var entry = queue[q].entry;
+      status.textContent = (q + 1) + ' / ' + queue.length + '…';
+      sdSetThumbStatus(idx, 'uploading');
+
+      // For RAW files, wait for extraction if not done yet
+      if (entry.isRaw && !entry.uploadFile) {
+        try {
+          var jpegBytes = await extractEmbeddedJpeg(entry.file);
+          if (jpegBytes) {
+            var blob = new Blob([jpegBytes], {type: 'image/jpeg'});
+            entry.uploadFile = new File([blob], entry.file.name, {type: 'image/jpeg'});
+            if (!entry.thumbUrl) {
+              entry.thumbUrl = URL.createObjectURL(blob);
+              var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + idx + '"]');
+              if (wrap) {
+                var img = wrap.querySelector('img');
+                if (img) { img.src = entry.thumbUrl; img.style.display = ''; }
+                var lbl = document.getElementById('sd-orf-lbl-' + idx);
+                if (lbl) lbl.remove();
+              }
+            }
+          }
+        } catch(e) { console.warn('RAW extract failed for upload', entry.file.name, e); }
+      }
+
+      if (!entry.uploadFile) { sdSetThumbStatus(idx, 'error'); failed++; continue; }
+
+      // captured_at: use lastModified as fallback (EXIF parsing comes in stage 6.2)
+      var ts = new Date(entry.file.lastModified).toISOString();
+
+      var fd = new FormData();
+      fd.append('image', entry.uploadFile, entry.file.name);
+      fd.append('captured_at', ts);
+
+      try {
+        var resp = await fetch('/manual-photos', {method: 'POST', body: fd});
+        if (resp.ok) { sdSetThumbStatus(idx, 'done'); done++; }
+        else         { sdSetThumbStatus(idx, 'error', 'HTTP ' + resp.status); failed++; console.warn('Upload failed', entry.file.name, resp.status); }
+      } catch(e)   { sdSetThumbStatus(idx, 'error', String(e)); failed++; console.warn('Upload error', entry.file.name, e); }
+    }
+
+    btn.disabled = false;
+    status.textContent = done + ' uploaded' + (failed > 0 ? ', ' + failed + ' failed' : '');
+    if (done > 0) loadPhotos();
+  }
 
   updateFlickerFps();
   loadDropdownData().then(loadPhotos);
