@@ -569,6 +569,9 @@ class PhotoBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 
+CARE_ACTION_TYPES = {"fed_liquid", "fed_worm_castings", "watered", "harvested", "potted_up", "other"}
+
+
 class EventCreate(BaseModel):
     event_type: str
     event_at: Optional[datetime] = None
@@ -576,6 +579,13 @@ class EventCreate(BaseModel):
     location_id: Optional[int] = None
     growing_unit_ids: Optional[list[int]] = None
     photo_ids: Optional[list[int]] = None
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event_type(cls, v: str) -> str:
+        if v not in CARE_ACTION_TYPES:
+            raise ValueError(f"event_type must be one of {sorted(CARE_ACTION_TYPES)}")
+        return v
 
 
 class EventOut(BaseModel):

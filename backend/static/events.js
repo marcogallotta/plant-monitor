@@ -1,6 +1,17 @@
 import { createEvent, getEvents, createLocation as apiCreateLocation, createGrowingUnit } from './api.js';
 import { formatDate } from './utils.js';
 
+export const CARE_ACTION_TYPES = ['fed_liquid', 'fed_worm_castings', 'watered', 'harvested', 'potted_up', 'other'];
+
+export function buildEventBody(type, at, loc, unitIds, note) {
+  const body = {event_type: type};
+  if (at)           body.event_at          = new Date(at).toISOString();
+  if (loc)          body.location_id       = parseInt(loc);
+  if (unitIds.length) body.growing_unit_ids = unitIds;
+  if (note)         body.note_text         = note;
+  return body;
+}
+
 let _reloadDropdowns = null;
 
 export function initEvents(reloadDropdowns) {
@@ -53,18 +64,13 @@ export function toggleEventsPanel() {
 }
 
 export async function logEvent() {
-  const type = document.getElementById('new-event-type').value;
-  const at   = document.getElementById('new-event-at').value;
-  const loc  = document.getElementById('new-event-location').value;
+  const type    = document.getElementById('new-event-type').value;
+  const at      = document.getElementById('new-event-at').value;
+  const loc     = document.getElementById('new-event-location').value;
   const unitSel = document.getElementById('new-event-units');
-  const note = document.getElementById('new-event-note').value.trim();
-
-  const body = {event_type: type};
-  if (at)   body.event_at    = new Date(at).toISOString();
-  if (loc)  body.location_id = parseInt(loc);
+  const note    = document.getElementById('new-event-note').value.trim();
   const unitIds = Array.from(unitSel.selectedOptions).map(function(o) { return parseInt(o.value); });
-  if (unitIds.length) body.growing_unit_ids = unitIds;
-  if (note) body.note_text = note;
+  const body    = buildEventBody(type, at, loc, unitIds, note);
 
   document.getElementById('event-status').textContent = 'Saving…';
   try {

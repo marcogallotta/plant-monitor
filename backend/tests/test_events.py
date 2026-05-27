@@ -96,6 +96,28 @@ def test_create_event_optional_fields_null(client):
     assert data["photos"] == []
 
 
+# --- event type validation ---
+
+VALID_EVENT_TYPES = ["fed_liquid", "fed_worm_castings", "watered", "harvested", "potted_up", "other"]
+
+
+@pytest.mark.parametrize("event_type", VALID_EVENT_TYPES)
+def test_create_event_valid_types(client, event_type):
+    r = client.post("/events", json={"event_type": event_type})
+    assert r.status_code == 201
+    assert r.json()["event_type"] == event_type
+
+
+def test_create_event_invalid_type_rejected(client):
+    r = client.post("/events", json={"event_type": "watering"})
+    assert r.status_code == 422
+
+
+def test_create_event_unknown_type_rejected(client):
+    r = client.post("/events", json={"event_type": "random_action"})
+    assert r.status_code == 422
+
+
 # --- GET /events ---
 
 def test_list_events_empty(client):
