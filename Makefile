@@ -1,6 +1,7 @@
-.PHONY: test test-backend test-pi migrate seed up down build
+.PHONY: test test-backend test-pi migrate seed up down build verify-up verify-down verify-reset
 
-TEST_COMPOSE := docker compose -p plant-monitoring-test -f docker-compose.test.yml
+TEST_COMPOSE   := docker compose -p plant-monitoring-test -f docker-compose.test.yml
+VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
 
 test: test-backend test-pi
 
@@ -25,3 +26,12 @@ down:
 
 build:
 	docker compose build
+
+verify-up:
+	$(VERIFY_COMPOSE) up -d --build
+
+verify-down:
+	$(VERIFY_COMPOSE) down -v
+
+verify-reset:
+	$(VERIFY_COMPOSE) down -v && $(VERIFY_COMPOSE) up -d --build

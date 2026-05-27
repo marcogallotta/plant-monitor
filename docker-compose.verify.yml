@@ -1,0 +1,25 @@
+services:
+  db-verify:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: plantmonitoring_verify
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d plantmonitoring_verify"]
+      interval: 2s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db-verify:5432/plantmonitoring_verify
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db-verify:
+        condition: service_healthy
