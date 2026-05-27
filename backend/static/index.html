@@ -53,7 +53,7 @@
 <div class="upload-panel">
   <div class="upload-panel-header" onclick="toggleUploadPanel()">
     <h2>Upload photo</h2>
-    <span id="upload-toggle-label" style="font-size:0.75rem;color:#555;">▸ expand</span>
+    <span id="upload-toggle-label" class="panel-toggle">▸ expand</span>
   </div>
   <div class="upload-form" id="upload-form">
     <div class="upload-row">
@@ -85,8 +85,7 @@
     </div>
     <div class="upload-row">
       <label>Growing units</label>
-      <select id="upload-units" multiple>
-      </select>
+      <select id="upload-units" multiple></select>
     </div>
     <div class="upload-row">
       <label>Initial note</label>
@@ -95,7 +94,7 @@
     <div class="upload-row">
       <label></label>
       <button onclick="submitManualUpload()">Upload</button>
-      <span id="upload-status" style="font-size:0.8rem;color:#888;"></span>
+      <span id="upload-status" class="status-msg"></span>
     </div>
   </div>
 </div>
@@ -104,27 +103,27 @@
 <div class="upload-panel">
   <div class="upload-panel-header" onclick="toggleSdPanel()">
     <h2>SD card import</h2>
-    <span id="sd-toggle-label" style="font-size:0.75rem;color:#555;">▸ expand</span>
+    <span id="sd-toggle-label" class="panel-toggle">▸ expand</span>
   </div>
   <div class="upload-form" id="sd-form">
     <div class="upload-row">
       <input type="file" id="sd-folder-input" webkitdirectory accept=".jpg,.jpeg,.orf,.arw" style="display:none" onchange="handleSdFolderInput(event)">
       <button onclick="document.getElementById('sd-folder-input').click()">Choose folder</button>
-      <span id="sd-folder-status" style="font-size:0.8rem;color:#888;margin-left:0.5rem;"></span>
+      <span id="sd-folder-status" class="status-msg" style="margin-left:0.5rem;"></span>
     </div>
     <div class="upload-row" id="sd-grid-controls" style="display:none;">
-      <span id="sd-selected-count" style="font-size:0.8rem;color:#888;flex:1;"></span>
+      <span id="sd-selected-count" class="status-msg" style="flex:1;"></span>
       <button onclick="sdSelectAllVisible()">Select all visible</button>
       <button onclick="sdDeselectAll()">Deselect all</button>
     </div>
     <div class="sd-grid" id="sd-grid"></div>
     <div class="upload-row" id="sd-load-more-row" style="display:none;justify-content:center;">
       <button onclick="sdLoadMore()">Load more</button>
-      <span id="sd-load-more-label" style="font-size:0.8rem;color:#555;margin-left:0.5rem;"></span>
+      <span id="sd-load-more-label" class="status-msg" style="margin-left:0.5rem;"></span>
     </div>
     <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;align-items:center;">
-      <label style="font-size:0.8rem;color:#888;">Type:</label>
-      <select id="sd-photo-type" style="font-size:0.8rem;">
+      <label>Type:</label>
+      <select id="sd-photo-type">
         <option value="">— none —</option>
         <option value="overview">overview</option>
         <option value="closeup">closeup</option>
@@ -136,7 +135,7 @@
         <option value="other">other</option>
       </select>
       <button id="sd-upload-btn" onclick="sdUploadSelected()">Import selected</button>
-      <span id="sd-upload-status" style="font-size:0.8rem;color:#888;"></span>
+      <span id="sd-upload-status" class="status-msg"></span>
     </div>
   </div>
 </div>
@@ -145,33 +144,33 @@
 <div class="upload-panel">
   <div class="upload-panel-header" onclick="toggleManagePanel()">
     <h2>Manage locations &amp; units</h2>
-    <span id="manage-toggle-label" style="font-size:0.75rem;color:#555;">▸ expand</span>
+    <span id="manage-toggle-label" class="panel-toggle">▸ expand</span>
   </div>
   <div class="upload-form" id="manage-form">
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
 
       <div style="flex:1;min-width:220px;">
-        <div style="font-size:0.8rem;color:#888;margin-bottom:0.4rem;">New location</div>
+        <div class="section-label">New location</div>
         <div class="upload-row">
           <label>Name</label>
-          <input type="text" id="new-loc-name" placeholder="e.g. Balcony" style="background:#222;border:1px solid #444;color:#ddd;padding:0.3rem 0.5rem;border-radius:4px;font-size:0.8rem;flex:1;">
+          <input type="text" id="new-loc-name" placeholder="e.g. Balcony">
         </div>
         <div class="upload-row">
           <label>Description</label>
-          <input type="text" id="new-loc-desc" placeholder="optional" style="background:#222;border:1px solid #444;color:#ddd;padding:0.3rem 0.5rem;border-radius:4px;font-size:0.8rem;flex:1;">
+          <input type="text" id="new-loc-desc" placeholder="optional">
         </div>
         <div class="upload-row">
           <label></label>
           <button onclick="createLocation()">Add location</button>
-          <span id="loc-status" style="font-size:0.8rem;color:#888;"></span>
+          <span id="loc-status" class="status-msg"></span>
         </div>
       </div>
 
       <div style="flex:1;min-width:220px;">
-        <div style="font-size:0.8rem;color:#888;margin-bottom:0.4rem;">New growing unit</div>
+        <div class="section-label">New growing unit</div>
         <div class="upload-row">
           <label>Name</label>
-          <input type="text" id="new-unit-name" placeholder="e.g. Thai basil plant 1" style="background:#222;border:1px solid #444;color:#ddd;padding:0.3rem 0.5rem;border-radius:4px;font-size:0.8rem;flex:1;">
+          <input type="text" id="new-unit-name" placeholder="e.g. Thai basil plant 1">
         </div>
         <div class="upload-row">
           <label>Type</label>
@@ -190,7 +189,7 @@
         <div class="upload-row">
           <label></label>
           <button onclick="createUnit()">Add unit</button>
-          <span id="unit-status" style="font-size:0.8rem;color:#888;"></span>
+          <span id="unit-status" class="status-msg"></span>
         </div>
       </div>
 
@@ -202,13 +201,13 @@
 <div class="upload-panel">
   <div class="upload-panel-header" onclick="toggleEventsPanel()">
     <h2>Events</h2>
-    <span id="events-toggle-label" style="font-size:0.75rem;color:#555;">▸ expand</span>
+    <span id="events-toggle-label" class="panel-toggle">▸ expand</span>
   </div>
   <div class="upload-form" id="events-form">
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
 
       <div style="flex:1;min-width:260px;">
-        <div style="font-size:0.8rem;color:#888;margin-bottom:0.4rem;">Log event</div>
+        <div class="section-label">Log event</div>
         <div class="upload-row">
           <label>Type</label>
           <select id="new-event-type">
@@ -237,8 +236,7 @@
         </div>
         <div class="upload-row">
           <label>Growing units</label>
-          <select id="new-event-units" multiple style="height:80px;flex:1;">
-          </select>
+          <select id="new-event-units" multiple></select>
         </div>
         <div class="upload-row">
           <label>Note</label>
@@ -247,13 +245,13 @@
         <div class="upload-row">
           <label></label>
           <button onclick="logEvent()">Log event</button>
-          <span id="event-status" style="font-size:0.8rem;color:#888;"></span>
+          <span id="event-status" class="status-msg"></span>
         </div>
       </div>
 
       <div style="flex:2;min-width:260px;">
-        <div style="font-size:0.8rem;color:#888;margin-bottom:0.4rem;">Recent events</div>
-        <div id="event-list" style="font-size:0.8rem;color:#aaa;display:flex;flex-direction:column;gap:0.4rem;max-height:260px;overflow-y:auto;"></div>
+        <div class="section-label">Recent events</div>
+        <div id="event-list" class="event-list"></div>
       </div>
 
     </div>
@@ -266,7 +264,7 @@
 <div class="compare-panel">
   <div class="compare-header">
     <h2>Compare</h2>
-    <span id="compare-hint" style="font-size:0.75rem;color:#555;">
+    <span id="compare-hint" class="panel-toggle">
       Click <strong style="color:#8af">A</strong> / <strong style="color:#c8f">B</strong> on any photo above to select
     </span>
   </div>
@@ -290,7 +288,7 @@
     <button id="btn-toggle" onclick="flickerToggle()" disabled>Toggle A/B</button>
     <button id="btn-auto"   onclick="flickerAuto()"   disabled>Auto flicker</button>
     <label>Speed <input type="range" id="flicker-speed" min="1" max="20" value="4"></label>
-    <span id="flicker-fps" style="font-size:0.75rem;color:#555;"></span>
+    <span id="flicker-fps" class="panel-toggle"></span>
   </div>
 
   <div class="flicker-view" id="flicker-view">
@@ -303,13 +301,13 @@
 <div class="compare-panel" style="margin-top:0.5rem;">
   <div class="compare-header">
     <h2>Timelapse</h2>
-    <span id="tl-counter" style="font-size:0.75rem;color:#555;">no photos loaded</span>
+    <span id="tl-counter" class="panel-toggle">no photos loaded</span>
   </div>
 
-  <div style="background:#111;position:relative;min-height:120px;display:flex;align-items:center;justify-content:center;">
-    <img id="tl-img" src="" alt="" style="width:100%;max-height:60vh;object-fit:contain;display:none;">
-    <div id="tl-empty" style="color:#444;font-size:0.85rem;">Load photos in the timeline above to play</div>
-    <div id="tl-label" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.6);padding:0.2rem 0.5rem;border-radius:3px;font-size:0.7rem;color:#aaa;display:none;"></div>
+  <div class="tl-view">
+    <img id="tl-img" src="" alt="" style="display:none">
+    <div id="tl-empty" class="tl-empty">Load photos in the timeline above to play</div>
+    <div id="tl-label" class="tl-label" style="display:none;"></div>
   </div>
 
   <div class="flicker-controls">
@@ -317,7 +315,7 @@
     <button id="tl-play" onclick="tlPlayPause()" disabled>&#9654; Play</button>
     <button id="tl-next" onclick="tlNext()" disabled>&#9654; Next</button>
     <label>Speed <input type="range" id="tl-speed" min="1" max="24" value="4"></label>
-    <span id="tl-fps" style="font-size:0.75rem;color:#555;"></span>
+    <span id="tl-fps" class="panel-toggle"></span>
   </div>
 </div>
 
@@ -332,12 +330,12 @@
       <div class="modal-img-wrap" id="modal-img-wrap" onclick="modalImgClick(event)">
         <img id="modal-img" src="" alt="">
         <div class="note-pins" id="note-pins"></div>
-      <div id="rect-preview"></div>
+        <div id="rect-preview"></div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-top:0.25rem;">
+    <div class="modal-toolbar">
       <button onclick="rotatePhoto(-90)" title="Rotate counter-clockwise" style="font-size:1rem;padding:0.1rem 0.5rem;">&#8634;</button>
-      <div id="modal-caption" class="modal-caption" style="flex:1;"></div>
+      <div id="modal-caption" class="modal-caption"></div>
       <button onclick="toggleModalLogEvent()" title="Log event for this photo" style="font-size:0.75rem;padding:0.1rem 0.5rem;">+ event</button>
       <button onclick="rotatePhoto(90)" title="Rotate clockwise" style="font-size:1rem;padding:0.1rem 0.5rem;">&#8635;</button>
     </div>
@@ -345,7 +343,7 @@
       <div class="identity-row">
         <span class="identity-label">Source</span><span class="identity-value" id="id-source">—</span>
         <span class="identity-label" style="margin-left:1rem;">Type</span>
-        <select id="id-type-select" onchange="identityUpdate()" style="font-size:0.8rem;">
+        <select id="id-type-select" onchange="identityUpdate()">
           <option value="">— none —</option>
           <option value="overview">Overview</option>
           <option value="closeup">Closeup</option>
@@ -358,23 +356,22 @@
       </div>
       <div class="identity-row">
         <span class="identity-label">Location</span>
-        <select id="id-location-select" onchange="identityUpdate()" style="font-size:0.8rem;">
+        <select id="id-location-select" onchange="identityUpdate()">
           <option value="">— none —</option>
         </select>
       </div>
       <div class="identity-row">
         <span class="identity-label">Growing units</span>
-        <select id="id-units-select" multiple onchange="identityUpdate()" style="font-size:0.8rem;height:70px;flex:1;">
-        </select>
+        <select id="id-units-select" multiple onchange="identityUpdate()"></select>
       </div>
       <div class="identity-row" id="id-original-row" style="display:none;">
         <span class="identity-label">Original file</span><span class="identity-value" id="id-original">—</span>
       </div>
     </div>
-    <div id="modal-log-event-panel" style="display:none;background:#141414;border-top:1px solid #222;padding:0.5rem 0.75rem;font-size:0.8rem;">
-      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-        <span style="color:#666;font-size:0.75rem;min-width:100px;">Event type</span>
-        <select id="modal-event-type" style="font-size:0.8rem;">
+    <div id="modal-log-event-panel" class="identity-panel" style="display:none;">
+      <div class="identity-row">
+        <span class="identity-label">Event type</span>
+        <select id="modal-event-type">
           <option value="watered">Watered</option>
           <option value="harvested">Harvested</option>
           <option value="pinched_pruned">Pinched / pruned</option>
@@ -388,13 +385,13 @@
           <option value="other">Other</option>
         </select>
       </div>
-      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.35rem;">
-        <span style="color:#666;font-size:0.75rem;min-width:100px;">Note</span>
-        <textarea id="modal-event-note" placeholder="Optional…" rows="2" style="flex:1;font-size:0.8rem;background:#1a1a1a;border:1px solid #333;color:#ccc;border-radius:3px;padding:0.3rem 0.4rem;resize:vertical;"></textarea>
+      <div class="identity-row">
+        <span class="identity-label">Note</span>
+        <textarea id="modal-event-note" placeholder="Optional…" rows="2"></textarea>
       </div>
-      <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.35rem;">
-        <button onclick="modalLogEvent()" style="font-size:0.8rem;">Log event</button>
-        <span id="modal-event-status" style="font-size:0.75rem;color:#888;"></span>
+      <div class="identity-row">
+        <button onclick="modalLogEvent()">Log event</button>
+        <span id="modal-event-status" class="status-msg"></span>
       </div>
     </div>
     <div class="note-hint">Scroll to zoom · drag to pan · click to pin · shift+drag to box</div>

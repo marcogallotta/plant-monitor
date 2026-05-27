@@ -10,7 +10,7 @@ input, select, textarea {
   background: #222; border: 1px solid #444; color: #ddd;
   padding: 0.3rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-family: inherit;
 }
-input[type="file"] { padding: 0.2rem 0.4rem; }
+input[type="file"]  { padding: 0.2rem 0.4rem; }
 input[type="range"] { background: none; border: none; padding: 0; width: 80px; accent-color: #68f; }
 textarea { border-radius: 3px; resize: vertical; min-height: 2.5rem; }
 
@@ -20,6 +20,11 @@ button {
 }
 button:hover { background: #333; }
 button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
+
+/* Utility */
+.panel-toggle  { font-size: 0.75rem; color: #555; }
+.status-msg    { font-size: 0.8rem; color: #888; }
+.section-label { font-size: 0.8rem; color: #888; margin-bottom: 0.4rem; }
 
 /* Filters */
 .filters {
@@ -94,14 +99,21 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .flicker-label.a { color: #8af; }
 .flicker-label.b { color: #c8f; }
 
+/* Timelapse */
+.tl-view { background: #111; position: relative; min-height: 120px; display: flex; align-items: center; justify-content: center; }
+.tl-view img { width: 100%; max-height: 60vh; object-fit: contain; display: block; }
+.tl-empty { color: #444; font-size: 0.85rem; }
+.tl-label { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.6); padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.7rem; color: #aaa; }
+
 /* Modal */
 .modal        { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; }
 .modal.hidden { display: none; }
 .modal-bg     { position: absolute; inset: 0; background: rgba(0,0,0,0.85); cursor: pointer; }
 .modal-box    { position: relative; z-index: 1; max-width: 92vw; max-height: 90vh; display: flex; flex-direction: column; gap: 0.5rem; }
-.modal-caption { font-size: 0.8rem; color: #aaa; text-align: center; }
+.modal-caption { font-size: 0.8rem; color: #aaa; text-align: center; flex: 1; }
 .modal-close  { position: absolute; top: -2rem; right: 0; background: none; border: none; color: #aaa; font-size: 1.4rem; cursor: pointer; line-height: 1; }
 .modal-close:hover { color: #fff; }
+.modal-toolbar { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0.25rem; }
 
 /* Zoom viewport */
 #zoom-viewport          { display: inline-block; overflow: hidden; position: relative; cursor: grab; user-select: none; max-width: 100%; }
@@ -145,9 +157,13 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .upload-row label { font-size: 0.8rem; color: #888; min-width: 110px; }
 .upload-row input[type="file"],
 .upload-row input[type="datetime-local"],
+.upload-row input[type="text"],
 .upload-row select,
 .upload-row textarea { flex: 1; min-width: 0; }
 .upload-row select[multiple] { height: 80px; }
+
+/* Event list */
+.event-list { font-size: 0.8rem; color: #aaa; display: flex; flex-direction: column; gap: 0.4rem; max-height: 260px; overflow-y: auto; }
 
 /* Identity panel */
 .identity-panel        { background: #141414; border-top: 1px solid #222; padding: 0.6rem 0.75rem; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
@@ -157,6 +173,8 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .identity-value        { color: #ccc; }
 .identity-edit-row     { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
 .identity-edit-row select[multiple] { height: 70px; }
+.identity-row select[multiple]      { height: 70px; flex: 1; }
+#modal-log-event-panel textarea     { flex: 1; background: #1a1a1a; border-color: #333; color: #ccc; padding: 0.3rem 0.4rem; }
 
 /* SD card import */
 .sd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 4px; padding: 4px 0; }
