@@ -7,39 +7,13 @@ Notes for contributors. Covers non-obvious design decisions, test isolation mech
 ## Repository layout
 
 ```
-backend/
-  app/
-    main.py         # FastAPI app, all routes, request validation
-    models.py       # SQLAlchemy ORM models
-    database.py     # engine, session factory, get_db dependency
-  alembic/
-    env.py          # reads DATABASE_URL, binds Base.metadata
-    versions/       # migration scripts (prefix 0001_, 0002_, …)
-  scripts/
-    seed.py         # dev seed: downloads Picsum images, uploads via POST /photos
-  static/
-    index.html      # dashboard HTML (no build step)
-    style.css       # dashboard styles
-    app.js          # dashboard JS (ES module)
-    state.js        # shared JS state
-  tests/
-    conftest.py     # all shared fixtures
-    test_schema.py  # DB schema assertions (tables, columns, constraints, indexes)
-    test_upload_db.py
-    test_list_serve.py
-    test_notes.py
-    test_seed.py
-    test_dashboard.py
-    test_photos.py  # original upload endpoint tests
-
-pi/
-  camera.py         # photo capture (mocks hardware until Pi arrives)
-  upload.py         # uploads photos to backend
-  cleanup.py        # prunes local photos older than 7 days
-
-data/photos/        # image files on disk (gitignored)
-docs/               # design docs and this file
+backend/    # FastAPI app, Alembic migrations, static dashboard, tests
+pi/         # camera capture, upload, and cleanup scripts
+data/       # image files on disk (gitignored)
+docs/       # design docs and this file
 ```
+
+`backend/app/` holds the FastAPI app and ORM models. `backend/alembic/` holds migrations. `backend/static/` is the no-build-step dashboard (HTML + ES modules). `backend/tests/` has all backend tests.
 
 ---
 
@@ -94,6 +68,26 @@ After files are on disk, `_upsert_photo_record()` creates the DB row if one does
 ### Serving photos
 
 `GET /photos/{filename}` validates the filename format, checks the DB for a matching record, then serves the file from `data/photos/`. The DB check (not just a filesystem check) prevents path traversal — a filename that doesn't match any DB row gets a 404 even if the file happens to exist on disk.
+
+### Manual upload
+
+`POST /manual-photos` accepts a multipart upload from the dashboard. Only `image` (JPEG) is required; `captured_at`, `photo_type`, `location_id`, `growing_unit_ids`, and `note_text` are optional form fields. The filename is a random UUID hex — no timestamp stem requirement. `source` is always set to `"manual"` and `original_filename` records the browser filename. If `note_text` is supplied a `PhotoNote` with `x=0, y=0` is created in the same transaction.
+
+### Photo classification
+
+`PUT /photos/{photo_id}` updates `photo_type`, `location_id`, `rotation`, and/or `growing_unit_ids`. Growing unit assignments are replaced wholesale: the endpoint deletes all existing `PhotoGrowingUnit` rows for the photo then inserts the new set. Only fields present in the request body are touched (Pydantic `model_fields_set`).
+
+### Locations and growing units
+
+Standard CRUD via `/locations` and `/growing-units`. Both support `GET` (list), `POST` (create), `GET /{id}`, and `PUT /{id}`. `GrowingUnit` has rich optional fields (`species`, `variety`, `source`, `started_at`, `notes`, `current_location_id`) that are all nullable.
+
+### Events
+
+`POST /events` creates a garden event. `event_type` is a free-ish string (the dashboard offers a fixed set but the backend doesn't enforce it). Optional associations: `location_id`, `growing_unit_ids` (many-to-many via `event_growing_units`), `photo_ids` (many-to-many via `event_photos`). `event_at` defaults to `now()` if omitted. `GET /events` returns all events ordered by `event_at` descending.
+
+### Assistant API
+
+`/assistant/*` is a read-only sub-router protected by a Bearer token from the `ASSISTANT_API_TOKEN` env var. It exposes `GET /assistant/summary`, `/assistant/photos`, `/assistant/photos/{id}`, `/assistant/photos/{id}/context`, `/assistant/photos/{id}/thumbnail`, `/assistant/growing-units`, `/assistant/growing-units/{id}/context`, `/assistant/locations`, `/assistant/events`, and `/assistant/unclassified`. The thumbnail endpoint resizes to 256×256 via Pillow and returns JPEG bytes. A simple in-process rate limiter allows 60 requests per 60-second window per token.
 
 ---
 
@@ -159,20 +153,28 @@ The `Makefile` passes `-p plant-monitoring-test` when invoking the test compose 
 
 ## Dashboard
 
-`static/index.html` links `style.css` and `app.js` — no build step, no npm, no bundler. FastAPI serves all three files from `_STATIC_DIR`.
+`static/index.html` — no build step, no npm, no bundler. FastAPI serves the static directory from `_STATIC_DIR`. `app.js` is the ES module entry point; it imports from focused sibling modules and assigns the functions that HTML `onclick=` attributes need onto `window`.
 
-Key JS state:
+Key JS state (all fields live on the single `state` object in `state.js`):
 
 | Variable | Purpose |
 |----------|---------|
 | `allPhotos` | Array of photo objects from the last `GET /photos` call |
 | `photoA`, `photoB` | Selected photos for comparison / flicker |
+| `allLocations`, `allUnits` | Cached dropdown data from `GET /locations` and `GET /growing-units` |
 | `currentIndex` | Index into `allPhotos` for the open modal photo |
 | `currentPhotoId` | DB id of the currently open modal photo, used for notes API calls |
+| `currentRotation` | Visual rotation (0/90/180/270) of the modal photo |
 | `currentNotes` | Notes loaded for the current modal photo |
-| `pendingNote` | `{x, y}` for a new note being composed, or `{noteId, x, y}` for an edit |
+| `pendingNote` | `{x, y, x2, y2}` for a new note (x2/y2 non-null for a region); `{noteId, x, y, x2, y2}` for an edit |
+| `zoom`, `panX`, `panY` | Current zoom level and pan offset in the modal viewport |
+| `isPanning`, `wasDrag`, `isDrawingRect`, `rectStart` | Transient pointer-event state in the modal |
+| `flickerShowing`, `flickerTimer` | Which slot (a/b) is visible and the auto-flicker interval id |
+| `tlIndex`, `tlTimer` | Current frame index and play interval id for the timelapse panel |
 
-Note pin positions use `left: x*100%; top: y*100%` inside `.note-pins`, which is absolutely positioned over the image wrapper. The image wrapper is `display: inline-block` so it shrinks to fit the rendered image size, not the surrounding flex container. Normalized x/y are calculated from `img.getBoundingClientRect()` at click time.
+Note pin positions use `left: x*100%; top: y*100%` inside `.note-pins`, which is absolutely positioned over the image wrapper. The image wrapper is `display: inline-block` so it shrinks to fit the rendered image size, not the surrounding flex container. Normalised x/y are calculated from `img.getBoundingClientRect()` at click time. For region notes (shift+drag), x2/y2 are stored the same way; rendering uses the min/max of the two corners so drag direction doesn't matter.
+
+`zoom.js` owns all pointer events on `#zoom-viewport`. `visualToStored(rx, ry)` maps a click position in the rotated visual space back to the canonical stored coordinate system — any code that records a note position must go through this function.
 
 ---
 
