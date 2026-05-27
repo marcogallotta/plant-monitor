@@ -842,6 +842,7 @@
     <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-top:0.25rem;">
       <button onclick="rotatePhoto(-90)" title="Rotate counter-clockwise" style="font-size:1rem;padding:0.1rem 0.5rem;">&#8634;</button>
       <div id="modal-caption" class="modal-caption" style="flex:1;"></div>
+      <button onclick="toggleModalLogEvent()" title="Log event for this photo" style="font-size:0.75rem;padding:0.1rem 0.5rem;">+ event</button>
       <button onclick="rotatePhoto(90)" title="Rotate clockwise" style="font-size:1rem;padding:0.1rem 0.5rem;">&#8635;</button>
     </div>
     <div id="identity-panel" class="identity-panel hidden">
@@ -872,6 +873,32 @@
       </div>
       <div class="identity-row" id="id-original-row" style="display:none;">
         <span class="identity-label">Original file</span><span class="identity-value" id="id-original">—</span>
+      </div>
+    </div>
+    <div id="modal-log-event-panel" style="display:none;background:#141414;border-top:1px solid #222;padding:0.5rem 0.75rem;font-size:0.8rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+        <span style="color:#666;font-size:0.75rem;min-width:100px;">Event type</span>
+        <select id="modal-event-type" style="font-size:0.8rem;">
+          <option value="watered">Watered</option>
+          <option value="harvested">Harvested</option>
+          <option value="pinched_pruned">Pinched / pruned</option>
+          <option value="moved">Moved</option>
+          <option value="potted_up">Potted up</option>
+          <option value="propagated">Propagated</option>
+          <option value="stress_noticed">Stress noticed</option>
+          <option value="pest_issue">Pest issue</option>
+          <option value="mildew_yellowing">Mildew / yellowing</option>
+          <option value="recovered_improved">Recovered / improved</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-top:0.35rem;">
+        <span style="color:#666;font-size:0.75rem;min-width:100px;">Note</span>
+        <textarea id="modal-event-note" placeholder="Optional…" rows="2" style="flex:1;font-size:0.8rem;background:#1a1a1a;border:1px solid #333;color:#ccc;border-radius:3px;padding:0.3rem 0.4rem;resize:vertical;"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.35rem;">
+        <button onclick="modalLogEvent()" style="font-size:0.8rem;">Log event</button>
+        <span id="modal-event-status" style="font-size:0.75rem;color:#888;"></span>
       </div>
     </div>
     <div class="note-hint">Scroll to zoom · drag to pan · click to pin · shift+drag to box</div>
@@ -1174,6 +1201,8 @@
     currentRotation = p.rotation || 0;
     resetZoom();
     noteCancel();
+    document.getElementById('modal-log-event-panel').style.display = 'none';
+    document.getElementById('modal-event-status').textContent = '';
     currentPhotoId = p.id;
     document.getElementById('modal-img').src = p.url;
     document.getElementById('modal-caption').textContent =
@@ -1187,8 +1216,38 @@
     document.getElementById('modal').classList.add('hidden');
     document.getElementById('modal-img').src = '';
     document.getElementById('identity-panel').classList.add('hidden');
+    document.getElementById('modal-log-event-panel').style.display = 'none';
     currentPhotoId = null;
     currentNotes = [];
+  }
+
+  function toggleModalLogEvent() {
+    var panel = document.getElementById('modal-log-event-panel');
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+    document.getElementById('modal-event-status').textContent = '';
+  }
+
+  async function modalLogEvent() {
+    if (!currentPhotoId) return;
+    var type = document.getElementById('modal-event-type').value;
+    var note = document.getElementById('modal-event-note').value.trim();
+    var status = document.getElementById('modal-event-status');
+    var body = {event_type: type, photo_ids: [currentPhotoId]};
+    if (note) body.note_text = note;
+    status.textContent = 'Saving…';
+    try {
+      var resp = await fetch('/events', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        throw new Error(err.detail || 'HTTP ' + resp.status);
+      }
+      document.getElementById('modal-event-note').value = '';
+      status.textContent = 'Logged.';
+    } catch (e) { status.textContent = 'Error: ' + e.message; }
   }
 
   document.addEventListener('keydown', function(e) {
