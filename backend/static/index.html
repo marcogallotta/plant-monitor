@@ -723,7 +723,8 @@
             <option value="potted_up">Potted up</option>
             <option value="propagated">Propagated</option>
             <option value="stress_noticed">Stress noticed</option>
-            <option value="pest_mildew_yellowing">Pest / mildew / yellowing</option>
+            <option value="pest_issue">Pest issue</option>
+            <option value="mildew_yellowing">Mildew / yellowing</option>
             <option value="recovered_improved">Recovered / improved</option>
             <option value="other">Other</option>
           </select>
@@ -749,7 +750,7 @@
         </div>
         <div class="upload-row">
           <label></label>
-          <button onclick="createEvent()">Log event</button>
+          <button onclick="logEvent()">Log event</button>
           <span id="event-status" style="font-size:0.8rem;color:#888;"></span>
         </div>
       </div>
@@ -1387,7 +1388,7 @@ function openEditForm(note) {
     if (open) loadEvents();
   }
 
-  async function createEvent() {
+  async function logEvent() {
     const type = document.getElementById('new-event-type').value;
     const at   = document.getElementById('new-event-at').value;
     const loc  = document.getElementById('new-event-location').value;
