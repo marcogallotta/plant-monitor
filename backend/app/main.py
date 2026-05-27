@@ -12,6 +12,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
@@ -23,6 +24,8 @@ app = FastAPI()
 
 PHOTOS_DIR = Path("data/photos")
 _STATIC_DIR = Path(__file__).parent.parent / "static"
+
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)

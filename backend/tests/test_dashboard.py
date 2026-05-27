@@ -7,8 +7,17 @@ def test_dashboard_returns_html(client):
     assert "text/html" in resp.headers["content-type"]
 
 
-def test_dashboard_contains_photos_api_call(client):
+def test_dashboard_loads_app_js(client):
     resp = client.get("/")
+    assert b"/static/app.js" in resp.content
+
+
+def test_app_js_returns_200(client):
+    assert client.get("/static/app.js").status_code == 200
+
+
+def test_app_js_contains_photos_api_call(client):
+    resp = client.get("/static/app.js")
     assert b"/photos" in resp.content
 
 
@@ -55,12 +64,12 @@ def test_dashboard_has_photo_type_filter(client):
 
 
 def test_dashboard_has_location_filter(client):
-    resp = client.get("/")
+    resp = client.get("/static/app.js")
     assert b"/locations" in resp.content
 
 
 def test_dashboard_has_growing_unit_filter(client):
-    resp = client.get("/")
+    resp = client.get("/static/app.js")
     assert b"/growing-units" in resp.content
 
 
@@ -87,6 +96,6 @@ def test_dashboard_has_add_unit_form(client):
 
 
 def test_dashboard_has_events_ui(client):
-    resp = client.get("/")
+    resp = client.get("/static/app.js")
     assert b"/events" in resp.content
     assert b"Log event" in resp.content
