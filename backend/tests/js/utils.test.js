@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rotTransform, formatDate } from '@/utils.js';
+import { rotTransform, formatDate, populateSelect } from '@/utils.js';
 
 describe('rotTransform', () => {
   it('returns empty string for 0 or falsy', () => {
@@ -22,5 +22,43 @@ describe('formatDate', () => {
     const result = formatDate('2024-01-15T10:30:00Z');
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe('populateSelect', () => {
+  it('adds a blank option followed by items for a single-select', () => {
+    document.body.innerHTML = '<select id="sel"></select>';
+    populateSelect('sel', [{id: 1, name: 'Foo'}, {id: 2, name: 'Bar'}], 'All');
+    const sel = document.getElementById('sel');
+    expect(sel.options.length).toBe(3);
+    expect(sel.options[0].value).toBe('');
+    expect(sel.options[0].textContent).toBe('All');
+    expect(sel.options[1].value).toBe('1');
+    expect(sel.options[1].textContent).toBe('Foo');
+    expect(sel.options[2].value).toBe('2');
+  });
+
+  it('omits blank option for multi-select', () => {
+    document.body.innerHTML = '<select id="sel" multiple></select>';
+    populateSelect('sel', [{id: 1, name: 'Foo'}], null);
+    const sel = document.getElementById('sel');
+    expect(sel.options.length).toBe(1);
+    expect(sel.options[0].value).toBe('1');
+  });
+
+  it('clears existing options before repopulating', () => {
+    document.body.innerHTML = '<select id="sel"><option value="old">Old</option></select>';
+    populateSelect('sel', [{id: 1, name: 'New'}], 'All');
+    const values = Array.from(document.getElementById('sel').options).map(o => o.value);
+    expect(values).not.toContain('old');
+    expect(values).toContain('1');
+  });
+
+  it('handles an empty items array', () => {
+    document.body.innerHTML = '<select id="sel"></select>';
+    populateSelect('sel', [], 'All');
+    const sel = document.getElementById('sel');
+    expect(sel.options.length).toBe(1);
+    expect(sel.options[0].value).toBe('');
   });
 });

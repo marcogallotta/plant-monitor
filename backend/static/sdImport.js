@@ -1,9 +1,12 @@
 import { state } from './state.js';
 import { uploadPhoto } from './api.js';
+import {
+  isImportablePhoto, isRawPhoto, sortCameraFiles, detectSessionBoundary,
+  scanForJpeg, deriveTimestamp, buildUploadFormData,
+} from './sdImportCore.js';
 
 const SD_PAGE = 20;
 const SD_TZ   = 'Europe/Rome';
-const SD_TIME_GAP = 60 * 60 * 1000;
 
 let sdFiles = [];
 let sdShown = 0;
@@ -37,16 +40,8 @@ export async function handleSdFolderInput(event) {
   var uploaded = new Set(state.allPhotos.map(function(p) { return p.original_filename; }).filter(Boolean));
 
   var all = Array.from(event.target.files);
-  var photos = all.filter(function(f) {
-    var lower = f.name.toLowerCase();
-    if (!lower.endsWith('.jpg') && !lower.endsWith('.jpeg') && !lower.endsWith('.orf') && !lower.endsWith('.arw')) return false;
-    return !uploaded.has(f.name);
-  });
-
-  var skipped = all.filter(function(f) {
-    var lower = f.name.toLowerCase();
-    return (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.orf') || lower.endsWith('.arw')) && uploaded.has(f.name);
-  }).length;
+  var photos = all.filter(function(f) { return isImportablePhoto(f.name) && !uploaded.has(f.name); });
+  var skipped = all.filter(function(f) { return isImportablePhoto(f.name) && uploaded.has(f.name); }).length;
 
   if (photos.length === 0) {
     status.textContent = skipped > 0 ? 'All ' + skipped + ' already imported.' : 'No photos found.';
@@ -54,11 +49,10 @@ export async function handleSdFolderInput(event) {
   }
 
   // most recently shot first — sort by filename descending (sequential camera numbering)
-  photos.sort(function(a, b) { return b.name.localeCompare(a.name); });
+  photos = sortCameraFiles(photos);
 
   sdFiles = photos.map(function(f) {
-    var lower  = f.name.toLowerCase();
-    var isRaw  = lower.endsWith('.orf') || lower.endsWith('.arw');
+    var isRaw  = isRawPhoto(f.name);
     return {
       file:        f,
       selected:    false,
@@ -71,20 +65,9 @@ export async function handleSdFolderInput(event) {
     };
   });
 
-  // detect session boundary: first time gap > 1 hour between consecutive files
-  var batchEnd = -1;
-  for (var i = 0; i < sdFiles.length - 1; i++) {
-    var tA = sdFiles[i].file.lastModified;
-    var tB = sdFiles[i+1].file.lastModified;
-    if (tA > 0 && tB > 0 && (tA - tB) > SD_TIME_GAP) {
-      sdFiles[i+1].sessionBreak = true;
-      batchEnd = i + 1;
-      break;
-    }
-  }
-
-  // auto-select only if a clear boundary was found
+  var batchEnd = detectSessionBoundary(sdFiles.map(function(e) { return e.file.lastModified; }));
   if (batchEnd > 0) {
+    sdFiles[batchEnd].sessionBreak = true;
     for (var i = 0; i < batchEnd; i++) sdFiles[i].selected = true;
   }
 
@@ -159,37 +142,6 @@ function sdMakeThumb(i) {
   return wrap;
 }
 
-// Scan a Uint8Array for the largest complete embedded JPEG (FF D8 FF ... FF D9).
-// Returns {jpeg: Uint8Array, truncated: bool}.
-// truncated=true means a JPEG started but its FFD9 end marker wasn't found —
-// caller should re-scan a larger buffer before trusting the result.
-function scanForJpeg(bytes) {
-  var best = null;
-  var truncated = false;
-  var i = 0;
-  while (i < bytes.length - 3) {
-    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
-      var j = i + 2;
-      var found = false;
-      while (j < bytes.length - 1) {
-        if (bytes[j] === 0xFF && bytes[j+1] === 0xD9) {
-          var size = j + 2 - i;
-          if (!best || size > best.size) best = {start: i, size: size};
-          i = j + 2;
-          found = true;
-          break;
-        }
-        j++;
-      }
-      if (!found) { truncated = true; break; }
-    } else {
-      i++;
-    }
-  }
-  var jpeg = best ? bytes.slice(best.start, best.start + best.size) : null;
-  return {jpeg: jpeg, truncated: truncated};
-}
-
 // Extract the largest embedded JPEG from a raw camera file.
 // Try a 768 KB slice first for speed; if a JPEG was cut off (FFD9 not found),
 // fall through to a full read so the complete preview isn't missed.
@@ -235,25 +187,6 @@ function sdFmtTs(iso) {
   } catch(e) { return iso.slice(0, 16); }
 }
 
-// Derive captured_at ISO string from EXIF data using the priority chain.
-// Returns {iso, badge} where badge is 'ok' | 'assumed' | 'fallback'.
-//
-// exifr parses DateTimeOriginal into a JS Date. When OffsetTimeOriginal is
-// present exifr applies it, so the Date is already correct UTC — toISOString()
-// is safe. When there is no offset exifr treats the raw values as local browser
-// time, which is good enough given the browser runs in the camera's timezone.
-function sdDeriveTs(exif, file) {
-  var dto = exif && (exif.DateTimeOriginal || exif.CreateDate);
-  if (dto) {
-    var d = dto instanceof Date ? dto : new Date(dto);
-    if (!isNaN(d.getTime())) {
-      var hasOffset = !!(exif && exif.OffsetTimeOriginal);
-      return {iso: d.toISOString(), badge: hasOffset ? 'ok' : 'assumed'};
-    }
-  }
-  return {iso: new Date(file.lastModified).toISOString(), badge: 'fallback'};
-}
-
 async function sdParseExif(from, to) {
   for (var i = from; i < to; i++) {
     var entry = sdFiles[i];
@@ -263,7 +196,7 @@ async function sdParseExif(from, to) {
       // exifr can read JPEG and ARW; ORF is not supported — will return null
       exif = await window.exifr.parse(entry.file, ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal']);
     } catch(e) { /* unsupported format — fallback below */ }
-    var result      = sdDeriveTs(exif, entry.file);
+    var result      = deriveTimestamp(exif, entry.file);
     entry.capturedAt = result.iso;
     entry.tsBadge    = result.badge;
     var tsEl = document.getElementById('sd-ts-line-' + i);
@@ -375,11 +308,8 @@ export async function sdUploadSelected() {
     if (!entry.uploadFile) { sdSetThumbStatus(idx, 'error'); failed++; continue; }
 
     var ts = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
-    var fd = new FormData();
-    fd.append('image', entry.uploadFile, entry.file.name);
-    fd.append('captured_at', ts);
     var ptype = document.getElementById('sd-photo-type').value;
-    if (ptype) fd.append('photo_type', ptype);
+    var fd = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype);
 
     try {
       await uploadPhoto(fd);
