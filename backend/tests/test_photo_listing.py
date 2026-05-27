@@ -181,6 +181,28 @@ def test_classify_photo_can_clear_location(client, db_session):
     assert r.json()["location_id"] is None
 
 
+def test_classify_photo_rotation(client, db_session):
+    photo = _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
+    assert photo.rotation == 0
+    r = client.put(f"/photos/{photo.id}", json={"rotation": 90})
+    assert r.status_code == 200
+    assert r.json()["rotation"] == 90
+    r = client.put(f"/photos/{photo.id}", json={"rotation": 270})
+    assert r.json()["rotation"] == 270
+
+
+def test_classify_photo_rotation_invalid_returns_422(client, db_session):
+    photo = _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
+    r = client.put(f"/photos/{photo.id}", json={"rotation": 45})
+    assert r.status_code == 422
+
+
+def test_list_photos_includes_rotation(client, db_session):
+    _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z", rotation=180)
+    data = client.get("/photos").json()
+    assert data[0]["rotation"] == 180
+
+
 # --- Pi upload sets source='pi' ---
 
 def test_pi_upload_sets_source_pi(client, isolated_photos_dir):

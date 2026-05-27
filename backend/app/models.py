@@ -51,6 +51,7 @@ class Photo(Base):
     photo_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     original_filename: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     location_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("locations.id"), nullable=True)
+    rotation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

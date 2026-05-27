@@ -110,6 +110,7 @@ class PhotoOut(BaseModel):
     location_id: Optional[int] = None
     location_name: Optional[str] = None
     growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
+    rotation: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -323,6 +324,7 @@ def _photo_out(p: Photo, db: Session) -> PhotoOut:
         location_id=p.location_id,
         location_name=location_name,
         growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in units],
+        rotation=p.rotation,
     )
 
 
@@ -402,6 +404,14 @@ class PhotoClassify(BaseModel):
     photo_type: Optional[str] = None
     location_id: Optional[int] = None
     growing_unit_ids: Optional[list[int]] = None
+    rotation: Optional[int] = None
+
+    @field_validator("rotation")
+    @classmethod
+    def rotation_must_be_valid(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v not in {0, 90, 180, 270}:
+            raise ValueError("rotation must be 0, 90, 180, or 270")
+        return v
 
 
 @app.put("/photos/{photo_id}", response_model=PhotoOut)
@@ -414,6 +424,8 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
     if "location_id" in body.model_fields_set:
         _check_location_exists(body.location_id, db)
         photo.location_id = body.location_id
+    if "rotation" in body.model_fields_set:
+        photo.rotation = body.rotation
     if body.growing_unit_ids is not None:
         for uid in body.growing_unit_ids:
             if not db.query(GrowingUnit).filter_by(id=uid).first():

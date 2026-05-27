@@ -251,7 +251,7 @@
     #zoom-viewport.grabbing { cursor: grabbing; }
 
     /* Notes */
-    .modal-img-wrap { position: relative; display: inline-block; line-height: 0; max-width: 100%; transform-origin: 0 0; will-change: transform; }
+    .modal-img-wrap { position: relative; display: inline-block; line-height: 0; max-width: 100%; transform-origin: center center; will-change: transform; }
     .modal-img-wrap img { max-width: 100%; max-height: 72vh; border-radius: 4px; display: block; }
     .note-pins { position: absolute; inset: 0; pointer-events: none; }
     .note-pin {
@@ -838,7 +838,11 @@
       <div id="rect-preview"></div>
       </div>
     </div>
-    <div id="modal-caption" class="modal-caption"></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-top:0.25rem;">
+      <button onclick="rotatePhoto(-90)" title="Rotate counter-clockwise" style="font-size:1rem;padding:0.1rem 0.5rem;">&#8634;</button>
+      <div id="modal-caption" class="modal-caption" style="flex:1;"></div>
+      <button onclick="rotatePhoto(90)" title="Rotate clockwise" style="font-size:1rem;padding:0.1rem 0.5rem;">&#8635;</button>
+    </div>
     <div id="identity-panel" class="identity-panel hidden">
       <div class="identity-row">
         <span class="identity-label">Source</span><span class="identity-value" id="id-source">—</span>
@@ -969,8 +973,9 @@
       card.className = 'photo-card';
       card.dataset.id = p.id;
       const ts = new Date(p.captured_at).toLocaleString();
+      const rotStyle = p.rotation ? ' style="transform:rotate(' + p.rotation + 'deg)"' : '';
       card.innerHTML =
-        '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
+        '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')"' + rotStyle + '>' +
         '<div class="card-ab">' +
           '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
           '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
@@ -1098,6 +1103,7 @@
   let currentPhotoId = null;
   let currentNotes = [];
   let pendingNote = null; // {x, y} for new note, or {noteId, x, y} for edit
+  let currentRotation = 0;
 
   // ── Zoom / pan / rect draw ───────────────────────────────
   let zoom = 1, panX = 0, panY = 0;
@@ -1106,7 +1112,35 @@
 
   function applyTransform() {
     document.getElementById('modal-img-wrap').style.transform =
-      'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoom + ')';
+      'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoom + ') rotate(' + currentRotation + 'deg)';
+  }
+
+  function visualToStored(rx, ry) {
+    var x, y;
+    if (currentRotation === 90)       { x = ry;     y = 1 - rx; }
+    else if (currentRotation === 180) { x = 1 - rx; y = 1 - ry; }
+    else if (currentRotation === 270) { x = 1 - ry; y = rx;     }
+    else                              { x = rx;      y = ry;     }
+    return {x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y))};
+  }
+
+  async function rotatePhoto(delta) {
+    currentRotation = ((currentRotation + delta) % 360 + 360) % 360;
+    resetZoom();
+    const photo = allPhotos[currentIndex];
+    photo.rotation = currentRotation;
+    const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
+    if (card) {
+      var img = card.querySelector('img');
+      if (img) img.style.transform = currentRotation ? 'rotate(' + currentRotation + 'deg)' : '';
+    }
+    try {
+      await fetch('/photos/' + currentPhotoId, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({rotation: currentRotation}),
+      });
+    } catch (e) { setStatus('Rotation save failed: ' + e.message); }
   }
 
   function resetZoom() {
@@ -1131,9 +1165,10 @@
 
   function showModalPhoto(index) {
     currentIndex = index;
+    const p = allPhotos[index];
+    currentRotation = p.rotation || 0;
     resetZoom();
     noteCancel();
-    const p = allPhotos[index];
     currentPhotoId = p.id;
     document.getElementById('modal-img').src = p.url;
     document.getElementById('modal-caption').textContent =
@@ -1211,14 +1246,14 @@
   function modalImgClick(e) {
     if (wasDrag) { wasDrag = false; return; }
     if (!currentPhotoId) return;
-    const wrap = document.getElementById('modal-img-wrap');
-    const img  = document.getElementById('modal-img');
+    const img = document.getElementById('modal-img');
     const r = img.getBoundingClientRect();
-    // Ignore clicks outside the rendered image area (on padding of wrapper)
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
-    const x = (e.clientX - r.left) / r.width;
-    const y = (e.clientY - r.top)  / r.height;
-    openCreateForm(x, y);
+    const raw = visualToStored(
+      (e.clientX - r.left) / r.width,
+      (e.clientY - r.top)  / r.height
+    );
+    openCreateForm(raw.x, raw.y);
   }
 
   function openCreateForm(x, y, x2, y2) {
@@ -1627,7 +1662,8 @@ function openEditForm(note) {
     if (e.shiftKey) {
       if (!currentPhotoId) return;
       isDrawingRect = true;
-      rectStart = imgCoordsFromEvent(e);
+      var rawStart = imgCoordsFromEvent(e);
+      rectStart = visualToStored(rawStart.x, rawStart.y);
       this.classList.add('drawing');
       e.preventDefault();
       return;
@@ -1642,7 +1678,8 @@ function openEditForm(note) {
 
   document.addEventListener('mousemove', function(e) {
     if (isDrawingRect) {
-      var cur = imgCoordsFromEvent(e);
+      var rawCur = imgCoordsFromEvent(e);
+      var cur = visualToStored(rawCur.x, rawCur.y);
       var preview = document.getElementById('rect-preview');
       var x1 = Math.min(rectStart.x, cur.x), y1 = Math.min(rectStart.y, cur.y);
       var x2 = Math.max(rectStart.x, cur.x), y2 = Math.max(rectStart.y, cur.y);
@@ -1666,7 +1703,8 @@ function openEditForm(note) {
 
   document.addEventListener('mouseup', function(e) {
     if (isDrawingRect) {
-      var cur = imgCoordsFromEvent(e);
+      var rawCur = imgCoordsFromEvent(e);
+      var cur = visualToStored(rawCur.x, rawCur.y);
       document.getElementById('rect-preview').style.display = 'none';
       document.getElementById('zoom-viewport').classList.remove('drawing');
       isDrawingRect = false;
