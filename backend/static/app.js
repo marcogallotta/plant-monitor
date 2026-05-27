@@ -1,9 +1,4 @@
-  let allPhotos = [];
-  let photoA = null, photoB = null;
-  let flickerShowing = 'a';
-  let flickerTimer = null;
-  let allLocations = [];
-  let allUnits = [];
+import { state } from './state.js';
 
   // ── Bootstrap: load locations + units for dropdowns ───────
 
@@ -12,16 +7,16 @@
       fetch('/locations'),
       fetch('/growing-units'),
     ]);
-    allLocations = locResp.ok ? await locResp.json() : [];
-    allUnits     = unitResp.ok ? await unitResp.json() : [];
-    populateSelect('filter-location', allLocations, 'All locations');
-    populateSelect('filter-unit',     allUnits,     'All units');
-    populateSelect('upload-location', allLocations, '— none —');
-    populateSelect('upload-units',    allUnits,     null);
-    populateSelect('id-location-select',  allLocations, '— none —');
-    populateSelect('id-units-select',     allUnits,     null);
-    populateSelect('new-event-location',  allLocations, '— none —');
-    populateSelect('new-event-units',     allUnits,     null);
+    state.allLocations = locResp.ok ? await locResp.json() : [];
+    state.allUnits     = unitResp.ok ? await unitResp.json() : [];
+    populateSelect('filter-location', state.allLocations, 'All locations');
+    populateSelect('filter-unit',     state.allUnits,     'All units');
+    populateSelect('upload-location', state.allLocations, '— none —');
+    populateSelect('upload-units',    state.allUnits,     null);
+    populateSelect('id-location-select',  state.allLocations, '— none —');
+    populateSelect('id-units-select',     state.allUnits,     null);
+    populateSelect('new-event-location',  state.allLocations, '— none —');
+    populateSelect('new-event-units',     state.allUnits,     null);
   }
 
   function populateSelect(id, items, blankLabel) {
@@ -63,9 +58,9 @@
     try {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      allPhotos = await resp.json();
-      renderGrid(allPhotos);
-      setStatus(allPhotos.length === 0 ? 'No photos found.' : allPhotos.length + ' photo' + (allPhotos.length === 1 ? '' : 's'));
+      state.allPhotos = await resp.json();
+      renderGrid(state.allPhotos);
+      setStatus(state.allPhotos.length === 0 ? 'No photos found.' : state.allPhotos.length + ' photo' + (state.allPhotos.length === 1 ? '' : 's'));
     } catch (e) {
       setStatus('Error loading photos: ' + e.message);
     }
@@ -77,8 +72,8 @@
     grid.innerHTML = '';
     for (let i = 0; i < photos.length; i++) {
       const p = photos[i];
-      const isA = photoA && photoA.id === p.id;
-      const isB = photoB && photoB.id === p.id;
+      const isA = state.photoA && state.photoA.id === p.id;
+      const isB = state.photoB && state.photoB.id === p.id;
       const card = document.createElement('div');
       card.className = 'photo-card';
       card.dataset.id = p.id;
@@ -112,37 +107,37 @@
 
   function selectA(e, idx) {
     e.stopPropagation();
-    photoA = allPhotos[idx];
+    state.photoA = state.allPhotos[idx];
     updateCompare();
-    renderGrid(allPhotos);
+    renderGrid(state.allPhotos);
   }
 
   function selectB(e, idx) {
     e.stopPropagation();
-    photoB = allPhotos[idx];
+    state.photoB = state.allPhotos[idx];
     updateCompare();
-    renderGrid(allPhotos);
+    renderGrid(state.allPhotos);
   }
 
   function updateCompare() {
-    const ready = photoA && photoB;
+    const ready = state.photoA && state.photoB;
 
     // Slot A
-    if (photoA) {
+    if (state.photoA) {
       document.getElementById('slot-a-empty').style.display = 'none';
       const img = document.getElementById('img-a');
-      img.src = photoA.url;
+      img.src = state.photoA.url;
       img.style.display = 'block';
-      document.getElementById('cap-a').textContent = new Date(photoA.captured_at).toLocaleString();
+      document.getElementById('cap-a').textContent = new Date(state.photoA.captured_at).toLocaleString();
     }
 
     // Slot B
-    if (photoB) {
+    if (state.photoB) {
       document.getElementById('slot-b-empty').style.display = 'none';
       const img = document.getElementById('img-b');
-      img.src = photoB.url;
+      img.src = state.photoB.url;
       img.style.display = 'block';
-      document.getElementById('cap-b').textContent = new Date(photoB.captured_at).toLocaleString();
+      document.getElementById('cap-b').textContent = new Date(state.photoB.captured_at).toLocaleString();
     }
 
     document.getElementById('btn-toggle').disabled = !ready;
@@ -159,37 +154,37 @@
   }
 
   function toggleFlickerFrame() {
-    if (!photoA || !photoB) return;
-    flickerShowing = flickerShowing === 'a' ? 'b' : 'a';
-    const photo = flickerShowing === 'a' ? photoA : photoB;
+    if (!state.photoA || !state.photoB) return;
+    state.flickerShowing = state.flickerShowing === 'a' ? 'b' : 'a';
+    const photo = state.flickerShowing === 'a' ? state.photoA : state.photoB;
     document.getElementById('flicker-img').src = photo.url;
     const lbl = document.getElementById('flicker-label');
-    lbl.textContent = flickerShowing.toUpperCase();
-    lbl.className = 'flicker-label ' + flickerShowing;
+    lbl.textContent = state.flickerShowing.toUpperCase();
+    lbl.className = 'flicker-label ' + state.flickerShowing;
   }
 
   function showFlickerView() {
     if (!document.getElementById('flicker-view').classList.contains('visible')) {
-      flickerShowing = 'b'; // toggleFlickerFrame will flip to 'a' first
+      state.flickerShowing = 'b'; // toggleFlickerFrame will flip to 'a' first
       toggleFlickerFrame();
       document.getElementById('flicker-view').classList.add('visible');
     }
   }
 
   function flickerAuto() {
-    if (flickerTimer) {
+    if (state.flickerTimer) {
       stopAuto();
       return;
     }
     showFlickerView();
     const fps = flickerFps();
-    flickerTimer = setInterval(toggleFlickerFrame, 1000 / fps);
+    state.flickerTimer = setInterval(toggleFlickerFrame, 1000 / fps);
     document.getElementById('btn-auto').classList.add('active');
     document.getElementById('btn-auto').textContent = 'Stop';
   }
 
   function stopAuto() {
-    if (flickerTimer) { clearInterval(flickerTimer); flickerTimer = null; }
+    if (state.flickerTimer) { clearInterval(state.flickerTimer); state.flickerTimer = null; }
     document.getElementById('btn-auto').classList.remove('active');
     document.getElementById('btn-auto').textContent = 'Auto flicker';
   }
@@ -205,61 +200,52 @@
 
   document.getElementById('flicker-speed').addEventListener('input', function() {
     updateFlickerFps();
-    if (flickerTimer) { stopAuto(); flickerAuto(); }
+    if (state.flickerTimer) { stopAuto(); flickerAuto(); }
   });
 
   // ── Modal ────────────────────────────────────────────────
 
-  let currentIndex = 0;
-  let currentPhotoId = null;
-  let currentNotes = [];
-  let pendingNote = null; // {x, y} for new note, or {noteId, x, y} for edit
-  let currentRotation = 0;
-
   // ── Zoom / pan / rect draw ───────────────────────────────
-  let zoom = 1, panX = 0, panY = 0;
-  let isPanning = false, panStart = null, wasDrag = false;
-  let isDrawingRect = false, rectStart = null; // {x, y} normalised image coords
 
   function applyTransform() {
     document.getElementById('modal-img-wrap').style.transform =
-      'translate(' + panX + 'px, ' + panY + 'px) scale(' + zoom + ') rotate(' + currentRotation + 'deg)';
+      'translate(' + state.panX + 'px, ' + state.panY + 'px) scale(' + state.zoom + ') rotate(' + state.currentRotation + 'deg)';
   }
 
   function visualToStored(rx, ry) {
     var x, y;
-    if (currentRotation === 90)       { x = ry;     y = 1 - rx; }
-    else if (currentRotation === 180) { x = 1 - rx; y = 1 - ry; }
-    else if (currentRotation === 270) { x = 1 - ry; y = rx;     }
+    if (state.currentRotation === 90)       { x = ry;     y = 1 - rx; }
+    else if (state.currentRotation === 180) { x = 1 - rx; y = 1 - ry; }
+    else if (state.currentRotation === 270) { x = 1 - ry; y = rx;     }
     else                              { x = rx;      y = ry;     }
     return {x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y))};
   }
 
   async function rotatePhoto(delta) {
-    currentRotation = ((currentRotation + delta) % 360 + 360) % 360;
+    state.currentRotation = ((state.currentRotation + delta) % 360 + 360) % 360;
     resetZoom();
-    const photo = allPhotos[currentIndex];
-    photo.rotation = currentRotation;
+    const photo = state.allPhotos[state.currentIndex];
+    photo.rotation = state.currentRotation;
     const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
     if (card) {
       var img = card.querySelector('img');
       if (img) {
-        const needsScale = currentRotation === 90 || currentRotation === 270;
-        img.style.transform = currentRotation ? 'rotate(' + currentRotation + 'deg)' + (needsScale ? ' scale(1.778)' : '') : '';
+        const needsScale = state.currentRotation === 90 || state.currentRotation === 270;
+        img.style.transform = state.currentRotation ? 'rotate(' + state.currentRotation + 'deg)' + (needsScale ? ' scale(1.778)' : '') : '';
       }
     }
     try {
-      await fetch('/photos/' + currentPhotoId, {
+      await fetch('/photos/' + state.currentPhotoId, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({rotation: currentRotation}),
+        body: JSON.stringify({rotation: state.currentRotation}),
       });
     } catch (e) { setStatus('Rotation save failed: ' + e.message); }
   }
 
   function resetZoom() {
-    zoom = 1; panX = 0; panY = 0;
-    isDrawingRect = false; rectStart = null;
+    state.zoom = 1; state.panX = 0; state.panY = 0;
+    state.isDrawingRect = false; state.rectStart = null;
     document.getElementById('rect-preview').style.display = 'none';
     applyTransform();
   }
@@ -267,9 +253,9 @@
   function clampPan() {
     const img = document.getElementById('modal-img');
     const W = img.offsetWidth, H = img.offsetHeight;
-    // panX/panY are in screen pixels; image occupies [panX, panX+zoom*W] × [panY, panY+zoom*H]
-    panX = Math.min(0, Math.max(W  * (1 - zoom), panX));
-    panY = Math.min(0, Math.max(H * (1 - zoom), panY));
+    // state.panX/state.panY are in screen pixels; image occupies [state.panX, state.panX+state.zoom*W] × [state.panY, state.panY+state.zoom*H]
+    state.panX = Math.min(0, Math.max(W  * (1 - state.zoom), state.panX));
+    state.panY = Math.min(0, Math.max(H * (1 - state.zoom), state.panY));
   }
 
   function openModal(index) {
@@ -278,14 +264,14 @@
   }
 
   function showModalPhoto(index) {
-    currentIndex = index;
-    const p = allPhotos[index];
-    currentRotation = p.rotation || 0;
+    state.currentIndex = index;
+    const p = state.allPhotos[index];
+    state.currentRotation = p.rotation || 0;
     resetZoom();
     noteCancel();
     document.getElementById('modal-log-event-panel').style.display = 'none';
     document.getElementById('modal-event-status').textContent = '';
-    currentPhotoId = p.id;
+    state.currentPhotoId = p.id;
     document.getElementById('modal-img').src = p.url;
     document.getElementById('modal-caption').textContent =
       new Date(p.captured_at).toLocaleString() + ' — ' + p.filename;
@@ -299,8 +285,8 @@
     document.getElementById('modal-img').src = '';
     document.getElementById('identity-panel').classList.add('hidden');
     document.getElementById('modal-log-event-panel').style.display = 'none';
-    currentPhotoId = null;
-    currentNotes = [];
+    state.currentPhotoId = null;
+    state.currentNotes = [];
   }
 
   function toggleModalLogEvent() {
@@ -310,11 +296,11 @@
   }
 
   async function modalLogEvent() {
-    if (!currentPhotoId) return;
+    if (!state.currentPhotoId) return;
     var type = document.getElementById('modal-event-type').value;
     var note = document.getElementById('modal-event-note').value.trim();
     var status = document.getElementById('modal-event-status');
-    var body = {event_type: type, photo_ids: [currentPhotoId]};
+    var body = {event_type: type, photo_ids: [state.currentPhotoId]};
     if (note) body.note_text = note;
     status.textContent = 'Saving…';
     try {
@@ -336,8 +322,8 @@
     const modalOpen = !document.getElementById('modal').classList.contains('hidden');
     if (e.key === 'Escape') { closeModal(); stopAuto(); }
     if (modalOpen) {
-      if (e.key === 'ArrowRight' && currentIndex < allPhotos.length - 1) showModalPhoto(currentIndex + 1);
-      if (e.key === 'ArrowLeft'  && currentIndex > 0)                    showModalPhoto(currentIndex - 1);
+      if (e.key === 'ArrowRight' && state.currentIndex < state.allPhotos.length - 1) showModalPhoto(state.currentIndex + 1);
+      if (e.key === 'ArrowLeft'  && state.currentIndex > 0)                    showModalPhoto(state.currentIndex - 1);
     }
     if (e.key === 'f' || e.key === 'F') flickerToggle();
   });
@@ -345,11 +331,11 @@
   // ── Notes ─────────────────────────────────────────────────
 
   async function loadNotes() {
-    if (!currentPhotoId) return;
+    if (!state.currentPhotoId) return;
     try {
-      const resp = await fetch('/photos/' + currentPhotoId + '/notes');
+      const resp = await fetch('/photos/' + state.currentPhotoId + '/notes');
       if (!resp.ok) return;
-      currentNotes = await resp.json();
+      state.currentNotes = await resp.json();
       renderPins();
     } catch (e) { setStatus('Failed to load notes: ' + e.message); }
   }
@@ -357,8 +343,8 @@
   function renderPins() {
     const container = document.getElementById('note-pins');
     container.innerHTML = '';
-    const isSelected = function(note) { return pendingNote && pendingNote.noteId === note.id; };
-    currentNotes.forEach(function(note, i) {
+    const isSelected = function(note) { return state.pendingNote && state.pendingNote.noteId === note.id; };
+    state.currentNotes.forEach(function(note, i) {
       const el = document.createElement('div');
       if (note.x2 != null && note.y2 != null) {
         const x1 = Math.min(note.x, note.x2), y1 = Math.min(note.y, note.y2);
@@ -390,8 +376,8 @@
   }
 
   function modalImgClick(e) {
-    if (wasDrag) { wasDrag = false; return; }
-    if (!currentPhotoId) return;
+    if (state.wasDrag) { state.wasDrag = false; return; }
+    if (!state.currentPhotoId) return;
     const img = document.getElementById('modal-img');
     const r = img.getBoundingClientRect();
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
@@ -403,7 +389,7 @@
   }
 
   function openCreateForm(x, y, x2, y2) {
-    pendingNote = {x: x, y: y, x2: x2 != null ? x2 : null, y2: y2 != null ? y2 : null};
+    state.pendingNote = {x: x, y: y, x2: x2 != null ? x2 : null, y2: y2 != null ? y2 : null};
     var isRect = x2 != null && y2 != null;
     document.getElementById('note-panel-title').textContent = isRect ? 'New region note' : 'New note';
     document.getElementById('note-text').value = '';
@@ -414,7 +400,7 @@
   }
 
 function openEditForm(note) {
-    pendingNote = {noteId: note.id, x: note.x, y: note.y, x2: note.x2, y2: note.y2};
+    state.pendingNote = {noteId: note.id, x: note.x, y: note.y, x2: note.x2, y2: note.y2};
     document.getElementById('note-panel-title').textContent = 'Edit note';
     document.getElementById('note-text').value = note.note_text;
     document.getElementById('note-delete').style.display = 'inline-block';
@@ -424,23 +410,23 @@ function openEditForm(note) {
   }
 
   async function noteSave() {
-    if (!pendingNote || !currentPhotoId) return;
+    if (!state.pendingNote || !state.currentPhotoId) return;
     const text = document.getElementById('note-text').value.trim();
     if (!text) return;
     try {
-      const coords = {x: pendingNote.x, y: pendingNote.y};
-      if (pendingNote.x2 != null && pendingNote.y2 != null) {
-        coords.x2 = pendingNote.x2;
-        coords.y2 = pendingNote.y2;
+      const coords = {x: state.pendingNote.x, y: state.pendingNote.y};
+      if (state.pendingNote.x2 != null && state.pendingNote.y2 != null) {
+        coords.x2 = state.pendingNote.x2;
+        coords.y2 = state.pendingNote.y2;
       }
-      if (pendingNote.noteId) {
-        await fetch('/notes/' + pendingNote.noteId, {
+      if (state.pendingNote.noteId) {
+        await fetch('/notes/' + state.pendingNote.noteId, {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(Object.assign({note_text: text}, coords)),
         });
       } else {
-        await fetch('/photos/' + currentPhotoId + '/notes', {
+        await fetch('/photos/' + state.currentPhotoId + '/notes', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(Object.assign({note_text: text}, coords)),
@@ -452,16 +438,16 @@ function openEditForm(note) {
   }
 
   async function noteDelete() {
-    if (!pendingNote || !pendingNote.noteId) return;
+    if (!state.pendingNote || !state.pendingNote.noteId) return;
     try {
-      await fetch('/notes/' + pendingNote.noteId, {method: 'DELETE'});
+      await fetch('/notes/' + state.pendingNote.noteId, {method: 'DELETE'});
     } catch (e) { setStatus('Note delete failed: ' + e.message); return; }
     noteCancel();
     loadNotes();
   }
 
   function noteCancel() {
-    pendingNote = null;
+    state.pendingNote = null;
     document.getElementById('note-panel').classList.add('hidden');
     document.getElementById('note-text').value = '';
     document.getElementById('rect-preview').style.display = 'none';
@@ -680,7 +666,7 @@ function openEditForm(note) {
   }
 
   async function identityUpdate() {
-    if (!currentPhotoId) return;
+    if (!state.currentPhotoId) return;
     const typeSelect = document.getElementById('id-type-select');
     const locSelect  = document.getElementById('id-location-select');
     const unitSelect = document.getElementById('id-units-select');
@@ -690,7 +676,7 @@ function openEditForm(note) {
       growing_unit_ids: Array.from(unitSelect.selectedOptions).map(function(o) { return parseInt(o.value); }),
     };
     try {
-      const resp = await fetch('/photos/' + currentPhotoId, {
+      const resp = await fetch('/photos/' + state.currentPhotoId, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body),
@@ -700,8 +686,8 @@ function openEditForm(note) {
         throw new Error(err.detail || 'HTTP ' + resp.status);
       }
       const updated = await resp.json();
-      const idx = allPhotos.findIndex(function(p) { return p.id === currentPhotoId; });
-      if (idx !== -1) allPhotos[idx] = updated;
+      const idx = state.allPhotos.findIndex(function(p) { return p.id === state.currentPhotoId; });
+      if (idx !== -1) state.allPhotos[idx] = updated;
       showIdentityPanel(updated);
       setStatus('Saved.');
     } catch (e) { setStatus('Identity update failed: ' + e.message); }
@@ -709,16 +695,14 @@ function openEditForm(note) {
 
   // ── Timelapse ────────────────────────────────────────────
 
-  let tlIndex = 0;
-  let tlTimer = null;
 
   function tlInit() {
     tlStop();
-    tlIndex = 0;
+    state.tlIndex = 0;
     const empty = document.getElementById('tl-empty');
     const img   = document.getElementById('tl-img');
     const label = document.getElementById('tl-label');
-    const hasPhotos = allPhotos.length > 0;
+    const hasPhotos = state.allPhotos.length > 0;
     empty.style.display = hasPhotos ? 'none' : 'block';
     img.style.display   = hasPhotos ? 'block' : 'none';
     label.style.display = hasPhotos ? 'block' : 'none';
@@ -729,26 +713,26 @@ function openEditForm(note) {
   }
 
   function tlShowFrame() {
-    const p = allPhotos[tlIndex];
+    const p = state.allPhotos[state.tlIndex];
     document.getElementById('tl-img').src = p.url;
     document.getElementById('tl-label').textContent = new Date(p.captured_at).toLocaleString();
-    document.getElementById('tl-counter').textContent = (tlIndex + 1) + ' / ' + allPhotos.length;
+    document.getElementById('tl-counter').textContent = (state.tlIndex + 1) + ' / ' + state.allPhotos.length;
   }
 
   function tlPlayPause() {
-    if (tlTimer) { tlStop(); return; }
+    if (state.tlTimer) { tlStop(); return; }
     const btn = document.getElementById('tl-play');
     btn.textContent = '⏸ Pause';
     btn.classList.add('active');
     const fps = parseInt(document.getElementById('tl-speed').value, 10);
-    tlTimer = setInterval(function() {
-      tlIndex = (tlIndex + 1) % allPhotos.length;
+    state.tlTimer = setInterval(function() {
+      state.tlIndex = (state.tlIndex + 1) % state.allPhotos.length;
       tlShowFrame();
     }, 1000 / fps);
   }
 
   function tlStop() {
-    if (tlTimer) { clearInterval(tlTimer); tlTimer = null; }
+    if (state.tlTimer) { clearInterval(state.tlTimer); state.tlTimer = null; }
     const btn = document.getElementById('tl-play');
     btn.textContent = '▶ Play';
     btn.classList.remove('active');
@@ -756,13 +740,13 @@ function openEditForm(note) {
 
   function tlPrev() {
     tlStop();
-    tlIndex = (tlIndex - 1 + allPhotos.length) % allPhotos.length;
+    state.tlIndex = (state.tlIndex - 1 + state.allPhotos.length) % state.allPhotos.length;
     tlShowFrame();
   }
 
   function tlNext() {
     tlStop();
-    tlIndex = (tlIndex + 1) % allPhotos.length;
+    state.tlIndex = (state.tlIndex + 1) % state.allPhotos.length;
     tlShowFrame();
   }
 
@@ -770,7 +754,7 @@ function openEditForm(note) {
 
   document.getElementById('tl-speed').addEventListener('input', function() {
     document.getElementById('tl-fps').textContent = tlFps() + ' fps';
-    if (tlTimer) { tlStop(); tlPlayPause(); }
+    if (state.tlTimer) { tlStop(); tlPlayPause(); }
   });
 
   document.getElementById('tl-fps').textContent = tlFps() + ' fps';
@@ -785,12 +769,12 @@ function openEditForm(note) {
     var cx = e.clientX - rect.left;
     var cy = e.clientY - rect.top;
     var factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    var newZoom = Math.min(Math.max(zoom * factor, 1), 10);
-    // Keep the point under the cursor fixed: cx = panX + zoom*lx = newPanX + newZoom*lx
-    // => newPanX = cx - (newZoom/zoom) * (cx - panX)
-    panX = cx - (newZoom / zoom) * (cx - panX);
-    panY = cy - (newZoom / zoom) * (cy - panY);
-    zoom = newZoom;
+    var newZoom = Math.min(Math.max(state.zoom * factor, 1), 10);
+    // Keep the point under the cursor fixed: cx = state.panX + state.zoom*lx = newPanX + newZoom*lx
+    // => newPanX = cx - (newZoom/state.zoom) * (cx - state.panX)
+    state.panX = cx - (newZoom / state.zoom) * (cx - state.panX);
+    state.panY = cy - (newZoom / state.zoom) * (cy - state.panY);
+    state.zoom = newZoom;
     clampPan();
     applyTransform();
   }, { passive: false });
@@ -806,29 +790,29 @@ function openEditForm(note) {
   zoomViewport.addEventListener('mousedown', function(e) {
     if (e.button !== 0) return;
     if (e.shiftKey) {
-      if (!currentPhotoId) return;
-      isDrawingRect = true;
+      if (!state.currentPhotoId) return;
+      state.isDrawingRect = true;
       var rawStart = imgCoordsFromEvent(e);
-      rectStart = visualToStored(rawStart.x, rawStart.y);
+      state.rectStart = visualToStored(rawStart.x, rawStart.y);
       this.classList.add('drawing');
       e.preventDefault();
       return;
     }
-    if (zoom <= 1) return;
-    isPanning = true;
-    wasDrag = false;
-    panStart = { x: e.clientX, y: e.clientY, panX: panX, panY: panY };
+    if (state.zoom <= 1) return;
+    state.isPanning = true;
+    state.wasDrag = false;
+    state.panStart = { x: e.clientX, y: e.clientY, panX: state.panX, panY: state.panY };
     this.classList.add('grabbing');
     e.preventDefault();
   });
 
   document.addEventListener('mousemove', function(e) {
-    if (isDrawingRect) {
+    if (state.isDrawingRect) {
       var rawCur = imgCoordsFromEvent(e);
       var cur = visualToStored(rawCur.x, rawCur.y);
       var preview = document.getElementById('rect-preview');
-      var x1 = Math.min(rectStart.x, cur.x), y1 = Math.min(rectStart.y, cur.y);
-      var x2 = Math.max(rectStart.x, cur.x), y2 = Math.max(rectStart.y, cur.y);
+      var x1 = Math.min(state.rectStart.x, cur.x), y1 = Math.min(state.rectStart.y, cur.y);
+      var x2 = Math.max(state.rectStart.x, cur.x), y2 = Math.max(state.rectStart.y, cur.y);
       preview.style.left   = (x1 * 100) + '%';
       preview.style.top    = (y1 * 100) + '%';
       preview.style.width  = ((x2 - x1) * 100) + '%';
@@ -836,34 +820,34 @@ function openEditForm(note) {
       preview.style.display = 'block';
       return;
     }
-    if (!isPanning) return;
-    var dx = e.clientX - panStart.x;
-    var dy = e.clientY - panStart.y;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) wasDrag = true;
-    // panX/panY are screen pixels — no /zoom needed
-    panX = panStart.panX + dx;
-    panY = panStart.panY + dy;
+    if (!state.isPanning) return;
+    var dx = e.clientX - state.panStart.x;
+    var dy = e.clientY - state.panStart.y;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) state.wasDrag = true;
+    // state.panX/state.panY are screen pixels — no /state.zoom needed
+    state.panX = state.panStart.panX + dx;
+    state.panY = state.panStart.panY + dy;
     clampPan();
     applyTransform();
   });
 
   document.addEventListener('mouseup', function(e) {
-    if (isDrawingRect) {
+    if (state.isDrawingRect) {
       var rawCur = imgCoordsFromEvent(e);
       var cur = visualToStored(rawCur.x, rawCur.y);
       document.getElementById('rect-preview').style.display = 'none';
       document.getElementById('zoom-viewport').classList.remove('drawing');
-      isDrawingRect = false;
-      var dx = Math.abs(cur.x - rectStart.x), dy = Math.abs(cur.y - rectStart.y);
+      state.isDrawingRect = false;
+      var dx = Math.abs(cur.x - state.rectStart.x), dy = Math.abs(cur.y - state.rectStart.y);
       if (dx > 0.01 || dy > 0.01) {
-        wasDrag = true;
-        openCreateForm(rectStart.x, rectStart.y, cur.x, cur.y);
+        state.wasDrag = true;
+        openCreateForm(state.rectStart.x, state.rectStart.y, cur.x, cur.y);
       }
-      rectStart = null;
+      state.rectStart = null;
       return;
     }
-    if (!isPanning) return;
-    isPanning = false;
+    if (!state.isPanning) return;
+    state.isPanning = false;
     document.getElementById('zoom-viewport').classList.remove('grabbing');
   });
 
@@ -892,7 +876,7 @@ function openEditForm(note) {
     document.getElementById('sd-load-more-row').style.display = 'none';
     document.getElementById('sd-grid').innerHTML = '';
 
-    var uploaded = new Set(allPhotos.map(function(p) { return p.original_filename; }).filter(Boolean));
+    var uploaded = new Set(state.allPhotos.map(function(p) { return p.original_filename; }).filter(Boolean));
 
     var all = Array.from(event.target.files);
     var photos = all.filter(function(f) {
@@ -1186,16 +1170,15 @@ function openEditForm(note) {
     sdUpdateCount();
   }
 
-  function sdSetThumbStatus(i, state, detail) {
-    // state: 'uploading' | 'done' | 'error'
+  function sdSetThumbStatus(i, thumbStatus, detail) {
     var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
     if (!wrap) return;
     var existing = wrap.querySelector('.sd-status-overlay');
     if (existing) existing.remove();
     var ov = document.createElement('div');
     ov.className = 'sd-status-overlay';
-    ov.dataset.state = state;
-    ov.textContent = state === 'uploading' ? '…' : state === 'done' ? '✓' : '✗';
+    ov.dataset.state = thumbStatus;
+    ov.textContent = thumbStatus === 'uploading' ? '…' : thumbStatus === 'done' ? '✓' : '✗';
     if (detail) ov.title = detail;
     wrap.appendChild(ov);
   }
@@ -1261,3 +1244,19 @@ function openEditForm(note) {
 
   updateFlickerFps();
   loadDropdownData().then(loadPhotos);
+
+  Object.assign(window, {
+    applyFilter, clearFilter,
+    openModal, closeModal, modalImgClick,
+    selectA, selectB,
+    rotatePhoto, toggleModalLogEvent, modalLogEvent,
+    flickerToggle, flickerAuto,
+    tlPrev, tlPlayPause, tlNext,
+    noteSave, noteDelete, noteCancel,
+    toggleUploadPanel, submitManualUpload,
+    toggleSdPanel, sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
+    toggleManagePanel, createLocation, createUnit,
+    toggleEventsPanel, logEvent,
+    handleSdFolderInput,
+    identityUpdate,
+  });
