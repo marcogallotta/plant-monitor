@@ -1,9 +1,9 @@
-.PHONY: test test-backend test-pi migrate seed up down build verify-up verify-down verify-reset
+.PHONY: test test-backend test-pi test-js migrate seed up down build verify-up verify-down verify-reset
 
 TEST_COMPOSE   := docker compose -p plant-monitoring-test -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
 
-test: test-backend test-pi
+test: test-backend test-pi test-js
 
 test-backend:
 	$(TEST_COMPOSE) run --rm backend pytest tests/ -v
@@ -11,6 +11,9 @@ test-backend:
 
 test-pi:
 	docker compose run --rm pi pytest tests/ -v
+
+test-js:
+	cd backend && npm test
 
 migrate:
 	docker compose run --rm backend alembic upgrade head
