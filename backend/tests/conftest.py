@@ -8,7 +8,7 @@ from app.database import build_engine, build_session_factory, get_db
 from app.main import app, PHOTOS_DIR
 from app.models import Base
 
-_SEED_LABELS = ["watered", "fed_liquid", "fed_worm_castings", "harvested", "potted_up", "other"]
+_SEED_LABELS = ["aphids", "yellowing", "mildew", "damage", "new_growth", "recovery", "watch"]
 
 
 @pytest.fixture(scope="session")
