@@ -20,10 +20,8 @@ def test_list_labels_returns_200(client):
 
 
 def test_list_labels_returns_seeded_labels(client):
-    labels = client.get("/labels").json()
-    names = [l["name"] for l in labels]
-    assert "aphids" in names
-    assert "yellowing" in names
+    names = sorted(l["name"] for l in client.get("/labels").json())
+    assert names == sorted(["watered", "fed_liquid", "fed_worm_castings", "harvested", "potted_up", "other"])
 
 
 def test_list_labels_ordered_by_usage_count(client, isolated_photos_dir):

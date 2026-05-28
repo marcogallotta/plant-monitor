@@ -8,6 +8,8 @@ from app.database import build_engine, build_session_factory, get_db
 from app.main import app, PHOTOS_DIR
 from app.models import Base
 
+_SEED_LABELS = ["watered", "fed_liquid", "fed_worm_castings", "harvested", "potted_up", "other"]
+
 
 @pytest.fixture(scope="session")
 def engine():
@@ -40,7 +42,15 @@ def db_session(engine):
 def clean_tables(engine):
     yield
     with engine.connect() as conn:
-        conn.execute(text("TRUNCATE TABLE photo_notes, photo_growing_units, event_photos, event_growing_units, events, photos, growing_units, locations RESTART IDENTITY CASCADE"))
+        conn.execute(text(
+            "TRUNCATE TABLE photo_notes, photo_growing_units, photo_labels, event_photos, "
+            "event_growing_units, events, photos, growing_units, locations, labels "
+            "RESTART IDENTITY CASCADE"
+        ))
+        conn.execute(
+            text("INSERT INTO labels (name) VALUES (:name)"),
+            [{"name": n} for n in _SEED_LABELS],
+        )
         conn.commit()
 
 
