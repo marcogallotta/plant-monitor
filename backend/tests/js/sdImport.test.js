@@ -6,6 +6,7 @@ vi.mock('@/api.js', () => ({
   uploadPhoto:         vi.fn().mockResolvedValue({}),
   scanCameraImport:    vi.fn().mockResolvedValue({ candidates: [], already_imported_count: 0, sources: [], warnings: [] }),
   importCameraPhotos:  vi.fn().mockResolvedValue({ created: [], skipped: [], failed: [] }),
+  getThumbnailBatch:   vi.fn().mockResolvedValue({ thumbs: {} }),
 }));
 
 vi.mock('@/sdImportCore.js', () => ({
@@ -78,6 +79,7 @@ beforeEach(() => {
   vi.mocked(api.uploadPhoto).mockResolvedValue({});
   vi.mocked(api.scanCameraImport).mockResolvedValue({ candidates: [], already_imported_count: 0, sources: [], warnings: [] });
   vi.mocked(api.importCameraPhotos).mockResolvedValue({ created: [], skipped: [], failed: [] });
+  vi.mocked(api.getThumbnailBatch).mockResolvedValue({ thumbs: {} });
   vi.mocked(core.detectAllBoundaries).mockReturnValue([]);
   document.getElementById('sd-folder-status').textContent = '';
   document.getElementById('sd-grid').innerHTML = '';
