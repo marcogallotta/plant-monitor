@@ -87,7 +87,9 @@ Standard CRUD via `/locations` and `/growing-units`. Both support `GET` (list), 
 
 ### Labels
 
-`GET /labels` returns all available labels ordered by id. Labels are seeded by migration `0006_labels.py` with six common values (`watered`, `fed_liquid`, `fed_worm_castings`, `harvested`, `potted_up`, `other`). `label.name` has a unique constraint.
+`GET /labels` returns all labels ordered by usage count descending, then by name — so frequently-used labels float to the top. Labels are seeded by migration `0006_labels.py` with six common values (`watered`, `fed_liquid`, `fed_worm_castings`, `harvested`, `potted_up`, `other`). `label.name` has a unique constraint.
+
+`POST /labels` creates a new label. The name is normalised to lowercase snake_case (whitespace → `_`). If a label with the normalised name already exists the endpoint returns it with 200 (idempotent). Returns the created label with 201.
 
 `POST /photos/{photo_id}/labels/{label_id}` assigns a label to a photo (idempotent — duplicate assignment is a no-op). Returns the updated `PhotoOut`.
 
@@ -132,6 +134,12 @@ FastAPI wires `get_db()` as a dependency. Tests override it with `app.dependency
 
 ## Test isolation
 
+Run all test suites with:
+
+```sh
+make test   # runs test-backend + test-pi + test-js
+```
+
 Tests run inside Docker Compose using `docker-compose.test.yml`, which spins up a separate `db-test` service pointing at the `plantmonitoring_test` database. The test stack uses project name `plant-monitoring-test` so its network (`plant-monitoring-test_default`) is entirely separate from the dev stack's network. Running `make test-backend` cannot interfere with a running `make up`.
 
 ### conftest.py fixtures
@@ -164,6 +172,16 @@ Patches `app.main.PHOTOS_DIR` to a `tmp_path` for each test. Prevents test photo
 **`client` (function-scoped)**
 
 Installs a `get_db` override so the FastAPI app uses the same session as the test. Clears overrides on teardown.
+
+### JavaScript tests
+
+`backend/tests/js/` holds Vitest tests for the pure-logic dashboard modules. Run with:
+
+```sh
+make test-js   # cd backend && npm test (vitest run)
+```
+
+Tests use `jsdom` for DOM-dependent modules. Modules that depend on `window.exifr` (e.g. `sdImport`) must stub it in the test environment. Coverage is provided by `@vitest/coverage-v8`.
 
 ---
 
@@ -199,13 +217,33 @@ Key JS state (all fields live on the single `state` object in `state.js`):
 | `currentNotes` | Notes loaded for the current modal photo |
 | `pendingNote` | `{x, y, x2, y2}` for a new note (x2/y2 non-null for a region); `{noteId, x, y, x2, y2}` for an edit |
 | `zoom`, `panX`, `panY` | Current zoom level and pan offset in the modal viewport |
-| `isPanning`, `wasDrag`, `isDrawingRect`, `rectStart` | Transient pointer-event state in the modal |
+| `isPanning`, `panStart`, `wasDrag`, `isDrawingRect`, `rectStart` | Transient pointer-event state in the modal |
 | `flickerShowing`, `flickerTimer` | Which slot (a/b) is visible and the auto-flicker interval id |
 | `tlIndex`, `tlTimer` | Current frame index and play interval id for the timelapse panel |
 
 Note pin positions use `left: x*100%; top: y*100%` inside `.note-pins`, which is absolutely positioned over the image wrapper. The image wrapper is `display: inline-block` so it shrinks to fit the rendered image size, not the surrounding flex container. Normalised x/y are calculated from `img.getBoundingClientRect()` at click time. For region notes (shift+drag), x2/y2 are stored the same way; rendering uses the min/max of the two corners so drag direction doesn't matter.
 
 `zoom.js` owns all pointer events on `#zoom-viewport`. `visualToStored(rx, ry)` maps a click position in the rotated visual space back to the canonical stored coordinate system — any code that records a note position must go through this function.
+
+### SD card import
+
+The SD import panel lets users bulk-import photos directly from a camera SD card via the File System Access API's folder picker.
+
+`sdImportCore.js` contains all pure logic (no DOM) and is fully unit-tested:
+
+- `isImportablePhoto` / `isRawPhoto` — filter `.jpg`, `.jpeg`, `.orf`, `.arw`.
+- `sortCameraFiles` — sorts by filename descending (matches camera sequential numbering, newest first).
+- `detectSessionBoundary` — scans `lastModified` timestamps for a gap > `SD_TIME_GAP` (1 hour); returns the index of the first file in the older batch, or `-1` if no boundary found. Used to auto-select only the latest shooting session.
+- `scanForJpeg` — scans a `Uint8Array` for the largest embedded JPEG (`FFD8FF … FFD9`). Used to extract preview JPEGs from RAW files.
+- `deriveTimestamp` — reads `DateTimeOriginal`/`CreateDate` from EXIF (via `exifr`). Returns `{iso, badge}` where `badge` is `'ok'` (UTC offset present), `'assumed'` (no offset, browser timezone used), or `'fallback'` (no usable EXIF, `file.lastModified` used).
+- `buildUploadFormData` — builds the `FormData` for `POST /manual-photos`.
+
+`sdImport.js` owns the DOM and upload flow:
+
+- `handleSdFolderInput` — processes the folder picker result: filters already-uploaded filenames (matched against `state.allPhotos[].original_filename`), calls `detectSessionBoundary` to auto-select the latest batch, and renders thumbnails in pages of 20.
+- RAW files (`.orf`, `.arw`): thumbnails are extracted asynchronously via `extractEmbeddedJpeg`. For non-ORF RAW files a 768 KB slice is tried first; if the embedded JPEG is truncated the full file is read. The extracted JPEG blob is uploaded in place of the original file, but `original_filename` on the backend is set to the raw filename (e.g. `DSC01349.ARW`).
+- EXIF timestamps are parsed asynchronously via `window.exifr` (loaded from CDN). ORF files are not supported by exifr and fall back to `lastModified`.
+- `sdUploadSelected` — uploads selected photos sequentially, showing per-thumb status overlays (`…` / `✓` / `✗`).
 
 ---
 
