@@ -135,6 +135,24 @@ def test_manual_upload_bad_captured_at_returns_422(client):
     assert r.status_code == 422
 
 
+def test_manual_upload_uses_provided_original_size_bytes(client, db_session):
+    from app.models import Photo
+    r = client.post("/manual-photos", data={"original_size_bytes": 99999}, files={
+        "image": ("DSC001.ARW", b"FAKEJPEG", "image/jpeg"),
+    })
+    assert r.status_code == 201
+    photo = db_session.query(Photo).first()
+    assert photo.original_size_bytes == 99999
+
+
+def test_manual_upload_falls_back_to_image_size_without_original_size_bytes(client, db_session):
+    from app.models import Photo
+    image_bytes = b"FAKEJPEG"
+    _upload(client, image_bytes=image_bytes)
+    photo = db_session.query(Photo).first()
+    assert photo.original_size_bytes == len(image_bytes)
+
+
 def test_manual_upload_invalid_rotation_returns_422(client):
     r = _upload(client, rotation=45)
     assert r.status_code == 422

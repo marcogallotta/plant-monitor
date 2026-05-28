@@ -580,7 +580,7 @@ async function sdUploadBrowser(queue, btn, status) {
 
     var ts    = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
     var ptype = document.getElementById('sd-photo-type').value;
-    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype, entry.rotation || 0);
+    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype, entry.rotation || 0, entry.file.size);
 
     try {
       await uploadPhoto(fd);

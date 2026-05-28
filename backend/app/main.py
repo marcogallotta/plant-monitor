@@ -480,6 +480,7 @@ async def upload_manual_photo(
     growing_unit_ids: Optional[List[int]] = Form(None),
     note_text: Optional[str] = Form(None),
     rotation: int = Form(0),
+    original_size_bytes: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ):
     if image.content_type not in {"image/jpeg", "image/jpg"}:
@@ -506,7 +507,7 @@ async def upload_manual_photo(
         db,
         image_bytes,
         image.filename,
-        len(image_bytes),
+        original_size_bytes if original_size_bytes is not None else len(image_bytes),
         parsed_at,
         "manual",
         photo_type=photo_type,

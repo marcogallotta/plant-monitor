@@ -229,6 +229,16 @@ describe('buildUploadFormData', () => {
     expect(buildUploadFormData(file, 'DSC001.JPG', ts, '').has('photo_type')).toBe(false);
     expect(buildUploadFormData(file, 'DSC001.JPG', ts, null).has('photo_type')).toBe(false);
   });
+
+  it('includes original_size_bytes when provided', () => {
+    const fd = buildUploadFormData(file, 'DSC001.ARW', ts, null, 0, 8192000);
+    expect(fd.get('original_size_bytes')).toBe('8192000');
+  });
+
+  it('omits original_size_bytes when not provided', () => {
+    const fd = buildUploadFormData(file, 'DSC001.JPG', ts, null, 0);
+    expect(fd.has('original_size_bytes')).toBe(false);
+  });
 });
 
 // ── detectAllBoundaries ───────────────────────────────────
