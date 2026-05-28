@@ -17,10 +17,11 @@ import { initUpload, toggleUploadPanel, submitManualUpload } from './upload.js';
 import { visualToStored } from './zoom.js';
 import {
   openModal, closeModal, showModalPhoto,
-  rotatePhoto, toggleLabel,
+  rotatePhoto,
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
 } from './modal.js';
+import { handleLabelInput, handleLabelKeydown } from './labels.js';
 import {
   loadPhotos,
   applyFilter, clearFilter,
@@ -64,7 +65,8 @@ Object.assign(window, {
   applyFilter, clearFilter,
   openModal, closeModal, modalImgClick,
   selectA, selectB,
-  rotatePhoto, toggleLabel,
+  rotatePhoto,
+  handleLabelInput, handleLabelKeydown,
   flickerToggle, flickerAuto,
   tlPrev, tlPlayPause, tlNext,
   noteSave, noteDelete, noteCancel,

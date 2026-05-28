@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -576,9 +576,28 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+class LabelCreate(BaseModel):
+    name: str
+
+
 @app.get("/labels", response_model=list[LabelOut])
 def list_labels(db: Session = Depends(get_db)):
     return db.query(Label).order_by(Label.id).all()
+
+
+@app.post("/labels")
+def create_label(body: LabelCreate, db: Session = Depends(get_db)):
+    name = re.sub(r"\s+", "_", body.name.strip().lower())
+    if not name:
+        raise HTTPException(status_code=422, detail="name must not be empty")
+    existing = db.query(Label).filter_by(name=name).first()
+    if existing:
+        return JSONResponse(status_code=200, content={"id": existing.id, "name": existing.name})
+    label = Label(name=name)
+    db.add(label)
+    db.commit()
+    db.refresh(label)
+    return JSONResponse(status_code=201, content={"id": label.id, "name": label.name})
 
 
 @app.post("/photos/{photo_id}/labels/{label_id}", response_model=PhotoOut)

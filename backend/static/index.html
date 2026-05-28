@@ -365,7 +365,11 @@
       </div>
     </div>
     <div class="identity-panel">
-      <div id="label-chips" class="label-chips"></div>
+      <div id="label-assigned" class="label-chips"></div>
+      <div style="position:relative;margin-top:0.4rem;">
+        <input id="label-input" type="text" placeholder="Type to pick or create label…" autocomplete="off" oninput="handleLabelInput()" onkeydown="handleLabelKeydown(event)" style="width:100%;box-sizing:border-box;background:#1a1a1a;border:1px solid #444;color:#ddd;padding:0.3rem 0.5rem;border-radius:4px;">
+        <div id="label-dropdown" class="label-dropdown hidden"></div>
+      </div>
       <span id="label-status" class="status-msg"></span>
     </div>
     <div id="modal-event-panel" class="identity-panel hidden">

@@ -128,6 +128,64 @@ def test_get_photos_labels_empty_by_default(client, isolated_photos_dir):
     assert photo["labels"] == []
 
 
+# --- POST /labels ---
+
+def test_create_label_returns_201(client):
+    r = client.post("/labels", json={"name": "rust"})
+    assert r.status_code == 201
+
+
+def test_create_label_returns_id_and_name(client):
+    r = client.post("/labels", json={"name": "rust"})
+    data = r.json()
+    assert "id" in data
+    assert data["name"] == "rust"
+
+
+def test_create_label_normalizes_spaces_to_underscores(client):
+    r = client.post("/labels", json={"name": "new symptoms"})
+    assert r.json()["name"] == "new_symptoms"
+
+
+def test_create_label_lowercases(client):
+    r = client.post("/labels", json={"name": "Rust"})
+    assert r.json()["name"] == "rust"
+
+
+def test_create_label_trims_whitespace(client):
+    r = client.post("/labels", json={"name": "  rust  "})
+    assert r.json()["name"] == "rust"
+
+
+def test_create_label_empty_returns_422(client):
+    r = client.post("/labels", json={"name": ""})
+    assert r.status_code == 422
+
+
+def test_create_label_whitespace_only_returns_422(client):
+    r = client.post("/labels", json={"name": "   "})
+    assert r.status_code == 422
+
+
+def test_create_label_existing_returns_existing_with_200(client):
+    r1 = client.post("/labels", json={"name": "aphids"})
+    r2 = client.post("/labels", json={"name": "aphids"})
+    assert r2.status_code == 200
+    assert r1.json()["id"] == r2.json()["id"]
+
+
+def test_create_label_existing_after_normalize_returns_existing(client):
+    r1 = client.post("/labels", json={"name": "aphids"})
+    r2 = client.post("/labels", json={"name": "  Aphids  "})
+    assert r1.json()["id"] == r2.json()["id"]
+
+
+def test_create_label_appears_in_get_labels(client):
+    client.post("/labels", json={"name": "rust"})
+    names = [l["name"] for l in client.get("/labels").json()]
+    assert "rust" in names
+
+
 # --- label uniqueness ---
 
 def test_label_names_are_unique(client):

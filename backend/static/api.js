@@ -42,6 +42,7 @@ export async function deleteNote(noteId) {
 export function createLocation(body)           { return apiJson('/locations', 'POST', body); }
 export function createGrowingUnit(body)        { return apiJson('/growing-units', 'POST', body); }
 export function getLabels()                    { return apiRequest('/labels'); }
+export function createLabel(name)              { return apiJson('/labels', 'POST', {name}); }
 export function assignLabel(photoId, labelId)  { return apiRequest('/photos/' + photoId + '/labels/' + labelId, {method: 'POST'}); }
 export async function removeLabel(photoId, labelId) {
   const resp = await fetch('/photos/' + photoId + '/labels/' + labelId, {method: 'DELETE'});

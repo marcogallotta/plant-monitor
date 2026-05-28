@@ -5,6 +5,10 @@ vi.mock('@/zoom.js', () => ({
   resetZoom: vi.fn(),
 }));
 
+vi.mock('@/labels.js', () => ({
+  renderLabelSection: vi.fn(),
+}));
+
 vi.mock('@/notes.js', () => ({
   noteCancel: vi.fn(),
   loadNotes: vi.fn(),
@@ -16,16 +20,11 @@ vi.mock('@/api.js', () => ({
   updatePhoto: vi.fn().mockResolvedValue({
     id: 5, photo_type: 'overview', location_id: null, growing_units: [], labels: [], original_filename: null, rotation: 0,
   }),
-  assignLabel: vi.fn().mockResolvedValue({
-    id: 5, photo_type: 'overview', location_id: null, growing_units: [],
-    labels: [{id: 1, name: 'watered'}], original_filename: null, rotation: 0,
-  }),
-  removeLabel: vi.fn().mockResolvedValue({}),
   getNotes: vi.fn().mockResolvedValue([]),
   createEvent: vi.fn().mockResolvedValue({id: 1}),
 }));
 
-let showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate, toggleModalLogEvent, logModalEvent;
+let showModalPhoto, closeModal, rotatePhoto, identityUpdate, toggleModalLogEvent, logModalEvent;
 let state;
 
 const PHOTO = {
@@ -45,8 +44,6 @@ beforeAll(async () => {
         <div id="rect-preview" style="display:none"></div>
       </div>
       <div id="modal-caption"></div>
-      <div id="label-chips"></div>
-      <span id="label-status"></span>
       <div id="identity-panel" class="hidden">
         <span id="id-source"></span>
         <select id="id-type-select">
@@ -78,14 +75,14 @@ beforeAll(async () => {
     </div>
   `;
 
-  ({showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate, toggleModalLogEvent, logModalEvent} =
+  ({showModalPhoto, closeModal, rotatePhoto, identityUpdate, toggleModalLogEvent, logModalEvent} =
     await import('@/modal.js'));
   ({state} = await import('@/state.js'));
 });
 
 beforeEach(async () => {
   state.allPhotos = [PHOTO];
-  state.allLabels = [{id: 1, name: 'watered'}, {id: 2, name: 'harvested'}];
+  state.allLabels = [{id: 1, name: 'aphids'}, {id: 2, name: 'yellowing'}];
   state.currentIndex = 0;
   state.currentPhotoId = null;
   state.currentRotation = 0;
@@ -94,11 +91,6 @@ beforeEach(async () => {
   vi.mocked(api.updatePhoto).mockResolvedValue({
     id: 5, photo_type: 'overview', location_id: null, growing_units: [], labels: [], original_filename: null, rotation: 0,
   });
-  vi.mocked(api.assignLabel).mockResolvedValue({
-    id: 5, photo_type: 'overview', location_id: null, growing_units: [],
-    labels: [{id: 1, name: 'watered'}], original_filename: null, rotation: 0,
-  });
-  vi.mocked(api.removeLabel).mockResolvedValue({});
 });
 
 // ── rotatePhoto ───────────────────────────────────────────
@@ -158,10 +150,10 @@ describe('showModalPhoto', () => {
     expect(document.getElementById('identity-panel').classList.contains('hidden')).toBe(false);
   });
 
-  it('renders label chips', () => {
+  it('calls renderLabelSection with the photo', async () => {
+    const {renderLabelSection} = await import('@/labels.js');
     showModalPhoto(0);
-    const chips = document.getElementById('label-chips').querySelectorAll('.label-chip');
-    expect(chips.length).toBe(state.allLabels.length);
+    expect(renderLabelSection).toHaveBeenCalledWith(PHOTO);
   });
 
   it('hides modal-event-panel', () => {
@@ -205,55 +197,6 @@ describe('closeModal', () => {
   });
 });
 
-// ── toggleLabel ───────────────────────────────────────────
-
-describe('toggleLabel', () => {
-  it('does nothing when currentPhotoId is null', async () => {
-    const {assignLabel} = await import('@/api.js');
-    state.currentPhotoId = null;
-    await toggleLabel(1);
-    expect(assignLabel).not.toHaveBeenCalled();
-  });
-
-  it('calls assignLabel when label is not assigned', async () => {
-    const {assignLabel} = await import('@/api.js');
-    state.currentPhotoId = 5;
-    state.allPhotos = [{...PHOTO, labels: []}];
-    await toggleLabel(1);
-    expect(assignLabel).toHaveBeenCalledWith(5, 1);
-  });
-
-  it('calls removeLabel when label is already assigned', async () => {
-    const {removeLabel} = await import('@/api.js');
-    state.currentPhotoId = 5;
-    state.allPhotos = [{...PHOTO, labels: [{id: 1, name: 'watered'}]}];
-    await toggleLabel(1);
-    expect(removeLabel).toHaveBeenCalledWith(5, 1);
-  });
-
-  it('updates photo labels in state after assign', async () => {
-    state.currentPhotoId = 5;
-    state.allPhotos = [{...PHOTO, labels: []}];
-    await toggleLabel(1);
-    expect(state.allPhotos[0].labels).toEqual([{id: 1, name: 'watered'}]);
-  });
-
-  it('updates photo labels in state after remove', async () => {
-    state.currentPhotoId = 5;
-    state.allPhotos = [{...PHOTO, labels: [{id: 1, name: 'watered'}]}];
-    await toggleLabel(1);
-    expect(state.allPhotos[0].labels).toEqual([]);
-  });
-
-  it('marks chip active when label is assigned', async () => {
-    state.currentPhotoId = 5;
-    state.allPhotos = [{...PHOTO, labels: []}];
-    showModalPhoto(0);
-    await toggleLabel(1);
-    const chips = document.getElementById('label-chips').querySelectorAll('.label-chip');
-    expect(chips[0].classList.contains('active')).toBe(true);
-  });
-});
 
 // ── identityUpdate ────────────────────────────────────────
 

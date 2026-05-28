@@ -1,5 +1,6 @@
 import { state } from './state.js';
-import { updatePhoto, assignLabel, removeLabel, createEvent } from './api.js';
+import { updatePhoto, createEvent } from './api.js';
+import { renderLabelSection } from './labels.js';
 import { resetZoom } from './zoom.js';
 import { noteCancel, loadNotes } from './notes.js';
 import { setStatus, formatDate, rotTransform } from './utils.js';
@@ -35,7 +36,7 @@ export function showModalPhoto(index) {
   document.getElementById('modal-caption').textContent =
     formatDate(p.captured_at) + ' — ' + p.filename;
   showIdentityPanel(p);
-  renderLabelChips(p);
+  renderLabelSection(p);
   loadNotes();
   document.getElementById('modal-event-panel').classList.add('hidden');
   document.getElementById('modal-event-type').selectedIndex = 0;
@@ -52,45 +53,6 @@ export function closeModal() {
   state.currentNotes = [];
 }
 
-export async function toggleLabel(labelId) {
-  if (!state.currentPhotoId) return;
-  const photo = state.allPhotos[state.currentIndex];
-  const assigned = (photo.labels || []).some(function(l) { return l.id === labelId; });
-  const chip = document.querySelector('.label-chip[data-label-id="' + labelId + '"]');
-  const status = document.getElementById('label-status');
-  try {
-    let updated;
-    if (assigned) {
-      await removeLabel(state.currentPhotoId, labelId);
-      updated = Object.assign({}, photo, {
-        labels: (photo.labels || []).filter(function(l) { return l.id !== labelId; }),
-      });
-      if (chip) chip.classList.remove('active');
-    } else {
-      updated = await assignLabel(state.currentPhotoId, labelId);
-      if (chip) chip.classList.add('active');
-    }
-    state.allPhotos[state.currentIndex] = updated;
-    if (status) status.textContent = '';
-  } catch (e) {
-    if (status) status.textContent = 'Error';
-  }
-}
-
-function renderLabelChips(photo) {
-  const container = document.getElementById('label-chips');
-  if (!container) return;
-  const assignedIds = new Set((photo.labels || []).map(function(l) { return l.id; }));
-  container.innerHTML = '';
-  state.allLabels.forEach(function(label) {
-    const btn = document.createElement('button');
-    btn.textContent = label.name.replace(/_/g, ' ');
-    btn.className = 'label-chip' + (assignedIds.has(label.id) ? ' active' : '');
-    btn.dataset.labelId = label.id;
-    btn.onclick = function() { toggleLabel(label.id); };
-    container.appendChild(btn);
-  });
-}
 
 function showIdentityPanel(photo) {
   document.getElementById('identity-panel').classList.remove('hidden');
