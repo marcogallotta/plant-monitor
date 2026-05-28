@@ -1,4 +1,8 @@
+import json
+from unittest.mock import MagicMock
+
 import pytest
+from sqlalchemy.exc import IntegrityError as SAIntegrityError
 
 
 def _make_photo(client, isolated_photos_dir):
@@ -209,3 +213,23 @@ def test_label_names_are_unique(client):
     labels = client.get("/labels").json()
     names = [l["name"] for l in labels]
     assert len(names) == len(set(names))
+
+
+# --- concurrent insert race condition ---
+
+def test_create_label_integrity_error_returns_existing_label():
+    from app.main import create_label, LabelCreate
+    from app.models import Label
+
+    existing = Label(id=42, name="rust")
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter_by.return_value.first.side_effect = [None, existing]
+    mock_db.commit.side_effect = SAIntegrityError(statement=None, params=None, orig=Exception("unique"))
+
+    result = create_label(body=LabelCreate(name="rust"), db=mock_db)
+
+    assert result.status_code == 200
+    data = json.loads(result.body)
+    assert data["name"] == "rust"
+    assert data["id"] == 42
+    mock_db.rollback.assert_called_once()

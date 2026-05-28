@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .camera_import import router as camera_import_router, save_photo
@@ -594,7 +595,12 @@ def create_label(body: LabelCreate, db: Session = Depends(get_db)):
         return JSONResponse(status_code=200, content={"id": existing.id, "name": existing.name})
     label = Label(name=name)
     db.add(label)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(Label).filter_by(name=name).first()
+        return JSONResponse(status_code=200, content={"id": existing.id, "name": existing.name})
     db.refresh(label)
     return JSONResponse(status_code=201, content={"id": label.id, "name": label.name})
 
