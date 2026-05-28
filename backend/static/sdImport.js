@@ -438,6 +438,8 @@ export function sdLoadMore() {
 
 export function sdAddMore() {
   if (sdRevealedBatchCount >= sdBatches.length) return;
+  var remaining = _revealedEnd() - sdShown;
+  if (remaining > 0) sdAppendThumbs(remaining);
   _revealBatch(sdRevealedBatchCount);
 }
 

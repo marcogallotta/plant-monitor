@@ -309,6 +309,23 @@ describe('sdLoadMore', () => {
   });
 });
 
+// ── sdAddMore ─────────────────────────────────────────────
+
+describe('sdAddMore', () => {
+  it('flushes remaining files from current batch before revealing next session', async () => {
+    // batch0=[0..4] batch1=[5..29] batch2=[30..49]
+    // after init: sdShown=25, 5 unshown from batch1
+    // without flush: sdAppendThumbs(20) eats 5 from batch1 + 15 from batch2 → 5 unshown from batch2
+    // with flush: all 5 remaining from batch1 shown first, then all 20 from batch2 fit → load-more hidden
+    vi.mocked(core.detectAllBoundaries).mockReturnValueOnce([5, 30]);
+    const files = Array.from({ length: 50 }, (_, i) =>
+      makeFile('DSC' + String(i).padStart(3, '0') + '.jpg'));
+    await handleSdFolderInput(makeEvent(files));
+    sdAddMore();
+    expect(document.getElementById('sd-load-more-row').style.display).toBe('none');
+  });
+});
+
 // ── sdUploadSelected ──────────────────────────────────────
 
 describe('sdUploadSelected', () => {
