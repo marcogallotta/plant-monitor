@@ -86,6 +86,12 @@ def test_update_location_can_clear_description(client):
     assert r.json()["description"] is None
 
 
+def test_update_location_name_null_returns_422(client):
+    r = client.post("/locations", json={"name": "Shelf"})
+    loc_id = r.json()["id"]
+    assert client.put(f"/locations/{loc_id}", json={"name": None}).status_code == 422
+
+
 def test_list_locations_ordered_by_name(client):
     client.post("/locations", json={"name": "West windowsill"})
     client.post("/locations", json={"name": "Balcony"})

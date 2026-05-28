@@ -269,7 +269,10 @@ def update_location(location_id: int, body: LocationUpdate, db: Session = Depend
     loc = db.query(Location).filter_by(id=location_id).first()
     if not loc:
         raise HTTPException(status_code=404, detail="location not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    if updates.get("name") is None and "name" in updates:
+        raise HTTPException(status_code=422, detail="name cannot be null")
+    for field, value in updates.items():
         setattr(loc, field, value)
     loc.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -311,6 +314,8 @@ def update_growing_unit(unit_id: int, body: GrowingUnitUpdate, db: Session = Dep
     if not unit:
         raise HTTPException(status_code=404, detail="growing unit not found")
     updates = body.model_dump(exclude_unset=True)
+    if updates.get("name") is None and "name" in updates:
+        raise HTTPException(status_code=422, detail="name cannot be null")
     if "current_location_id" in updates:
         _check_location_exists(updates["current_location_id"], db)
     for field, value in updates.items():
@@ -451,6 +456,8 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
         _check_location_exists(body.location_id, db)
         photo.location_id = body.location_id
     if "rotation" in body.model_fields_set:
+        if body.rotation is None:
+            raise HTTPException(status_code=422, detail="rotation cannot be null")
         photo.rotation = body.rotation
     if body.growing_unit_ids is not None:
         for uid in body.growing_unit_ids:
@@ -534,8 +541,12 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
     note = db.query(PhotoNote).filter_by(id=note_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="note not found")
+    _note_non_nullable = {"note_text", "x", "y"}
     for field in body.model_fields_set:
-        setattr(note, field, getattr(body, field))
+        value = getattr(body, field)
+        if value is None and field in _note_non_nullable:
+            raise HTTPException(status_code=422, detail=f"{field} cannot be null")
+        setattr(note, field, value)
     if (note.x2 is None) != (note.y2 is None):
         raise HTTPException(status_code=422, detail="x2 and y2 must both be set or both cleared")
     note.updated_at = datetime.now(timezone.utc)

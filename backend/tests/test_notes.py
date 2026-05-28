@@ -217,6 +217,24 @@ def test_update_note_x2_null_clears_existing_rect(client, db_session):
     assert data["y2"] is None
 
 
+def test_update_note_note_text_null_returns_422(client, db_session):
+    photo = _photo(db_session)
+    note = _note(db_session, photo.id)
+    assert client.put(f"/notes/{note.id}", json={"note_text": None}).status_code == 422
+
+
+def test_update_note_x_null_returns_422(client, db_session):
+    photo = _photo(db_session)
+    note = _note(db_session, photo.id)
+    assert client.put(f"/notes/{note.id}", json={"x": None}).status_code == 422
+
+
+def test_update_note_y_null_returns_422(client, db_session):
+    photo = _photo(db_session)
+    note = _note(db_session, photo.id)
+    assert client.put(f"/notes/{note.id}", json={"y": None}).status_code == 422
+
+
 def test_update_note_clearing_only_x2_returns_422(client, db_session):
     photo = _photo(db_session)
     note = _note(db_session, photo.id, x=0.1, y=0.2, x2=0.7, y2=0.8)

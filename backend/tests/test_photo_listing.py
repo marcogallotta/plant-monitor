@@ -197,6 +197,12 @@ def test_classify_photo_rotation_invalid_returns_422(client, db_session):
     assert r.status_code == 422
 
 
+def test_classify_photo_rotation_null_returns_422(client, db_session):
+    photo = _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
+    r = client.put(f"/photos/{photo.id}", json={"rotation": None})
+    assert r.status_code == 422
+
+
 def test_list_photos_includes_rotation(client, db_session):
     _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z", rotation=180)
     data = client.get("/photos").json()

@@ -119,6 +119,12 @@ def test_update_growing_unit_bad_location_returns_404(client):
     assert r.status_code == 404
 
 
+def test_update_growing_unit_name_null_returns_422(client):
+    r = client.post("/growing-units", json={"name": "Basil pot"})
+    unit_id = r.json()["id"]
+    assert client.put(f"/growing-units/{unit_id}", json={"name": None}).status_code == 422
+
+
 def test_list_growing_units_ordered_by_name(client):
     client.post("/growing-units", json={"name": "Thai basil plant 1"})
     client.post("/growing-units", json={"name": "Chives clump"})
