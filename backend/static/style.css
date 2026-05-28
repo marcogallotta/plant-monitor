@@ -113,6 +113,11 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .modal-caption { font-size: 0.8rem; color: #aaa; text-align: center; flex: 1; }
 .modal-close  { position: absolute; top: -2rem; right: 0; background: none; border: none; color: #aaa; font-size: 1.4rem; cursor: pointer; line-height: 1; }
 .modal-close:hover { color: #fff; }
+.modal-prev, .modal-next { position: absolute; top: 50%; transform: translateY(-50%); background: none; border: none; color: #aaa; font-size: 2.5rem; cursor: pointer; line-height: 1; padding: 0 0.4rem; z-index: 2; user-select: none; }
+.modal-prev { left: -2.2rem; }
+.modal-next { right: -2.2rem; }
+.modal-prev:hover, .modal-next:hover { color: #fff; }
+.modal-prev:disabled, .modal-next:disabled { opacity: 0.2; cursor: default; }
 .modal-toolbar { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0.25rem; }
 
 /* Zoom viewport */
