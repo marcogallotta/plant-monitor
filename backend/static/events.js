@@ -70,11 +70,13 @@ export async function logEvent() {
   const unitSel = document.getElementById('new-event-units');
   const note    = document.getElementById('new-event-note').value.trim();
   const unitIds = Array.from(unitSel.selectedOptions).map(function(o) { return parseInt(o.value); });
+  if (!type) { document.getElementById('event-status').textContent = 'Select a type.'; return; }
   const body    = buildEventBody(type, at, loc, unitIds, note);
 
   document.getElementById('event-status').textContent = 'Saving…';
   try {
     await createEvent(body);
+    document.getElementById('new-event-type').selectedIndex = 0;
     document.getElementById('new-event-at').value = '';
     document.getElementById('new-event-location').value = '';
     Array.from(unitSel.options).forEach(function(o) { o.selected = false; });

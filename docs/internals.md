@@ -83,7 +83,17 @@ Standard CRUD via `/locations` and `/growing-units`. Both support `GET` (list), 
 
 ### Events
 
-`POST /events` creates a garden event. `event_type` is a free-ish string (the dashboard offers a fixed set but the backend doesn't enforce it). Optional associations: `location_id`, `growing_unit_ids` (many-to-many via `event_growing_units`), `photo_ids` (many-to-many via `event_photos`). `event_at` defaults to `now()` if omitted. `GET /events` returns all events ordered by `event_at` descending.
+`POST /events` creates a garden event. `event_type` must be one of the values in `CARE_ACTION_TYPES` (`fed_liquid`, `fed_worm_castings`, `watered`, `harvested`, `potted_up`, `other`) — the backend enforces this with a 422 on unknown values. Optional associations: `location_id`, `growing_unit_ids` (many-to-many via `event_growing_units`), `photo_ids` (many-to-many via `event_photos`). `event_at` defaults to `now()` if omitted. `GET /events` returns all events ordered by `event_at` descending.
+
+### Labels
+
+`GET /labels` returns all available labels ordered by id. Labels are seeded by migration `0006_labels.py` with six common values (`watered`, `fed_liquid`, `fed_worm_castings`, `harvested`, `potted_up`, `other`). `label.name` has a unique constraint.
+
+`POST /photos/{photo_id}/labels/{label_id}` assigns a label to a photo (idempotent — duplicate assignment is a no-op). Returns the updated `PhotoOut`.
+
+`DELETE /photos/{photo_id}/labels/{label_id}` removes an assignment; returns 404 if not currently assigned.
+
+`GET /photos` includes `labels: [{id, name}]` on every photo via a join in `_photo_out()`. The frontend loads all labels once at boot via `GET /labels` (stored in `state.allLabels`) and renders them as chip buttons in the modal. Clicking a chip calls `toggleLabel(labelId)` which POSTs or DELETEs the assignment and updates local state without a full photo reload.
 
 ### Assistant API
 

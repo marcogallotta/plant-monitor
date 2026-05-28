@@ -89,6 +89,22 @@ class EventPhoto(Base):
     photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), primary_key=True)
 
 
+class Label(Base):
+    __tablename__ = "labels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PhotoLabel(Base):
+    __tablename__ = "photo_labels"
+
+    photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), primary_key=True)
+    label_id: Mapped[int] = mapped_column(Integer, ForeignKey("labels.id"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class PhotoNote(Base):
     __tablename__ = "photo_notes"
     __table_args__ = (

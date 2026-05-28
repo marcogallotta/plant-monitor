@@ -41,6 +41,15 @@ export async function deleteNote(noteId) {
 
 export function createLocation(body)           { return apiJson('/locations', 'POST', body); }
 export function createGrowingUnit(body)        { return apiJson('/growing-units', 'POST', body); }
+export function getLabels()                    { return apiRequest('/labels'); }
+export function assignLabel(photoId, labelId)  { return apiRequest('/photos/' + photoId + '/labels/' + labelId, {method: 'POST'}); }
+export async function removeLabel(photoId, labelId) {
+  const resp = await fetch('/photos/' + photoId + '/labels/' + labelId, {method: 'DELETE'});
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.detail || 'HTTP ' + resp.status);
+  }
+}
 export function createEvent(body)              { return apiJson('/events', 'POST', body); }
 export function getEvents()                    { return apiRequest('/events'); }
 

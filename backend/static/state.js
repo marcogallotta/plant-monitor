@@ -5,6 +5,7 @@ export const state = {
   photoB: null,
   allLocations: [],
   allUnits: [],
+  allLabels: [],
 
   // flicker
   flickerShowing: 'a',

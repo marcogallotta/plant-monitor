@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote
+from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote
 
 app = FastAPI()
 
@@ -102,6 +102,13 @@ class GrowingUnitBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class LabelOut(BaseModel):
+    id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class PhotoOut(BaseModel):
     id: int
     filename: str
@@ -113,6 +120,7 @@ class PhotoOut(BaseModel):
     location_id: Optional[int] = None
     location_name: Optional[str] = None
     growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
+    labels: list[LabelOut] = Field(default_factory=list)
     rotation: int = 0
 
     model_config = {"from_attributes": True}
@@ -316,6 +324,12 @@ def _photo_out(p: Photo, db: Session) -> PhotoOut:
         .filter(PhotoGrowingUnit.photo_id == p.id)
         .all()
     )
+    labels = (
+        db.query(Label)
+        .join(PhotoLabel, PhotoLabel.label_id == Label.id)
+        .filter(PhotoLabel.photo_id == p.id)
+        .all()
+    )
     return PhotoOut(
         id=p.id,
         filename=p.filename,
@@ -327,6 +341,7 @@ def _photo_out(p: Photo, db: Session) -> PhotoOut:
         location_id=p.location_id,
         location_name=location_name,
         growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in units],
+        labels=[LabelOut(id=l.id, name=l.name) for l in labels],
         rotation=p.rotation,
     )
 
@@ -558,6 +573,38 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
     if not note:
         raise HTTPException(status_code=404, detail="note not found")
     db.delete(note)
+    db.commit()
+
+
+@app.get("/labels", response_model=list[LabelOut])
+def list_labels(db: Session = Depends(get_db)):
+    return db.query(Label).order_by(Label.id).all()
+
+
+@app.post("/photos/{photo_id}/labels/{label_id}", response_model=PhotoOut)
+def assign_label(photo_id: int, label_id: int, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    label = db.query(Label).filter_by(id=label_id).first()
+    if not label:
+        raise HTTPException(status_code=404, detail="label not found")
+    existing = db.query(PhotoLabel).filter_by(photo_id=photo_id, label_id=label_id).first()
+    if not existing:
+        db.add(PhotoLabel(photo_id=photo_id, label_id=label_id))
+        db.commit()
+    return _photo_out(photo, db)
+
+
+@app.delete("/photos/{photo_id}/labels/{label_id}", status_code=204)
+def remove_label(photo_id: int, label_id: int, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    row = db.query(PhotoLabel).filter_by(photo_id=photo_id, label_id=label_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="label not assigned")
+    db.delete(row)
     db.commit()
 
 

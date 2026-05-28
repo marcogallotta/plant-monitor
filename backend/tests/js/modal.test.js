@@ -14,20 +14,24 @@ vi.mock('@/notes.js', () => ({
 
 vi.mock('@/api.js', () => ({
   updatePhoto: vi.fn().mockResolvedValue({
-    id: 5, photo_type: 'overview', location_id: null, growing_units: [], original_filename: null, rotation: 0,
+    id: 5, photo_type: 'overview', location_id: null, growing_units: [], labels: [], original_filename: null, rotation: 0,
   }),
-  createEvent: vi.fn().mockResolvedValue({id: 1}),
+  assignLabel: vi.fn().mockResolvedValue({
+    id: 5, photo_type: 'overview', location_id: null, growing_units: [],
+    labels: [{id: 1, name: 'watered'}], original_filename: null, rotation: 0,
+  }),
+  removeLabel: vi.fn().mockResolvedValue({}),
   getNotes: vi.fn().mockResolvedValue([]),
 }));
 
-let showModalPhoto, closeModal, toggleModalLogEvent, modalLogEvent, rotatePhoto, identityUpdate;
+let showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate;
 let state;
 
 const PHOTO = {
   id: 5, url: '/photos/test.jpg', filename: 'test.jpg',
   captured_at: '2026-01-01T10:00:00Z', rotation: 90,
   source: 'pi', photo_type: 'overview', growing_units: [],
-  original_filename: null, location_id: null,
+  labels: [], original_filename: null, location_id: null,
 };
 
 beforeAll(async () => {
@@ -40,14 +44,8 @@ beforeAll(async () => {
         <div id="rect-preview" style="display:none"></div>
       </div>
       <div id="modal-caption"></div>
-      <div id="modal-log-event-panel" style="display:none"></div>
-      <div id="modal-event-status"></div>
-      <select id="modal-event-type">
-        <option value="fed_liquid">Fed liquid</option>
-        <option value="watered">Watered</option>
-        <option value="potted_up">Potted up</option>
-      </select>
-      <input id="modal-event-note" value="">
+      <div id="label-chips"></div>
+      <span id="label-status"></span>
       <div id="identity-panel" class="hidden">
         <span id="id-source"></span>
         <select id="id-type-select">
@@ -70,22 +68,27 @@ beforeAll(async () => {
     </div>
   `;
 
-  ({showModalPhoto, closeModal, toggleModalLogEvent, modalLogEvent, rotatePhoto, identityUpdate} =
+  ({showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate} =
     await import('@/modal.js'));
   ({state} = await import('@/state.js'));
 });
 
 beforeEach(async () => {
   state.allPhotos = [PHOTO];
+  state.allLabels = [{id: 1, name: 'watered'}, {id: 2, name: 'harvested'}];
   state.currentIndex = 0;
   state.currentPhotoId = null;
   state.currentRotation = 0;
   vi.clearAllMocks();
   const api = await import('@/api.js');
   vi.mocked(api.updatePhoto).mockResolvedValue({
-    id: 5, photo_type: 'overview', location_id: null, growing_units: [], original_filename: null, rotation: 0,
+    id: 5, photo_type: 'overview', location_id: null, growing_units: [], labels: [], original_filename: null, rotation: 0,
   });
-  vi.mocked(api.createEvent).mockResolvedValue({id: 1});
+  vi.mocked(api.assignLabel).mockResolvedValue({
+    id: 5, photo_type: 'overview', location_id: null, growing_units: [],
+    labels: [{id: 1, name: 'watered'}], original_filename: null, rotation: 0,
+  });
+  vi.mocked(api.removeLabel).mockResolvedValue({});
 });
 
 // ── rotatePhoto ───────────────────────────────────────────
@@ -135,18 +138,6 @@ describe('showModalPhoto', () => {
     expect(state.currentRotation).toBe(PHOTO.rotation);
   });
 
-  it('resets modal-event-type to first option (Bug B fix)', () => {
-    document.getElementById('modal-event-type').selectedIndex = 2;
-    showModalPhoto(0);
-    expect(document.getElementById('modal-event-type').selectedIndex).toBe(0);
-  });
-
-  it('clears modal-event-note', () => {
-    document.getElementById('modal-event-note').value = 'leftover';
-    showModalPhoto(0);
-    expect(document.getElementById('modal-event-note').value).toBe('');
-  });
-
   it('sets modal-img src', () => {
     showModalPhoto(0);
     expect(document.getElementById('modal-img').src).toContain(PHOTO.url);
@@ -155,6 +146,12 @@ describe('showModalPhoto', () => {
   it('shows identity panel', () => {
     showModalPhoto(0);
     expect(document.getElementById('identity-panel').classList.contains('hidden')).toBe(false);
+  });
+
+  it('renders label chips', () => {
+    showModalPhoto(0);
+    const chips = document.getElementById('label-chips').querySelectorAll('.label-chip');
+    expect(chips.length).toBe(state.allLabels.length);
   });
 });
 
@@ -186,63 +183,53 @@ describe('closeModal', () => {
   });
 });
 
-// ── toggleModalLogEvent ───────────────────────────────────
+// ── toggleLabel ───────────────────────────────────────────
 
-describe('toggleModalLogEvent', () => {
-  it('shows the panel when it is hidden', () => {
-    document.getElementById('modal-log-event-panel').style.display = 'none';
-    toggleModalLogEvent();
-    expect(document.getElementById('modal-log-event-panel').style.display).toBe('');
-  });
-
-  it('hides the panel when it is visible', () => {
-    document.getElementById('modal-log-event-panel').style.display = '';
-    toggleModalLogEvent();
-    expect(document.getElementById('modal-log-event-panel').style.display).toBe('none');
-  });
-
-  it('clears the status text', () => {
-    document.getElementById('modal-event-status').textContent = 'Logged.';
-    toggleModalLogEvent();
-    expect(document.getElementById('modal-event-status').textContent).toBe('');
-  });
-});
-
-// ── modalLogEvent ─────────────────────────────────────────
-
-describe('modalLogEvent', () => {
+describe('toggleLabel', () => {
   it('does nothing when currentPhotoId is null', async () => {
-    const {createEvent} = await import('@/api.js');
+    const {assignLabel} = await import('@/api.js');
     state.currentPhotoId = null;
-    await modalLogEvent();
-    expect(createEvent).not.toHaveBeenCalled();
+    await toggleLabel(1);
+    expect(assignLabel).not.toHaveBeenCalled();
   });
 
-  it('calls createEvent with event_type and photo_ids', async () => {
-    const {createEvent} = await import('@/api.js');
+  it('calls assignLabel when label is not assigned', async () => {
+    const {assignLabel} = await import('@/api.js');
     state.currentPhotoId = 5;
-    document.getElementById('modal-event-type').value = 'watered';
-    document.getElementById('modal-event-note').value = '';
-    await modalLogEvent();
-    expect(createEvent).toHaveBeenCalledWith({event_type: 'watered', photo_ids: [5]});
+    state.allPhotos = [{...PHOTO, labels: []}];
+    await toggleLabel(1);
+    expect(assignLabel).toHaveBeenCalledWith(5, 1);
   });
 
-  it('includes note_text when the note field is non-empty', async () => {
-    const {createEvent} = await import('@/api.js');
+  it('calls removeLabel when label is already assigned', async () => {
+    const {removeLabel} = await import('@/api.js');
     state.currentPhotoId = 5;
-    document.getElementById('modal-event-type').value = 'watered';
-    document.getElementById('modal-event-note').value = 'checked soil';
-    await modalLogEvent();
-    expect(createEvent).toHaveBeenCalledWith(
-      expect.objectContaining({note_text: 'checked soil'})
-    );
+    state.allPhotos = [{...PHOTO, labels: [{id: 1, name: 'watered'}]}];
+    await toggleLabel(1);
+    expect(removeLabel).toHaveBeenCalledWith(5, 1);
   });
 
-  it('shows "Logged." on success', async () => {
+  it('updates photo labels in state after assign', async () => {
     state.currentPhotoId = 5;
-    document.getElementById('modal-event-note').value = '';
-    await modalLogEvent();
-    expect(document.getElementById('modal-event-status').textContent).toBe('Logged.');
+    state.allPhotos = [{...PHOTO, labels: []}];
+    await toggleLabel(1);
+    expect(state.allPhotos[0].labels).toEqual([{id: 1, name: 'watered'}]);
+  });
+
+  it('updates photo labels in state after remove', async () => {
+    state.currentPhotoId = 5;
+    state.allPhotos = [{...PHOTO, labels: [{id: 1, name: 'watered'}]}];
+    await toggleLabel(1);
+    expect(state.allPhotos[0].labels).toEqual([]);
+  });
+
+  it('marks chip active when label is assigned', async () => {
+    state.currentPhotoId = 5;
+    state.allPhotos = [{...PHOTO, labels: []}];
+    showModalPhoto(0);
+    await toggleLabel(1);
+    const chips = document.getElementById('label-chips').querySelectorAll('.label-chip');
+    expect(chips[0].classList.contains('active')).toBe(true);
   });
 });
 

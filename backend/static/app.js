@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getLocations, getGrowingUnits } from './api.js';
+import { getLocations, getGrowingUnits, getLabels } from './api.js';
 import {
   initSdImport,
   toggleSdPanel, handleSdFolderInput,
@@ -17,7 +17,7 @@ import { initUpload, toggleUploadPanel, submitManualUpload } from './upload.js';
 import { visualToStored } from './zoom.js';
 import {
   openModal, closeModal, showModalPhoto,
-  rotatePhoto, toggleModalLogEvent, modalLogEvent,
+  rotatePhoto, toggleLabel,
   identityUpdate,
 } from './modal.js';
 import {
@@ -28,9 +28,10 @@ import {
 } from './photos.js';
 
 async function loadDropdownData() {
-  [state.allLocations, state.allUnits] = await Promise.all([
+  [state.allLocations, state.allUnits, state.allLabels] = await Promise.all([
     getLocations(),
     getGrowingUnits(),
+    getLabels(),
   ]);
   populateSelect('filter-location', state.allLocations, 'All locations');
   populateSelect('filter-unit',     state.allUnits,     'All units');
@@ -62,7 +63,7 @@ Object.assign(window, {
   applyFilter, clearFilter,
   openModal, closeModal, modalImgClick,
   selectA, selectB,
-  rotatePhoto, toggleModalLogEvent, modalLogEvent,
+  rotatePhoto, toggleLabel,
   flickerToggle, flickerAuto,
   tlPrev, tlPlayPause, tlNext,
   noteSave, noteDelete, noteCancel,

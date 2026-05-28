@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { updatePhoto, createEvent } from './api.js';
+import { updatePhoto, assignLabel, removeLabel } from './api.js';
 import { resetZoom } from './zoom.js';
 import { noteCancel, loadNotes } from './notes.js';
 import { setStatus, formatDate, rotTransform } from './utils.js';
@@ -12,9 +12,7 @@ export async function rotatePhoto(delta) {
   const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
   if (card) {
     var img = card.querySelector('img');
-    if (img) {
-      img.style.transform = rotTransform(state.currentRotation);
-    }
+    if (img) img.style.transform = rotTransform(state.currentRotation);
   }
   try {
     await updatePhoto(state.currentPhotoId, {rotation: state.currentRotation});
@@ -32,13 +30,12 @@ export function showModalPhoto(index) {
   state.currentRotation = p.rotation || 0;
   resetZoom();
   noteCancel();
-  document.getElementById('modal-log-event-panel').style.display = 'none';
-  document.getElementById('modal-event-status').textContent = '';
   state.currentPhotoId = p.id;
   document.getElementById('modal-img').src = p.url;
   document.getElementById('modal-caption').textContent =
     formatDate(p.captured_at) + ' — ' + p.filename;
   showIdentityPanel(p);
+  renderLabelChips(p);
   loadNotes();
 }
 
@@ -47,30 +44,48 @@ export function closeModal() {
   document.getElementById('modal').classList.add('hidden');
   document.getElementById('modal-img').src = '';
   document.getElementById('identity-panel').classList.add('hidden');
-  document.getElementById('modal-log-event-panel').style.display = 'none';
   state.currentPhotoId = null;
   state.currentNotes = [];
 }
 
-export function toggleModalLogEvent() {
-  var panel = document.getElementById('modal-log-event-panel');
-  panel.style.display = panel.style.display === 'none' ? '' : 'none';
-  document.getElementById('modal-event-status').textContent = '';
+export async function toggleLabel(labelId) {
+  if (!state.currentPhotoId) return;
+  const photo = state.allPhotos[state.currentIndex];
+  const assigned = (photo.labels || []).some(function(l) { return l.id === labelId; });
+  const chip = document.querySelector('.label-chip[data-label-id="' + labelId + '"]');
+  const status = document.getElementById('label-status');
+  try {
+    let updated;
+    if (assigned) {
+      await removeLabel(state.currentPhotoId, labelId);
+      updated = Object.assign({}, photo, {
+        labels: (photo.labels || []).filter(function(l) { return l.id !== labelId; }),
+      });
+      if (chip) chip.classList.remove('active');
+    } else {
+      updated = await assignLabel(state.currentPhotoId, labelId);
+      if (chip) chip.classList.add('active');
+    }
+    state.allPhotos[state.currentIndex] = updated;
+    if (status) status.textContent = '';
+  } catch (e) {
+    if (status) status.textContent = 'Error';
+  }
 }
 
-export async function modalLogEvent() {
-  if (!state.currentPhotoId) return;
-  var type = document.getElementById('modal-event-type').value;
-  var note = document.getElementById('modal-event-note').value.trim();
-  var status = document.getElementById('modal-event-status');
-  var body = {event_type: type, photo_ids: [state.currentPhotoId]};
-  if (note) body.note_text = note;
-  status.textContent = 'Saving…';
-  try {
-    await createEvent(body);
-    document.getElementById('modal-event-note').value = '';
-    status.textContent = 'Logged.';
-  } catch (e) { status.textContent = 'Error: ' + e.message; }
+function renderLabelChips(photo) {
+  const container = document.getElementById('label-chips');
+  if (!container) return;
+  const assignedIds = new Set((photo.labels || []).map(function(l) { return l.id; }));
+  container.innerHTML = '';
+  state.allLabels.forEach(function(label) {
+    const btn = document.createElement('button');
+    btn.textContent = label.name.replace(/_/g, ' ');
+    btn.className = 'label-chip' + (assignedIds.has(label.id) ? ' active' : '');
+    btn.dataset.labelId = label.id;
+    btn.onclick = function() { toggleLabel(label.id); };
+    container.appendChild(btn);
+  });
 }
 
 function showIdentityPanel(photo) {

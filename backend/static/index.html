@@ -363,26 +363,9 @@
         <span class="identity-label">Original file</span><span class="identity-value" id="id-original">—</span>
       </div>
     </div>
-    <div id="modal-log-event-panel" class="identity-panel" style="display:none;">
-      <div class="identity-row">
-        <span class="identity-label">Event type</span>
-        <select id="modal-event-type">
-          <option value="fed_liquid">Fed liquid</option>
-          <option value="fed_worm_castings">Fed worm castings</option>
-          <option value="watered">Watered</option>
-          <option value="harvested">Harvested</option>
-          <option value="potted_up">Potted up</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      <div class="identity-row">
-        <span class="identity-label">Note</span>
-        <textarea id="modal-event-note" placeholder="Optional…" rows="2"></textarea>
-      </div>
-      <div class="identity-row">
-        <button onclick="modalLogEvent()">Log event</button>
-        <span id="modal-event-status" class="status-msg"></span>
-      </div>
+    <div class="identity-panel">
+      <div id="label-chips" class="label-chips"></div>
+      <span id="label-status" class="status-msg"></span>
     </div>
     <div class="note-hint">Scroll to zoom · drag to pan · click to pin · shift+drag to box</div>
     <div id="note-panel" class="note-panel hidden">
