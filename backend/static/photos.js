@@ -85,6 +85,7 @@ function updateCompare() {
     const img = document.getElementById('img-a');
     img.src = state.photoA.url;
     img.style.display = 'block';
+    img.style.transform = 'rotate(' + (state.photoA.rotation || 0) + 'deg)';
     document.getElementById('cap-a').textContent = formatDate(state.photoA.captured_at);
   }
 
@@ -93,6 +94,7 @@ function updateCompare() {
     const img = document.getElementById('img-b');
     img.src = state.photoB.url;
     img.style.display = 'block';
+    img.style.transform = 'rotate(' + (state.photoB.rotation || 0) + 'deg)';
     document.getElementById('cap-b').textContent = formatDate(state.photoB.captured_at);
   }
 
@@ -113,7 +115,9 @@ function toggleFlickerFrame() {
   if (!state.photoA || !state.photoB) return;
   state.flickerShowing = state.flickerShowing === 'a' ? 'b' : 'a';
   const photo = state.flickerShowing === 'a' ? state.photoA : state.photoB;
-  document.getElementById('flicker-img').src = photo.url;
+  const flickerImg = document.getElementById('flicker-img');
+  flickerImg.src = photo.url;
+  flickerImg.style.transform = 'rotate(' + (photo.rotation || 0) + 'deg)';
   const lbl = document.getElementById('flicker-label');
   lbl.textContent = state.flickerShowing.toUpperCase();
   lbl.className = 'flicker-label ' + state.flickerShowing;
