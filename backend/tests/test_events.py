@@ -98,7 +98,7 @@ def test_create_event_optional_fields_null(client):
 
 # --- event type validation ---
 
-VALID_EVENT_TYPES = ["fed_liquid", "fed_worm_castings", "watered", "harvested", "potted_up", "other"]
+VALID_EVENT_TYPES = ["fed_liquid", "fed_worm_castings", "watered", "harvested", "potted_up", "propagated", "other"]
 
 
 @pytest.mark.parametrize("event_type", VALID_EVENT_TYPES)

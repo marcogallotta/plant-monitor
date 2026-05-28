@@ -19,6 +19,7 @@ import {
   openModal, closeModal, showModalPhoto,
   rotatePhoto, toggleLabel,
   identityUpdate,
+  toggleModalLogEvent, logModalEvent,
 } from './modal.js';
 import {
   loadPhotos,
@@ -73,4 +74,5 @@ Object.assign(window, {
   toggleEventsPanel, logEvent,
   handleSdFolderInput,
   identityUpdate,
+  toggleModalLogEvent, logModalEvent,
 });

@@ -616,7 +616,7 @@ class PhotoBrief(BaseModel):
     model_config = {"from_attributes": True}
 
 
-CARE_ACTION_TYPES = {"fed_liquid", "fed_worm_castings", "watered", "harvested", "potted_up", "other"}
+CARE_ACTION_TYPES = {"fed_liquid", "fed_worm_castings", "watered", "harvested", "potted_up", "propagated", "other"}
 
 
 class EventCreate(BaseModel):

@@ -22,9 +22,10 @@ vi.mock('@/api.js', () => ({
   }),
   removeLabel: vi.fn().mockResolvedValue({}),
   getNotes: vi.fn().mockResolvedValue([]),
+  createEvent: vi.fn().mockResolvedValue({id: 1}),
 }));
 
-let showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate;
+let showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate, toggleModalLogEvent, logModalEvent;
 let state;
 
 const PHOTO = {
@@ -61,6 +62,15 @@ beforeAll(async () => {
         </div>
       </div>
     </div>
+      <div id="modal-event-panel" class="hidden">
+        <select id="modal-event-type">
+          <option value="">— select type —</option>
+          <option value="watered">Watered</option>
+          <option value="fed_liquid">Fed liquid</option>
+        </select>
+        <textarea id="modal-event-note"></textarea>
+      </div>
+      <span id="modal-event-status"></span>
     <div id="note-panel" class="hidden">
       <div id="note-panel-title"></div>
       <input id="note-text" value="">
@@ -68,7 +78,7 @@ beforeAll(async () => {
     </div>
   `;
 
-  ({showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate} =
+  ({showModalPhoto, closeModal, toggleLabel, rotatePhoto, identityUpdate, toggleModalLogEvent, logModalEvent} =
     await import('@/modal.js'));
   ({state} = await import('@/state.js'));
 });
@@ -152,6 +162,18 @@ describe('showModalPhoto', () => {
     showModalPhoto(0);
     const chips = document.getElementById('label-chips').querySelectorAll('.label-chip');
     expect(chips.length).toBe(state.allLabels.length);
+  });
+
+  it('hides modal-event-panel', () => {
+    document.getElementById('modal-event-panel').classList.remove('hidden');
+    showModalPhoto(0);
+    expect(document.getElementById('modal-event-panel').classList.contains('hidden')).toBe(true);
+  });
+
+  it('clears modal-event-status', () => {
+    document.getElementById('modal-event-status').textContent = 'Logged.';
+    showModalPhoto(0);
+    expect(document.getElementById('modal-event-status').textContent).toBe('');
   });
 });
 
@@ -266,5 +288,83 @@ describe('identityUpdate', () => {
       5,
       expect.objectContaining({location_id: null})
     );
+  });
+});
+
+// ── toggleModalLogEvent ───────────────────────────────────
+
+describe('toggleModalLogEvent', () => {
+  it('shows the panel when it is hidden', () => {
+    document.getElementById('modal-event-panel').classList.add('hidden');
+    toggleModalLogEvent();
+    expect(document.getElementById('modal-event-panel').classList.contains('hidden')).toBe(false);
+  });
+
+  it('hides the panel when it is visible', () => {
+    document.getElementById('modal-event-panel').classList.remove('hidden');
+    toggleModalLogEvent();
+    expect(document.getElementById('modal-event-panel').classList.contains('hidden')).toBe(true);
+  });
+
+  it('clears status when opening', () => {
+    document.getElementById('modal-event-panel').classList.add('hidden');
+    document.getElementById('modal-event-status').textContent = 'Logged.';
+    toggleModalLogEvent();
+    expect(document.getElementById('modal-event-status').textContent).toBe('');
+  });
+});
+
+// ── logModalEvent ─────────────────────────────────────────
+
+describe('logModalEvent', () => {
+  beforeEach(async () => {
+    state.currentPhotoId = 5;
+    document.getElementById('modal-event-type').value = 'watered';
+    document.getElementById('modal-event-note').value = '';
+    document.getElementById('modal-event-status').textContent = '';
+    document.getElementById('modal-event-panel').classList.remove('hidden');
+    const api = await import('@/api.js');
+    vi.mocked(api.createEvent).mockResolvedValue({id: 1});
+  });
+
+  it('shows error and does not call createEvent when no type selected', async () => {
+    const {createEvent} = await import('@/api.js');
+    document.getElementById('modal-event-type').value = '';
+    await logModalEvent();
+    expect(document.getElementById('modal-event-status').textContent).toBeTruthy();
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  it('calls createEvent with event_type and photo_ids', async () => {
+    const {createEvent} = await import('@/api.js');
+    await logModalEvent();
+    expect(createEvent).toHaveBeenCalledWith(expect.objectContaining({
+      event_type: 'watered',
+      photo_ids: [5],
+    }));
+  });
+
+  it('includes note_text when note is provided', async () => {
+    const {createEvent} = await import('@/api.js');
+    document.getElementById('modal-event-note').value = 'big drink';
+    await logModalEvent();
+    expect(createEvent).toHaveBeenCalledWith(expect.objectContaining({note_text: 'big drink'}));
+  });
+
+  it('hides the panel after success', async () => {
+    await logModalEvent();
+    expect(document.getElementById('modal-event-panel').classList.contains('hidden')).toBe(true);
+  });
+
+  it('shows "Logged." after success', async () => {
+    await logModalEvent();
+    expect(document.getElementById('modal-event-status').textContent).toBe('Logged.');
+  });
+
+  it('shows error message on api failure', async () => {
+    const {createEvent} = await import('@/api.js');
+    createEvent.mockRejectedValueOnce(new Error('server error'));
+    await logModalEvent();
+    expect(document.getElementById('modal-event-status').textContent).toContain('server error');
   });
 });

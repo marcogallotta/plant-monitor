@@ -4,10 +4,10 @@ import { CARE_ACTION_TYPES, buildEventBody } from '@/events.js';
 // ── CARE_ACTION_TYPES ─────────────────────────────────────
 
 describe('CARE_ACTION_TYPES', () => {
-  it('contains exactly the 6 expected types', () => {
-    expect(CARE_ACTION_TYPES).toHaveLength(6);
+  it('contains exactly the 7 expected types', () => {
+    expect(CARE_ACTION_TYPES).toHaveLength(7);
     expect(CARE_ACTION_TYPES).toEqual(
-      expect.arrayContaining(['fed_liquid', 'fed_worm_castings', 'watered', 'harvested', 'potted_up', 'other'])
+      expect.arrayContaining(['fed_liquid', 'fed_worm_castings', 'watered', 'harvested', 'potted_up', 'propagated', 'other'])
     );
   });
 });

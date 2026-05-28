@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { updatePhoto, assignLabel, removeLabel } from './api.js';
+import { updatePhoto, assignLabel, removeLabel, createEvent } from './api.js';
 import { resetZoom } from './zoom.js';
 import { noteCancel, loadNotes } from './notes.js';
 import { setStatus, formatDate, rotTransform } from './utils.js';
@@ -37,6 +37,10 @@ export function showModalPhoto(index) {
   showIdentityPanel(p);
   renderLabelChips(p);
   loadNotes();
+  document.getElementById('modal-event-panel').classList.add('hidden');
+  document.getElementById('modal-event-type').selectedIndex = 0;
+  document.getElementById('modal-event-note').value = '';
+  document.getElementById('modal-event-status').textContent = '';
 }
 
 export function closeModal() {
@@ -109,6 +113,31 @@ function showIdentityPanel(photo) {
   } else {
     origRow.style.display = 'none';
   }
+}
+
+export function toggleModalLogEvent() {
+  const panel = document.getElementById('modal-event-panel');
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) {
+    document.getElementById('modal-event-status').textContent = '';
+  }
+}
+
+export async function logModalEvent() {
+  if (!state.currentPhotoId) return;
+  const type = document.getElementById('modal-event-type').value;
+  const note = document.getElementById('modal-event-note').value.trim();
+  const status = document.getElementById('modal-event-status');
+  if (!type) { status.textContent = 'Select a type.'; return; }
+  const body = {event_type: type, photo_ids: [state.currentPhotoId]};
+  if (note) body.note_text = note;
+  try {
+    await createEvent(body);
+    document.getElementById('modal-event-type').selectedIndex = 0;
+    document.getElementById('modal-event-note').value = '';
+    document.getElementById('modal-event-panel').classList.add('hidden');
+    status.textContent = 'Logged.';
+  } catch (e) { status.textContent = 'Error: ' + e.message; }
 }
 
 export async function identityUpdate() {

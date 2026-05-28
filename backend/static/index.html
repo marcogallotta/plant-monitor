@@ -216,6 +216,7 @@
             <option value="watered">Watered</option>
             <option value="harvested">Harvested</option>
             <option value="potted_up">Potted up</option>
+            <option value="propagated">Propagated</option>
             <option value="other">Other</option>
           </select>
         </div>
@@ -367,6 +368,23 @@
       <div id="label-chips" class="label-chips"></div>
       <span id="label-status" class="status-msg"></span>
     </div>
+    <div id="modal-event-panel" class="identity-panel hidden">
+      <select id="modal-event-type">
+        <option value="">— select type —</option>
+        <option value="fed_liquid">Fed liquid</option>
+        <option value="fed_worm_castings">Fed worm castings</option>
+        <option value="watered">Watered</option>
+        <option value="harvested">Harvested</option>
+        <option value="potted_up">Potted up</option>
+        <option value="propagated">Propagated</option>
+        <option value="other">Other</option>
+      </select>
+      <textarea id="modal-event-note" placeholder="Optional note…" rows="2" style="width:100%;margin-top:0.4rem;"></textarea>
+      <div style="margin-top:0.4rem;">
+        <button onclick="logModalEvent()">Log</button>
+      </div>
+    </div>
+    <span id="modal-event-status" class="status-msg"></span>
     <div class="note-hint">Scroll to zoom · drag to pan · click to pin · shift+drag to box</div>
     <div id="note-panel" class="note-panel hidden">
       <div id="note-panel-title" class="note-panel-title">New note</div>

@@ -1,7 +1,7 @@
 import { createEvent, getEvents, createLocation as apiCreateLocation, createGrowingUnit } from './api.js';
 import { formatDate } from './utils.js';
 
-export const CARE_ACTION_TYPES = ['fed_liquid', 'fed_worm_castings', 'watered', 'harvested', 'potted_up', 'other'];
+export const CARE_ACTION_TYPES = ['fed_liquid', 'fed_worm_castings', 'watered', 'harvested', 'potted_up', 'propagated', 'other'];
 
 export function buildEventBody(type, at, loc, unitIds, note) {
   const body = {event_type: type};

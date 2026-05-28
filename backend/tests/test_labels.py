@@ -22,9 +22,9 @@ def test_list_labels_returns_200(client):
 def test_list_labels_returns_seeded_labels(client):
     labels = client.get("/labels").json()
     names = [l["name"] for l in labels]
-    assert "watered" in names
-    assert "fed_liquid" in names
-    assert "harvested" in names
+    assert "aphids" in names
+    assert "yellowing" in names
+    assert "new_growth" in names
 
 
 def test_label_has_id_and_name(client):
