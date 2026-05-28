@@ -546,13 +546,18 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
     if not note:
         raise HTTPException(status_code=404, detail="note not found")
     _note_non_nullable = {"note_text", "x", "y"}
+    updates = {}
     for field in body.model_fields_set:
         value = getattr(body, field)
         if value is None and field in _note_non_nullable:
             raise HTTPException(status_code=422, detail=f"{field} cannot be null")
-        setattr(note, field, value)
-    if (note.x2 is None) != (note.y2 is None):
+        updates[field] = value
+    proposed_x2 = updates.get("x2", note.x2)
+    proposed_y2 = updates.get("y2", note.y2)
+    if (proposed_x2 is None) != (proposed_y2 is None):
         raise HTTPException(status_code=422, detail="x2 and y2 must both be set or both cleared")
+    for field, value in updates.items():
+        setattr(note, field, value)
     note.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(note)

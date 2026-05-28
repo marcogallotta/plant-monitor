@@ -170,6 +170,21 @@ def test_update_note_rect_x2_without_y2_returns_422(client, db_session):
     assert client.put(f"/notes/{note.id}", json={"x2": 0.7}).status_code == 422
 
 
+def test_update_note_422_does_not_dirty_note(client, db_session):
+    # Sending {x2: null} against a rect note clears x2 but not y2 → inconsistent → 422.
+    # The ORM object must not be mutated before the check, otherwise the dirty in-memory
+    # object (x2=None) can be committed by a subsequent request sharing the same session.
+    photo = _photo(db_session)
+    note = _note(db_session, photo.id, x2=0.5, y2=0.5)
+    assert client.put(f"/notes/{note.id}", json={"x2": None}).status_code == 422
+    # A subsequent valid update must still see x2=0.5, y2=0.5
+    resp = client.put(f"/notes/{note.id}", json={"note_text": "changed"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["x2"] == 0.5
+    assert data["y2"] == 0.5
+
+
 def test_update_note_sets_updated_at(client, db_session):
     photo = _photo(db_session)
     note = _note(db_session, photo.id)
