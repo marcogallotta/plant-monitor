@@ -202,7 +202,7 @@ The `Makefile` passes `-p plant-monitoring-test` when invoking the test compose 
 
 ## Dashboard
 
-`static/index.html` — no build step, no npm, no bundler. FastAPI serves the static directory from `_STATIC_DIR`. `app.js` is the ES module entry point; it imports from focused sibling modules and assigns the functions that HTML `onclick=` attributes need onto `window`.
+`static/index.html` — no build step, no npm, no bundler. FastAPI serves the static directory from `_STATIC_DIR`. `app.js` is the ES module entry point; it imports from focused sibling modules and assigns the functions that HTML `onclick=` attributes need onto `window`. Any new function called from an `onclick=` attribute in `index.html` must be added to both the import and the `Object.assign(window, …)` call at the bottom of `app.js`, or it will throw `ReferenceError: X is not defined` at runtime.
 
 Key JS state (all fields live on the single `state` object in `state.js`):
 
@@ -227,23 +227,29 @@ Note pin positions use `left: x*100%; top: y*100%` inside `.note-pins`, which is
 
 ### SD card import
 
-The SD import panel lets users bulk-import photos directly from a camera SD card via the File System Access API's folder picker.
+The SD import panel supports two modes: a backend scanner (primary) and a browser folder-picker (fallback).
+
+**Backend scanner** (`GET /camera-import/scan`, `POST /camera-import/import`):
+
+- Configured via `IMPORT_SCAN_PATH` env var (e.g. `/host-media/4621-0000/DCIM/101MSDCF`). The host media root is mounted read-only into the container via `HOST_MEDIA_ROOT` (default `/media/marco`) → `/host-media:ro`.
+- `app/camera_import.py` owns scanning, HMAC-based opaque file IDs, in-process scan cache (TTL: `IMPORT_SCAN_CACHE_TTL_SECONDS`), embedded JPEG extraction from RAW files, and import logic.
+- Duplicate detection uses `original_filename + original_size_bytes` (source file size) — tolerates camera counter rollover where `DSC00001.ARW` repeats on a new card.
+- `save_photo()` in `camera_import.py` is the shared helper used by both `/camera-import/import` (source `"sd"`) and `/manual-photos` (source `"manual"`). It writes files atomically (tmp → rename) and commits the DB row.
+- Clicking **Scan camera/card** calls `scanCameraImport()` in `api.js`, builds the thumbnail grid, and auto-selects the latest shooting session via `detectSessionBoundary()` on `mtime_ms`.
+- Clicking **Import selected** calls `importCameraPhotos()` with the selected opaque file IDs; per-thumb overlays show created / skipped / failed.
+
+**Browser folder-picker** (fallback, `Choose folder` button):
 
 `sdImportCore.js` contains all pure logic (no DOM) and is fully unit-tested:
 
 - `isImportablePhoto` / `isRawPhoto` — filter `.jpg`, `.jpeg`, `.orf`, `.arw`.
 - `sortCameraFiles` — sorts by filename descending (matches camera sequential numbering, newest first).
-- `detectSessionBoundary` — scans `lastModified` timestamps for a gap > `SD_TIME_GAP` (1 hour); returns the index of the first file in the older batch, or `-1` if no boundary found. Used to auto-select only the latest shooting session.
+- `detectSessionBoundary` — scans `lastModified` timestamps for a gap > `SD_TIME_GAP` (1 hour); returns the index of the first file in the older batch, or `-1` if no boundary found.
 - `scanForJpeg` — scans a `Uint8Array` for the largest embedded JPEG (`FFD8FF … FFD9`). Used to extract preview JPEGs from RAW files.
 - `deriveTimestamp` — reads `DateTimeOriginal`/`CreateDate` from EXIF (via `exifr`). Returns `{iso, badge}` where `badge` is `'ok'` (UTC offset present), `'assumed'` (no offset, browser timezone used), or `'fallback'` (no usable EXIF, `file.lastModified` used).
 - `buildUploadFormData` — builds the `FormData` for `POST /manual-photos`.
 
-`sdImport.js` owns the DOM and upload flow:
-
-- `handleSdFolderInput` — processes the folder picker result: filters already-uploaded filenames (matched against `state.allPhotos[].original_filename`), calls `detectSessionBoundary` to auto-select the latest batch, and renders thumbnails in pages of 20.
-- RAW files (`.orf`, `.arw`): thumbnails are extracted asynchronously via `extractEmbeddedJpeg`. For non-ORF RAW files a 768 KB slice is tried first; if the embedded JPEG is truncated the full file is read. The extracted JPEG blob is uploaded in place of the original file, but `original_filename` on the backend is set to the raw filename (e.g. `DSC01349.ARW`).
-- EXIF timestamps are parsed asynchronously via `window.exifr` (loaded from CDN). ORF files are not supported by exifr and fall back to `lastModified`.
-- `sdUploadSelected` — uploads selected photos sequentially, showing per-thumb status overlays (`…` / `✓` / `✗`).
+`sdImport.js` owns the DOM and both upload flows. `sdMode` tracks which mode is active (`'browser'` or `'backend'`). `sdUploadSelected` branches on `sdMode` to call either `sdUploadBrowser` (sequential per-file via `/manual-photos`) or `sdUploadBackend` (batch via `/camera-import/import`).
 
 ---
 

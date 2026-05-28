@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { getLocations, getGrowingUnits, getLabels } from './api.js';
 import {
   initSdImport,
-  toggleSdPanel, handleSdFolderInput,
+  toggleSdPanel, handleSdFolderInput, handleSdScan,
   sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
 } from './sdImport.js';
 import {
@@ -85,7 +85,7 @@ Object.assign(window, {
   toggleSdPanel, sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
   toggleManagePanel, createLocation, createUnit,
   toggleEventsPanel, logEvent,
-  handleSdFolderInput,
+  handleSdFolderInput, handleSdScan,
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
 });

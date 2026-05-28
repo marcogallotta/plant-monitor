@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { uploadPhoto } from './api.js';
+import { uploadPhoto, scanCameraImport, importCameraPhotos } from './api.js';
 import {
   isImportablePhoto, isRawPhoto, sortCameraFiles, detectSessionBoundary,
   scanForJpeg, deriveTimestamp, buildUploadFormData,
@@ -10,6 +10,7 @@ const SD_TZ   = 'Europe/Rome';
 
 let sdFiles = [];
 let sdShown = 0;
+let sdMode  = 'browser'; // 'browser' | 'backend'
 let _loadPhotos = null;
 
 export function initSdImport(loadPhotos) {
@@ -23,6 +24,69 @@ export function toggleSdPanel() {
   label.textContent = open ? '▾ collapse' : '▸ expand';
 }
 
+export async function handleSdScan() {
+  var status = document.getElementById('sd-folder-status');
+  var btn    = document.getElementById('sd-scan-btn');
+  status.textContent = 'Scanning…';
+  if (btn) btn.disabled = true;
+
+  sdFiles.forEach(function(e) { if (e.thumbUrl && e.mode === 'browser') URL.revokeObjectURL(e.thumbUrl); });
+  sdFiles = [];
+  sdShown = 0;
+  sdMode  = 'backend';
+  document.getElementById('sd-grid-controls').style.display = 'none';
+  document.getElementById('sd-load-more-row').style.display = 'none';
+  document.getElementById('sd-grid').innerHTML = '';
+
+  var data;
+  try {
+    data = await scanCameraImport();
+  } catch(e) {
+    status.textContent = 'Scan failed: ' + e.message;
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  if (btn) btn.disabled = false;
+
+  var candidates = data.candidates || [];
+
+  if (candidates.length === 0) {
+    var msg = 'No camera/card photos found.';
+    if (data.already_imported_count > 0) msg = 'All ' + data.already_imported_count + ' already imported.';
+    status.textContent = msg;
+    return;
+  }
+
+  sdFiles = candidates.map(function(c) {
+    return {
+      fileId:          c.id,
+      filename:        c.filename,
+      selected:        false,
+      isRaw:           c.is_raw,
+      thumbUrl:        c.thumbnail_url,
+      capturedAt:      c.captured_at,
+      tsBadge:         'mtime',
+      mtimeMs:         c.mtime_ms,
+      alreadyImported: c.already_imported,
+      sessionBreak:    false,
+      mode:            'backend',
+    };
+  });
+
+  var batchEnd = detectSessionBoundary(sdFiles.map(function(e) { return e.mtimeMs; }));
+  if (batchEnd > 0) {
+    sdFiles[batchEnd].sessionBreak = true;
+    for (var i = 0; i < batchEnd; i++) sdFiles[i].selected = true;
+  }
+
+  var batchLabel = batchEnd > 0 ? ' — ' + batchEnd + ' in latest batch' : '';
+  var label = data.sources && data.sources[0] ? data.sources[0].label : 'card';
+  status.textContent = label + ': ' + candidates.length + ' photo' + (candidates.length === 1 ? '' : 's') + batchLabel;
+  document.getElementById('sd-grid-controls').style.display = 'flex';
+  sdAppendThumbs(batchEnd > 0 ? batchEnd + 3 : SD_PAGE);
+}
+
 export async function handleSdFolderInput(event) {
   var status = document.getElementById('sd-folder-status');
   status.textContent = 'Loading…';
@@ -30,9 +94,10 @@ export async function handleSdFolderInput(event) {
   // Ensure state.allPhotos is current before computing already-uploaded set
   if (_loadPhotos) await _loadPhotos();
 
-  sdFiles.forEach(function(e) { if (e.thumbUrl) URL.revokeObjectURL(e.thumbUrl); });
+  sdFiles.forEach(function(e) { if (e.thumbUrl && e.mode === 'browser') URL.revokeObjectURL(e.thumbUrl); });
   sdFiles = [];
   sdShown = 0;
+  sdMode  = 'browser';
   document.getElementById('sd-grid-controls').style.display = 'none';
   document.getElementById('sd-load-more-row').style.display = 'none';
   document.getElementById('sd-grid').innerHTML = '';
@@ -55,6 +120,7 @@ export async function handleSdFolderInput(event) {
     var isRaw  = isRawPhoto(f.name);
     return {
       file:        f,
+      filename:    f.name,
       selected:    false,
       isRaw:       isRaw,
       thumbUrl:    isRaw ? null : URL.createObjectURL(f),
@@ -62,6 +128,7 @@ export async function handleSdFolderInput(event) {
       capturedAt:  null,
       tsBadge:     null,
       sessionBreak: false,
+      mode:        'browser',
     };
   });
 
@@ -108,7 +175,7 @@ function sdMakeThumb(i) {
   wrap.addEventListener('click', function() { sdToggle(i); });
 
   var img = document.createElement('img');
-  img.alt     = entry.file.name;
+  img.alt     = entry.filename;
   img.loading = 'lazy';
   if (entry.thumbUrl) {
     img.src = entry.thumbUrl;
@@ -124,7 +191,7 @@ function sdMakeThumb(i) {
   var caption = document.createElement('div');
   caption.className = 'sd-thumb-caption';
   var nameSpan = document.createElement('div');
-  nameSpan.textContent = entry.file.name;
+  nameSpan.textContent = entry.filename;
   var tsSpan = document.createElement('div');
   tsSpan.className = 'sd-ts-line';
   tsSpan.id        = 'sd-ts-line-' + i;
@@ -160,7 +227,7 @@ async function extractEmbeddedJpeg(file) {
 async function sdExtractRawThumbs(from, to) {
   for (var i = from; i < to; i++) {
     var entry = sdFiles[i];
-    if (!entry.isRaw || entry.thumbUrl) continue;
+    if (entry.mode === 'backend' || !entry.isRaw || entry.thumbUrl) continue;
     try {
       var jpegBytes = await extractEmbeddedJpeg(entry.file);
       if (!jpegBytes) continue;
@@ -190,7 +257,7 @@ function sdFmtTs(iso) {
 async function sdParseExif(from, to) {
   for (var i = from; i < to; i++) {
     var entry = sdFiles[i];
-    if (entry.capturedAt) continue;
+    if (entry.mode === 'backend' || entry.capturedAt) continue;
     var exif = null;
     try {
       // exifr can read JPEG and ARW; ORF is not supported — will return null
@@ -276,6 +343,61 @@ export async function sdUploadSelected() {
   if (queue.length === 0) return;
 
   btn.disabled = true;
+
+  if (sdMode === 'backend') {
+    await sdUploadBackend(queue, btn, status);
+  } else {
+    await sdUploadBrowser(queue, btn, status);
+  }
+}
+
+async function sdUploadBackend(queue, btn, status) {
+  var ptype   = document.getElementById('sd-photo-type').value;
+  var fileIds = queue.map(function(q) { return q.entry.fileId; });
+
+  queue.forEach(function(q) { sdSetThumbStatus(q.idx, 'uploading'); });
+  status.textContent = 'Importing…';
+
+  var result;
+  try {
+    result = await importCameraPhotos({file_ids: fileIds, photo_type: ptype || null});
+  } catch(e) {
+    status.textContent = 'Import failed: ' + e.message;
+    queue.forEach(function(q) { sdSetThumbStatus(q.idx, 'error', e.message); });
+    btn.disabled = false;
+    return;
+  }
+
+  var idxByFileId = {};
+  queue.forEach(function(q) { idxByFileId[q.entry.fileId] = q.idx; });
+
+  (result.created || []).forEach(function(r) {
+    var idx = idxByFileId[r.file_id];
+    if (idx !== undefined) sdSetThumbStatus(idx, 'done');
+  });
+  (result.skipped || []).forEach(function(r) {
+    var idx = idxByFileId[r.file_id];
+    if (idx !== undefined) sdSetThumbStatus(idx, 'done', 'already imported');
+  });
+  (result.failed || []).forEach(function(r) {
+    var idx = idxByFileId[r.file_id];
+    if (idx !== undefined) sdSetThumbStatus(idx, 'error', r.reason);
+  });
+
+  var nc = (result.created || []).length;
+  var ns = (result.skipped || []).length;
+  var nf = (result.failed  || []).length;
+  var parts = [];
+  if (nc > 0) parts.push(nc + ' imported');
+  if (ns > 0) parts.push(ns + ' skipped');
+  if (nf > 0) parts.push(nf + ' failed');
+  status.textContent = parts.join(', ') || 'Nothing imported';
+
+  btn.disabled = false;
+  if (nc > 0 && _loadPhotos) _loadPhotos();
+}
+
+async function sdUploadBrowser(queue, btn, status) {
   var done = 0, failed = 0;
 
   for (var q = 0; q < queue.length; q++) {
@@ -284,7 +406,6 @@ export async function sdUploadSelected() {
     status.textContent = (q + 1) + ' / ' + queue.length + '…';
     sdSetThumbStatus(idx, 'uploading');
 
-    // For RAW files, wait for extraction if not done yet
     if (entry.isRaw && !entry.uploadFile) {
       try {
         var jpegBytes = await extractEmbeddedJpeg(entry.file);
@@ -307,9 +428,9 @@ export async function sdUploadSelected() {
 
     if (!entry.uploadFile) { sdSetThumbStatus(idx, 'error'); failed++; continue; }
 
-    var ts = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
+    var ts    = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
     var ptype = document.getElementById('sd-photo-type').value;
-    var fd = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype);
+    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype);
 
     try {
       await uploadPhoto(fd);
