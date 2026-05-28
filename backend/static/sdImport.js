@@ -83,6 +83,15 @@ export async function handleSdScan() {
   var batchLabel = batchEnd > 0 ? ' — ' + batchEnd + ' in latest batch' : '';
   var label = data.sources && data.sources[0] ? data.sources[0].label : 'card';
   status.textContent = label + ': ' + candidates.length + ' photo' + (candidates.length === 1 ? '' : 's') + batchLabel;
+
+  // Auto-expand so the grid is visible without a manual click
+  var form = document.getElementById('sd-form');
+  var toggleLabel = document.getElementById('sd-toggle-label');
+  if (!form.classList.contains('open')) {
+    form.classList.add('open');
+    if (toggleLabel) toggleLabel.textContent = '▾ collapse';
+  }
+
   document.getElementById('sd-grid-controls').style.display = 'flex';
   sdAppendThumbs(batchEnd > 0 ? batchEnd + 3 : SD_PAGE);
 }
