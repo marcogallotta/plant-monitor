@@ -1,12 +1,5 @@
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
-
-vi.mock('@/api.js', () => ({
-  assignLabel: vi.fn().mockResolvedValue({
-    id: 5, labels: [{id: 1, name: 'aphids'}],
-  }),
-  removeLabel: vi.fn().mockResolvedValue({}),
-  createLabel: vi.fn().mockResolvedValue({id: 99, name: 'rust'}),
-}));
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { makeFetchMock } from './fetchHelper.js';
 
 let renderLabelSection, handleLabelInput, handleLabelKeydown;
 let state;
@@ -33,21 +26,26 @@ beforeAll(async () => {
   ({state} = await import('@/state.js'));
 });
 
-beforeEach(async () => {
+let fetchMock;
+
+beforeEach(() => {
+  fetchMock = makeFetchMock([
+    {method: 'POST', url: /^\/photos\/\d+\/labels\/\d+$/, body: {...PHOTO, labels: [{id: 1, name: 'aphids'}]}},
+    {method: 'DELETE', url: /^\/photos\/\d+\/labels\/\d+$/, ok: true},
+    {method: 'POST', url: '/labels', body: {id: 99, name: 'rust'}},
+  ]);
+  vi.stubGlobal('fetch', fetchMock);
   state.allPhotos = [PHOTO];
   state.allLabels = [{id: 1, name: 'aphids'}, {id: 2, name: 'yellowing'}];
   state.currentIndex = 0;
   state.currentPhotoId = null;
-  vi.clearAllMocks();
   document.getElementById('label-input').value = '';
   document.getElementById('label-dropdown').innerHTML = '';
   document.getElementById('label-dropdown').classList.add('hidden');
   document.getElementById('label-status').textContent = '';
-  const api = await import('@/api.js');
-  vi.mocked(api.assignLabel).mockResolvedValue({...PHOTO, labels: [{id: 1, name: 'aphids'}]});
-  vi.mocked(api.removeLabel).mockResolvedValue({});
-  vi.mocked(api.createLabel).mockResolvedValue({id: 99, name: 'rust'});
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 // ── renderLabelSection ────────────────────────────────────
 
@@ -136,44 +134,38 @@ describe('handleLabelInput', () => {
 // ── handleLabelKeydown ────────────────────────────────────
 
 describe('handleLabelKeydown', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     state.currentPhotoId = 5;
     state.currentIndex = 0;
     state.allPhotos = [{...PHOTO, labels: []}];
     state.allLabels = [{id: 1, name: 'aphids'}];
     document.getElementById('label-input').value = '';
-    const api = await import('@/api.js');
-    vi.mocked(api.assignLabel).mockResolvedValue({...PHOTO, labels: [{id: 1, name: 'aphids'}]});
-    vi.mocked(api.createLabel).mockResolvedValue({id: 99, name: 'rust'});
   });
 
   it('ignores keys other than Enter', async () => {
-    const {assignLabel} = await import('@/api.js');
     document.getElementById('label-input').value = 'aphids';
     await handleLabelKeydown({key: 'Tab', preventDefault: vi.fn()});
-    expect(assignLabel).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('does nothing when input is empty', async () => {
-    const {assignLabel} = await import('@/api.js');
     document.getElementById('label-input').value = '';
     await handleLabelKeydown({key: 'Enter', preventDefault: vi.fn()});
-    expect(assignLabel).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('calls assignLabel for an existing label on Enter', async () => {
-    const {assignLabel} = await import('@/api.js');
+  it('POSTs to /photos/5/labels/1 for an existing label on Enter', async () => {
     document.getElementById('label-input').value = 'aphids';
     await handleLabelKeydown({key: 'Enter', preventDefault: vi.fn()});
-    expect(assignLabel).toHaveBeenCalledWith(5, 1);
+    expect(fetchMock).toHaveBeenCalledWith('/photos/5/labels/1', expect.objectContaining({method: 'POST'}));
   });
 
-  it('calls createLabel then assignLabel for a new label on Enter', async () => {
-    const {createLabel, assignLabel} = await import('@/api.js');
+  it('POSTs /labels then /photos/5/labels/99 for a new label on Enter', async () => {
     document.getElementById('label-input').value = 'rust';
     await handleLabelKeydown({key: 'Enter', preventDefault: vi.fn()});
-    expect(createLabel).toHaveBeenCalledWith('rust');
-    expect(assignLabel).toHaveBeenCalledWith(5, 99);
+    const labelCall = fetchMock.mock.calls.find(([u, o]) => u === '/labels' && o?.method === 'POST');
+    expect(JSON.parse(labelCall[1].body)).toEqual({name: 'rust'});
+    expect(fetchMock).toHaveBeenCalledWith('/photos/5/labels/99', expect.objectContaining({method: 'POST'}));
   });
 
   it('adds new label to state.allLabels after creation', async () => {

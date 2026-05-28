@@ -1,13 +1,8 @@
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
-
-vi.mock('@/api.js', () => ({
-  createEvent: vi.fn().mockResolvedValue({id: 1}),
-  getEvents: vi.fn().mockResolvedValue([]),
-  createLocation: vi.fn().mockResolvedValue({id: 1, name: 'Balcony'}),
-  createGrowingUnit: vi.fn().mockResolvedValue({id: 1, name: 'Basil'}),
-}));
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { makeFetchMock } from './fetchHelper.js';
 
 let toggleManagePanel, toggleEventsPanel, createLocation, createUnit, logEvent;
+let fetchMock;
 
 beforeAll(async () => {
   document.body.innerHTML = `
@@ -40,13 +35,14 @@ beforeAll(async () => {
     await import('@/events.js'));
 });
 
-beforeEach(async () => {
-  vi.clearAllMocks();
-  const api = await import('@/api.js');
-  vi.mocked(api.createEvent).mockResolvedValue({id: 1});
-  vi.mocked(api.getEvents).mockResolvedValue([]);
-  vi.mocked(api.createLocation).mockResolvedValue({id: 1, name: 'Balcony'});
-  vi.mocked(api.createGrowingUnit).mockResolvedValue({id: 1});
+beforeEach(() => {
+  fetchMock = makeFetchMock([
+    {method: 'POST', url: '/events',        body: {id: 1}},
+    {method: 'GET',  url: '/events',        body: []},
+    {method: 'POST', url: '/locations',     body: {id: 1, name: 'Balcony'}},
+    {method: 'POST', url: '/growing-units', body: {id: 1, name: 'Basil'}},
+  ]);
+  vi.stubGlobal('fetch', fetchMock);
   document.getElementById('new-loc-name').value = '';
   document.getElementById('new-loc-desc').value = '';
   document.getElementById('loc-status').textContent = '';
@@ -58,6 +54,8 @@ beforeEach(async () => {
   document.getElementById('event-status').textContent = '';
   document.getElementById('new-event-type').selectedIndex = 0;
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 // ── toggleManagePanel ─────────────────────────────────────
 
@@ -88,18 +86,16 @@ describe('toggleEventsPanel', () => {
     expect(document.getElementById('events-form').classList.contains('open')).toBe(true);
   });
 
-  it('calls getEvents when opening', async () => {
-    const {getEvents} = await import('@/api.js');
+  it('calls GET /events when opening', async () => {
     document.getElementById('events-form').classList.remove('open');
     toggleEventsPanel();
-    await vi.waitFor(() => expect(getEvents).toHaveBeenCalled());
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/events', undefined));
   });
 
-  it('does not call getEvents when closing', async () => {
-    const {getEvents} = await import('@/api.js');
+  it('does not call GET /events when closing', () => {
     document.getElementById('events-form').classList.add('open');
     toggleEventsPanel();
-    expect(getEvents).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith('/events', undefined);
   });
 
   it('updates label text', () => {
@@ -113,27 +109,27 @@ describe('toggleEventsPanel', () => {
 
 describe('createLocation', () => {
   it('shows "Name required." and does not call api when name is empty', async () => {
-    const {createLocation: apiCreate} = await import('@/api.js');
     document.getElementById('new-loc-name').value = '';
     await createLocation();
     expect(document.getElementById('loc-status').textContent).toBe('Name required.');
-    expect(apiCreate).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('calls apiCreateLocation with name and description', async () => {
-    const {createLocation: apiCreate} = await import('@/api.js');
+  it('POSTs /locations with name and description', async () => {
     document.getElementById('new-loc-name').value = 'Balcony';
     document.getElementById('new-loc-desc').value = 'South-facing';
     await createLocation();
-    expect(apiCreate).toHaveBeenCalledWith({name: 'Balcony', description: 'South-facing'});
+    expect(fetchMock).toHaveBeenCalledWith('/locations', expect.objectContaining({method: 'POST'}));
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/locations' && o?.method === 'POST');
+    expect(JSON.parse(call[1].body)).toEqual({name: 'Balcony', description: 'South-facing'});
   });
 
   it('passes null description when description field is empty', async () => {
-    const {createLocation: apiCreate} = await import('@/api.js');
     document.getElementById('new-loc-name').value = 'Windowsill';
     document.getElementById('new-loc-desc').value = '';
     await createLocation();
-    expect(apiCreate).toHaveBeenCalledWith({name: 'Windowsill', description: null});
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/locations' && o?.method === 'POST');
+    expect(JSON.parse(call[1].body)).toEqual({name: 'Windowsill', description: null});
   });
 
   it('clears input fields on success', async () => {
@@ -151,8 +147,7 @@ describe('createLocation', () => {
   });
 
   it('shows error message on api failure', async () => {
-    const {createLocation: apiCreate} = await import('@/api.js');
-    apiCreate.mockRejectedValueOnce(new Error('duplicate name'));
+    fetchMock.mockResolvedValueOnce({ok: false, status: 422, json: () => Promise.resolve({detail: 'duplicate name'})});
     document.getElementById('new-loc-name').value = 'Balcony';
     await createLocation();
     expect(document.getElementById('loc-status').textContent).toContain('duplicate name');
@@ -163,19 +158,19 @@ describe('createLocation', () => {
 
 describe('createUnit', () => {
   it('shows "Name required." when name is empty', async () => {
-    const {createGrowingUnit} = await import('@/api.js');
     document.getElementById('new-unit-name').value = '';
     await createUnit();
     expect(document.getElementById('unit-status').textContent).toBe('Name required.');
-    expect(createGrowingUnit).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('calls createGrowingUnit with name and unit_type', async () => {
-    const {createGrowingUnit} = await import('@/api.js');
+  it('POSTs /growing-units with name and unit_type', async () => {
     document.getElementById('new-unit-name').value = 'Thai basil';
     document.getElementById('new-unit-type').value = '';
     await createUnit();
-    expect(createGrowingUnit).toHaveBeenCalledWith({name: 'Thai basil', unit_type: null});
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/growing-units' && o?.method === 'POST');
+    expect(call).toBeDefined();
+    expect(JSON.parse(call[1].body)).toEqual({name: 'Thai basil', unit_type: null});
   });
 
   it('clears the name input on success', async () => {
@@ -188,11 +183,12 @@ describe('createUnit', () => {
 // ── logEvent ──────────────────────────────────────────────
 
 describe('logEvent', () => {
-  it('calls createEvent with the selected event_type', async () => {
-    const {createEvent} = await import('@/api.js');
+  it('POSTs /events with the selected event_type', async () => {
     document.getElementById('new-event-type').value = 'watered';
     await logEvent();
-    expect(createEvent).toHaveBeenCalledWith(expect.objectContaining({event_type: 'watered'}));
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/events' && o?.method === 'POST');
+    expect(call).toBeDefined();
+    expect(JSON.parse(call[1].body)).toMatchObject({event_type: 'watered'});
   });
 
   it('resets new-event-type to first option after success (Bug C fix)', async () => {
@@ -218,16 +214,16 @@ describe('logEvent', () => {
     expect(document.getElementById('event-status').textContent).toBe('Logged.');
   });
 
-  it('shows error text when createEvent rejects', async () => {
-    const {createEvent} = await import('@/api.js');
-    createEvent.mockRejectedValueOnce(new Error('server error'));
+  it('shows error text when POST /events fails', async () => {
+    fetchMock.mockResolvedValueOnce({ok: false, status: 500, json: () => Promise.resolve({detail: 'server error'})});
     await logEvent();
     expect(document.getElementById('event-status').textContent).toContain('server error');
   });
 
-  it('calls getEvents after a successful log', async () => {
-    const {getEvents} = await import('@/api.js');
+  it('calls GET /events after a successful log', async () => {
     await logEvent();
-    await vi.waitFor(() => expect(getEvents).toHaveBeenCalled());
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith('/events', undefined);
+    });
   });
 });

@@ -1,4 +1,5 @@
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { makeFetchMock } from './fetchHelper.js';
 
 vi.mock('@/zoom.js', () => ({
   visualToStored: vi.fn((x, y) => ({x, y})),
@@ -14,14 +15,6 @@ vi.mock('@/notes.js', () => ({
   loadNotes: vi.fn(),
   initNotes: vi.fn(),
   renderPins: vi.fn(),
-}));
-
-vi.mock('@/api.js', () => ({
-  updatePhoto: vi.fn().mockResolvedValue({
-    id: 5, photo_type: 'overview', location_id: null, growing_units: [], labels: [], original_filename: null, rotation: 0,
-  }),
-  getNotes: vi.fn().mockResolvedValue([]),
-  createEvent: vi.fn().mockResolvedValue({id: 1}),
 }));
 
 let showModalPhoto, closeModal, rotatePhoto, identityUpdate, toggleModalLogEvent, logModalEvent;
@@ -82,18 +75,26 @@ beforeAll(async () => {
   ({state} = await import('@/state.js'));
 });
 
-beforeEach(async () => {
+let fetchMock;
+const UPDATE_RESPONSE = {id: 5, photo_type: 'overview', location_id: null, growing_units: [], labels: [], original_filename: null, rotation: 0};
+
+beforeEach(() => {
+  fetchMock = makeFetchMock([
+    {method: 'PUT',  url: /^\/photos\/\d+$/,       body: UPDATE_RESPONSE},
+    {method: 'GET',  url: /^\/photos\/\d+\/notes$/, body: []},
+    {method: 'POST', url: '/events',                body: {id: 1}},
+    {url: /^\/sensors\//,                           body: {available: false, sensors: []}},
+  ]);
+  vi.stubGlobal('fetch', fetchMock);
+  vi.clearAllMocks();
   state.allPhotos = [PHOTO];
   state.allLabels = [{id: 1, name: 'aphids'}, {id: 2, name: 'yellowing'}];
   state.currentIndex = 0;
   state.currentPhotoId = null;
   state.currentRotation = 0;
-  vi.clearAllMocks();
-  const api = await import('@/api.js');
-  vi.mocked(api.updatePhoto).mockResolvedValue({
-    id: 5, photo_type: 'overview', location_id: null, growing_units: [], labels: [], original_filename: null, rotation: 0,
-  });
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 // ── rotatePhoto ───────────────────────────────────────────
 
@@ -120,12 +121,13 @@ describe('rotatePhoto', () => {
     expect(state.currentRotation).toBe(270);
   });
 
-  it('calls updatePhoto with the new rotation', async () => {
-    const {updatePhoto} = await import('@/api.js');
+  it('PUTs /photos/5 with the new rotation', async () => {
     state.currentPhotoId = 5;
     state.currentRotation = 0;
     await rotatePhoto(90);
-    expect(updatePhoto).toHaveBeenCalledWith(5, {rotation: 90});
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/photos/5' && o?.method === 'PUT');
+    expect(call).toBeDefined();
+    expect(JSON.parse(call[1].body)).toEqual({rotation: 90});
   });
 });
 
@@ -225,35 +227,29 @@ describe('closeModal', () => {
 
 describe('identityUpdate', () => {
   it('does nothing when currentPhotoId is null', async () => {
-    const {updatePhoto} = await import('@/api.js');
     state.currentPhotoId = null;
     await identityUpdate();
-    expect(updatePhoto).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringMatching(/^\/photos\/\d+$/), expect.objectContaining({method: 'PUT'}));
   });
 
-  it('calls updatePhoto with photo_type from select', async () => {
-    const {updatePhoto} = await import('@/api.js');
+  it('PUTs /photos/5 with photo_type from select', async () => {
     state.currentPhotoId = 5;
     state.allPhotos = [PHOTO];
     document.getElementById('id-type-select').value = 'overview';
     document.getElementById('id-location-select').value = '';
     await identityUpdate();
-    expect(updatePhoto).toHaveBeenCalledWith(
-      5,
-      expect.objectContaining({photo_type: 'overview'})
-    );
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/photos/5' && o?.method === 'PUT');
+    expect(call).toBeDefined();
+    expect(JSON.parse(call[1].body)).toMatchObject({photo_type: 'overview'});
   });
 
   it('sends null for empty location_id', async () => {
-    const {updatePhoto} = await import('@/api.js');
     state.currentPhotoId = 5;
     state.allPhotos = [PHOTO];
     document.getElementById('id-location-select').value = '';
     await identityUpdate();
-    expect(updatePhoto).toHaveBeenCalledWith(
-      5,
-      expect.objectContaining({location_id: null})
-    );
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/photos/5' && o?.method === 'PUT');
+    expect(JSON.parse(call[1].body)).toMatchObject({location_id: null});
   });
 });
 
@@ -283,38 +279,33 @@ describe('toggleModalLogEvent', () => {
 // ── logModalEvent ─────────────────────────────────────────
 
 describe('logModalEvent', () => {
-  beforeEach(async () => {
+  beforeEach(() => {
     state.currentPhotoId = 5;
     document.getElementById('modal-event-type').value = 'watered';
     document.getElementById('modal-event-note').value = '';
     document.getElementById('modal-event-status').textContent = '';
     document.getElementById('modal-event-panel').classList.remove('hidden');
-    const api = await import('@/api.js');
-    vi.mocked(api.createEvent).mockResolvedValue({id: 1});
   });
 
-  it('shows error and does not call createEvent when no type selected', async () => {
-    const {createEvent} = await import('@/api.js');
+  it('shows error and does not POST /events when no type selected', async () => {
     document.getElementById('modal-event-type').value = '';
     await logModalEvent();
     expect(document.getElementById('modal-event-status').textContent).toBeTruthy();
-    expect(createEvent).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith('/events', expect.anything());
   });
 
-  it('calls createEvent with event_type and photo_ids', async () => {
-    const {createEvent} = await import('@/api.js');
+  it('POSTs /events with event_type and photo_ids', async () => {
     await logModalEvent();
-    expect(createEvent).toHaveBeenCalledWith(expect.objectContaining({
-      event_type: 'watered',
-      photo_ids: [5],
-    }));
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/events' && o?.method === 'POST');
+    expect(call).toBeDefined();
+    expect(JSON.parse(call[1].body)).toMatchObject({event_type: 'watered', photo_ids: [5]});
   });
 
   it('includes note_text when note is provided', async () => {
-    const {createEvent} = await import('@/api.js');
     document.getElementById('modal-event-note').value = 'big drink';
     await logModalEvent();
-    expect(createEvent).toHaveBeenCalledWith(expect.objectContaining({note_text: 'big drink'}));
+    const call = fetchMock.mock.calls.find(([u, o]) => u === '/events' && o?.method === 'POST');
+    expect(JSON.parse(call[1].body)).toMatchObject({note_text: 'big drink'});
   });
 
   it('hides the panel after success', async () => {
@@ -327,9 +318,8 @@ describe('logModalEvent', () => {
     expect(document.getElementById('modal-event-status').textContent).toBe('Logged.');
   });
 
-  it('shows error message on api failure', async () => {
-    const {createEvent} = await import('@/api.js');
-    createEvent.mockRejectedValueOnce(new Error('server error'));
+  it('shows error message when POST /events fails', async () => {
+    fetchMock.mockResolvedValueOnce({ok: false, status: 500, json: () => Promise.resolve({detail: 'server error'})});
     await logModalEvent();
     expect(document.getElementById('modal-event-status').textContent).toContain('server error');
   });

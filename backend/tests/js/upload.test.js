@@ -1,10 +1,8 @@
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
-
-vi.mock('@/api.js', () => ({
-  uploadPhoto: vi.fn().mockResolvedValue({id: 1}),
-}));
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { makeFetchMock } from './fetchHelper.js';
 
 let toggleUploadPanel, submitManualUpload, initUpload;
+let fetchMock;
 
 beforeAll(async () => {
   document.body.innerHTML = `
@@ -23,12 +21,12 @@ beforeAll(async () => {
   ({toggleUploadPanel, submitManualUpload, initUpload} = await import('@/upload.js'));
 });
 
-beforeEach(async () => {
-  const mockLoadPhotos = vi.fn();
-  initUpload(mockLoadPhotos);
-  vi.clearAllMocks();
-  const api = await import('@/api.js');
-  vi.mocked(api.uploadPhoto).mockResolvedValue({id: 1});
+beforeEach(() => {
+  fetchMock = makeFetchMock([
+    {method: 'POST', url: '/manual-photos', body: {id: 1}},
+  ]);
+  vi.stubGlobal('fetch', fetchMock);
+  initUpload(vi.fn());
   document.getElementById('upload-status').textContent = '';
   document.getElementById('upload-captured-at').value = '';
   document.getElementById('upload-photo-type').value = '';
@@ -36,6 +34,8 @@ beforeEach(async () => {
   document.getElementById('upload-note').value = '';
   Array.from(document.getElementById('upload-units').options).forEach(o => { o.selected = false; });
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 // ── toggleUploadPanel ─────────────────────────────────────
 
@@ -61,7 +61,7 @@ describe('toggleUploadPanel', () => {
   });
 });
 
-// ── submitManualUpload ────────────────────────────────────
+// ── submitManualUpload — no file selected ─────────────────
 
 describe('submitManualUpload — no file selected', () => {
   it('shows "Choose an image first." when no file is selected', async () => {
@@ -69,10 +69,9 @@ describe('submitManualUpload — no file selected', () => {
     expect(document.getElementById('upload-status').textContent).toBe('Choose an image first.');
   });
 
-  it('does not call uploadPhoto when no file is selected', async () => {
-    const {uploadPhoto} = await import('@/api.js');
+  it('does not call POST /manual-photos when no file is selected', async () => {
     await submitManualUpload();
-    expect(uploadPhoto).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -85,44 +84,43 @@ describe('submitManualUpload — with file', () => {
     Object.defineProperty(fileInput, 'files', {value: [mockFile], configurable: true});
   });
 
-  it('calls uploadPhoto with a FormData containing the image', async () => {
-    const {uploadPhoto} = await import('@/api.js');
+  it('POSTs to /manual-photos', async () => {
     await submitManualUpload();
-    expect(uploadPhoto).toHaveBeenCalledOnce();
-    const fd = uploadPhoto.mock.calls[0][0];
-    expect(fd.get('image')).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith('/manual-photos', expect.objectContaining({method: 'POST'}));
+  });
+
+  it('sends the image in the FormData', async () => {
+    await submitManualUpload();
+    const call = fetchMock.mock.calls.find(([u]) => u === '/manual-photos');
+    expect(call[1].body.get('image')).not.toBeNull();
   });
 
   it('includes captured_at as ISO string when provided', async () => {
-    const {uploadPhoto} = await import('@/api.js');
     document.getElementById('upload-captured-at').value = '2026-05-28T10:00';
     await submitManualUpload();
-    const fd = uploadPhoto.mock.calls[0][0];
-    expect(fd.get('captured_at')).toMatch(/^2026-05-28T/);
+    const call = fetchMock.mock.calls.find(([u]) => u === '/manual-photos');
+    expect(call[1].body.get('captured_at')).toMatch(/^2026-05-28T/);
   });
 
   it('omits captured_at when field is empty', async () => {
-    const {uploadPhoto} = await import('@/api.js');
     document.getElementById('upload-captured-at').value = '';
     await submitManualUpload();
-    const fd = uploadPhoto.mock.calls[0][0];
-    expect(fd.get('captured_at')).toBeNull();
+    const call = fetchMock.mock.calls.find(([u]) => u === '/manual-photos');
+    expect(call[1].body.get('captured_at')).toBeNull();
   });
 
   it('includes photo_type when selected', async () => {
-    const {uploadPhoto} = await import('@/api.js');
     document.getElementById('upload-photo-type').value = 'overview';
     await submitManualUpload();
-    const fd = uploadPhoto.mock.calls[0][0];
-    expect(fd.get('photo_type')).toBe('overview');
+    const call = fetchMock.mock.calls.find(([u]) => u === '/manual-photos');
+    expect(call[1].body.get('photo_type')).toBe('overview');
   });
 
   it('includes note_text when filled in', async () => {
-    const {uploadPhoto} = await import('@/api.js');
     document.getElementById('upload-note').value = 'new sprout';
     await submitManualUpload();
-    const fd = uploadPhoto.mock.calls[0][0];
-    expect(fd.get('note_text')).toBe('new sprout');
+    const call = fetchMock.mock.calls.find(([u]) => u === '/manual-photos');
+    expect(call[1].body.get('note_text')).toBe('new sprout');
   });
 
   it('shows "Uploaded." and clears fields on success', async () => {
@@ -132,9 +130,8 @@ describe('submitManualUpload — with file', () => {
     expect(document.getElementById('upload-note').value).toBe('');
   });
 
-  it('shows error message when uploadPhoto rejects', async () => {
-    const {uploadPhoto} = await import('@/api.js');
-    uploadPhoto.mockRejectedValueOnce(new Error('network error'));
+  it('shows error message when POST /manual-photos fails', async () => {
+    fetchMock.mockResolvedValueOnce({ok: false, status: 500, json: () => Promise.resolve({detail: 'network error'})});
     await submitManualUpload();
     expect(document.getElementById('upload-status').textContent).toContain('network error');
   });
