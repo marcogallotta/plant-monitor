@@ -50,7 +50,7 @@ The column has a `server_default=func.now()` for insert, but there is no `onupda
 
 ### Note rectangle clearing
 
-`PUT /notes/{note_id}` uses `model_fields_set` to apply updates, so sending `x2: null, y2: null` explicitly clears an existing rectangle. Fields omitted from the request body are left unchanged. The `x2_y2_must_be_paired` validator on `NoteUpdate` enforces that both are provided or both are omitted, so you cannot clear only one.
+`PUT /notes/{note_id}` uses `model_fields_set` to apply updates, so sending `x2: null, y2: null` explicitly clears an existing rectangle. Fields omitted from the request body are left unchanged. The `x2_y2_must_be_paired` validator on `NoteUpdate` catches the case where the request body itself provides only one as non-null. The endpoint additionally checks the resulting note state after applying updates — so sending `x2: null` alone against a note that already has both set is also rejected, even though the request body has both as null (one explicit, one defaulted).
 
 ---
 
