@@ -133,14 +133,25 @@ def test_json_without_jpg_is_skipped(dirs):
 
 # --- destination already exists ---
 
-def test_both_destinations_exist_skips_move(dirs):
+def test_both_destinations_exist_cleans_up_source(dirs):
+    # Archive is complete — source is redundant and should be removed to stop retry loop.
     capture, uploaded = dirs
     uploaded.mkdir()
     _write_pair(capture)
     _write_pair(uploaded)
     run_upload(capture, uploaded, "http://backend", post_fn=_ok_post)
-    assert (capture / f"{STEM}.jpg").exists()
-    assert (capture / f"{STEM}.json").exists()
+    assert not (capture / f"{STEM}.jpg").exists()
+    assert not (capture / f"{STEM}.json").exists()
+
+
+def test_both_destinations_exist_skips_post(dirs):
+    capture, uploaded = dirs
+    uploaded.mkdir()
+    _write_pair(capture)
+    _write_pair(uploaded)
+    calls = []
+    run_upload(capture, uploaded, "http://backend", post_fn=lambda *a: calls.append(a) or True)
+    assert calls == []
 
 
 def test_partial_destination_exists_skips_move(dirs):

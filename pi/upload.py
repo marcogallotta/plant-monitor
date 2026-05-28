@@ -36,20 +36,25 @@ def run_upload(
         if not meta.exists():
             continue
 
+        uploaded_dir.mkdir(parents=True, exist_ok=True)
+        dest_jpg = uploaded_dir / jpg.name
+        dest_meta = uploaded_dir / meta.name
+
+        if dest_jpg.exists() and dest_meta.exists():
+            # Archive already complete — source is redundant, remove it.
+            jpg.unlink()
+            meta.unlink()
+            continue
+
+        if dest_jpg.exists() or dest_meta.exists():
+            # Partial archive state — leave capture pair alone.
+            continue
+
         image_bytes = jpg.read_bytes()
         meta_bytes = meta.read_bytes()
 
         success = post_fn(backend_url, jpg.stem, image_bytes, meta_bytes)
         if not success:
-            continue
-
-        uploaded_dir.mkdir(parents=True, exist_ok=True)
-
-        dest_jpg = uploaded_dir / jpg.name
-        dest_meta = uploaded_dir / meta.name
-
-        if dest_jpg.exists() or dest_meta.exists():
-            # destination already (partially) populated — leave capture pair alone
             continue
 
         tmp_jpg = dest_jpg.with_suffix(".jpg.tmp")
@@ -64,7 +69,6 @@ def run_upload(
         except Exception:
             tmp_jpg.unlink(missing_ok=True)
             tmp_meta.unlink(missing_ok=True)
-            # TODO: scan for leftover *.tmp files in uploaded/ at startup and clean them up
             raise
 
 
