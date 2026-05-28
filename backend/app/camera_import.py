@@ -32,17 +32,8 @@ _RAW_EXTS = {".arw", ".orf"}
 _SCAN_PATH = Path(os.environ.get("IMPORT_SCAN_PATH", "/host-media"))
 _MAX_FILES = int(os.environ.get("IMPORT_SCAN_MAX_FILES", "1000"))
 _CACHE_TTL = int(os.environ.get("IMPORT_SCAN_CACHE_TTL_SECONDS", "600"))
-
-# In-process scan cache: file_id -> entry dict; populated by /scan, consumed by /thumbs and /import
-_cache: dict[str, dict] = {}
-_cache_built_at: float = 0.0
 _hmac_secret_env = os.environ.get("CAMERA_IMPORT_HMAC_SECRET", "")
 _HMAC_SECRET = _hmac_secret_env.encode() if _hmac_secret_env else os.urandom(32)
-
-_scan_lock = threading.Lock()
-
-# Thumbnail cache: file_id -> downscaled JPEG bytes
-_thumb_cache: dict[str, bytes] = {}
 _THUMB_MAX_PX = 160  # matches the ~120-160px display size in the SD grid
 _thumb_executor = ThreadPoolExecutor(max_workers=4)
 
@@ -163,118 +154,143 @@ def _is_safe(entry: Path, resolved_root: Path) -> bool:
         return False
 
 
-def lookup_cached_entry(file_id: str) -> Optional[dict]:
-    """Return the cache entry for file_id after re-validating it on disk, or None."""
-    entry = _cache.get(file_id)
-    if entry is None:
-        return None
-    try:
-        stat = entry["path"].stat()
-        if stat.st_size != entry["size_bytes"] or stat.st_mtime_ns != entry["mtime_ns"]:
+class ScanCache:
+    def __init__(self, ttl: int = _CACHE_TTL):
+        self._ttl = ttl
+        self._entries: dict[str, dict] = {}
+        self._built_at: float = 0.0
+        self._lock = threading.Lock()
+        self._thumbs: dict[str, bytes] = {}
+
+    def lookup(self, file_id: str) -> Optional[dict]:
+        entry = self._entries.get(file_id)
+        if entry is None:
             return None
-        if not _is_safe(entry["path"], entry["root"]):
-            return None
-    except OSError:
-        return None
-    return entry
-
-
-def _build_cache(
-    scan_root: Path,
-    exact_imported: set[tuple[str, int]],
-    name_imported: set[str],
-) -> dict:
-    global _cache, _cache_built_at
-    _cache = {}
-
-    if not scan_root.exists():
-        return {
-            "sources": [],
-            "candidates": [],
-            "importable_count": 0,
-            "already_imported_count": 0,
-            "warnings": [f"Scan path not found: {scan_root}"],
-        }
-
-    resolved_root = scan_root.resolve()
-    warnings: list[str] = []
-    entries_with_stat: list[tuple[Path, os.stat_result]] = []
-
-    for entry in scan_root.iterdir():
-        if entry.suffix.lower() not in _IMPORTABLE_EXTS:
-            continue
-        if not _is_safe(entry, resolved_root):
-            warnings.append(f"Skipped unsafe path: {entry.name}")
-            continue
         try:
-            stat = entry.stat()
+            stat = entry["path"].stat()
+            if stat.st_size != entry["size_bytes"] or stat.st_mtime_ns != entry["mtime_ns"]:
+                return None
+            if not _is_safe(entry["path"], entry["root"]):
+                return None
         except OSError:
-            warnings.append(f"Skipped unreadable file: {entry.name}")
-            continue
-        entries_with_stat.append((entry, stat))
+            return None
+        return entry
 
-    # Sort (mtime asc, name asc) then reverse → (mtime desc, name desc) = newest first
-    entries_with_stat.sort(key=lambda x: (x[1].st_mtime_ns, x[0].name))
-    entries_with_stat.reverse()
+    def get_thumb(self, file_id: str) -> Optional[bytes]:
+        return self._thumbs.get(file_id)
 
-    candidates: list[dict] = []
-    already_imported_count = 0
-    limit_hit = False
+    def set_thumb(self, file_id: str, data: bytes) -> None:
+        self._thumbs[file_id] = data
 
-    for entry, stat in entries_with_stat:
-        if len(candidates) >= _MAX_FILES:
-            limit_hit = True
-            break
+    def build(self, scan_root: Path, exact_imported: set, name_imported: set) -> dict:
+        with self._lock:
+            if time.monotonic() - self._built_at > self._ttl:
+                self._thumbs.clear()
+            return self._build(scan_root, exact_imported, name_imported)
 
-        size = stat.st_size
-        mtime_ns = stat.st_mtime_ns
-        mtime_ms = mtime_ns // 1_000_000
-        ext = entry.suffix.lower()
-        file_id = _make_file_id(entry.resolve(), size, mtime_ns)
+    def _build(
+        self,
+        scan_root: Path,
+        exact_imported: set[tuple[str, int]],
+        name_imported: set[str],
+    ) -> dict:
+        self._entries = {}
 
-        already_imported = (
-            (entry.name, size) in exact_imported
-            or entry.name in name_imported
-        )
-        if already_imported:
-            already_imported_count += 1
+        if not scan_root.exists():
+            return {
+                "sources": [],
+                "candidates": [],
+                "importable_count": 0,
+                "already_imported_count": 0,
+                "warnings": [f"Scan path not found: {scan_root}"],
+            }
 
-        _cache[file_id] = {
-            "path": entry.resolve(),
-            "root": resolved_root,
-            "filename": entry.name,
-            "size_bytes": size,
-            "mtime_ns": mtime_ns,
-            "is_raw": ext in _RAW_EXTS,
+        resolved_root = scan_root.resolve()
+        warnings: list[str] = []
+        entries_with_stat: list[tuple[Path, os.stat_result]] = []
+
+        for entry in scan_root.iterdir():
+            if entry.suffix.lower() not in _IMPORTABLE_EXTS:
+                continue
+            if not _is_safe(entry, resolved_root):
+                warnings.append(f"Skipped unsafe path: {entry.name}")
+                continue
+            try:
+                stat = entry.stat()
+            except OSError:
+                warnings.append(f"Skipped unreadable file: {entry.name}")
+                continue
+            entries_with_stat.append((entry, stat))
+
+        # Sort (mtime asc, name asc) then reverse → (mtime desc, name desc) = newest first
+        entries_with_stat.sort(key=lambda x: (x[1].st_mtime_ns, x[0].name))
+        entries_with_stat.reverse()
+
+        candidates: list[dict] = []
+        already_imported_count = 0
+        limit_hit = False
+
+        for entry, stat in entries_with_stat:
+            if len(candidates) >= _MAX_FILES:
+                limit_hit = True
+                break
+
+            size = stat.st_size
+            mtime_ns = stat.st_mtime_ns
+            mtime_ms = mtime_ns // 1_000_000
+            ext = entry.suffix.lower()
+            file_id = _make_file_id(entry.resolve(), size, mtime_ns)
+
+            already_imported = (
+                (entry.name, size) in exact_imported
+                or entry.name in name_imported
+            )
+            if already_imported:
+                already_imported_count += 1
+
+            self._entries[file_id] = {
+                "path": entry.resolve(),
+                "root": resolved_root,
+                "filename": entry.name,
+                "size_bytes": size,
+                "mtime_ns": mtime_ns,
+                "is_raw": ext in _RAW_EXTS,
+            }
+
+            candidates.append({
+                "id": file_id,
+                "filename": entry.name,
+                "relative_path": entry.name,
+                "extension": ext,
+                "size_bytes": size,
+                "mtime_ms": mtime_ms,
+                "captured_at": datetime.fromtimestamp(mtime_ms / 1000, tz=timezone.utc).isoformat(),
+                "captured_at_source": "mtime",
+                "is_raw": ext in _RAW_EXTS,
+                "already_imported": already_imported,
+                "thumbnail_url": f"/camera-import/thumbs/{file_id}",
+            })
+
+        if limit_hit:
+            warnings.append(f"Scan limit of {_MAX_FILES} reached; some files may be omitted.")
+
+        self._built_at = time.monotonic()
+
+        importable_count = sum(1 for c in candidates if not c["already_imported"])
+        return {
+            "sources": [{"label": scan_root.name, "root": str(scan_root), "candidate_count": len(candidates)}],
+            "candidates": candidates,
+            "importable_count": importable_count,
+            "already_imported_count": already_imported_count,
+            "warnings": warnings,
         }
 
-        candidates.append({
-            "id": file_id,
-            "filename": entry.name,
-            "relative_path": entry.name,
-            "extension": ext,
-            "size_bytes": size,
-            "mtime_ms": mtime_ms,
-            "captured_at": datetime.fromtimestamp(mtime_ms / 1000, tz=timezone.utc).isoformat(),
-            "captured_at_source": "mtime",
-            "is_raw": ext in _RAW_EXTS,
-            "already_imported": already_imported,
-            "thumbnail_url": f"/camera-import/thumbs/{file_id}",
-        })
 
-    if limit_hit:
-        warnings.append(f"Scan limit of {_MAX_FILES} reached; some files may be omitted.")
+_scan_cache = ScanCache()
 
-    _cache_built_at = time.monotonic()
 
-    importable_count = sum(1 for c in candidates if not c["already_imported"])
-    return {
-        "sources": [{"label": scan_root.name, "root": str(scan_root), "candidate_count": len(candidates)}],
-        "candidates": candidates,
-        "importable_count": importable_count,
-        "already_imported_count": already_imported_count,
-        "warnings": warnings,
-    }
+def lookup_cached_entry(file_id: str) -> Optional[dict]:
+    return _scan_cache.lookup(file_id)
 
 
 # ---------------------------------------------------------------------------
@@ -294,10 +310,7 @@ def scan(
     exact_imported = {(name, size) for name, size in rows if size is not None}
     name_imported = {name for name, size in rows if size is None}
 
-    with _scan_lock:
-        if time.monotonic() - _cache_built_at > _CACHE_TTL:
-            _thumb_cache.clear()
-        result = _build_cache(_SCAN_PATH, exact_imported, name_imported)
+    result = _scan_cache.build(_SCAN_PATH, exact_imported, name_imported)
 
     if not include_imported:
         result = {**result, "candidates": [c for c in result["candidates"] if not c["already_imported"]]}
@@ -307,9 +320,10 @@ def scan(
 
 def _make_thumb(file_id: str) -> Optional[bytes]:
     """Extract, downscale, and cache a thumbnail. Returns None on failure. Thread-safe."""
-    if file_id in _thumb_cache:
-        return _thumb_cache[file_id]
-    entry = lookup_cached_entry(file_id)
+    cached = _scan_cache.get_thumb(file_id)
+    if cached is not None:
+        return cached
+    entry = _scan_cache.lookup(file_id)
     if entry is None:
         return None
     try:
@@ -327,7 +341,7 @@ def _make_thumb(file_id: str) -> Optional[bytes]:
         result = buf.getvalue()
     except Exception:
         result = jpeg  # fall back to raw if Pillow fails
-    _thumb_cache[file_id] = result
+    _scan_cache.set_thumb(file_id, result)
     return result
 
 

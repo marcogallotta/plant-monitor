@@ -28,11 +28,11 @@ def _scan(client, **params):
 
 @pytest.fixture(autouse=True)
 def reset_cache():
-    ci._cache = {}
-    ci._cache_built_at = 0.0
+    ci._scan_cache._entries = {}
+    ci._scan_cache._built_at = 0.0
     yield
-    ci._cache = {}
-    ci._cache_built_at = 0.0
+    ci._scan_cache._entries = {}
+    ci._scan_cache._built_at = 0.0
 
 
 @pytest.fixture
@@ -237,7 +237,7 @@ def test_scan_rejects_symlink_escaping_root(patched_scan, tmp_path, client):
 
 def _file_id_for(filename: str) -> str:
     """Look up the file_id (cache key) for a given filename."""
-    return next(fid for fid, entry in ci._cache.items() if entry["filename"] == filename)
+    return next(fid for fid, entry in ci._scan_cache._entries.items() if entry["filename"] == filename)
 
 
 def test_thumb_jpeg_returns_bytes(patched_scan, client):
@@ -275,9 +275,9 @@ def test_thumb_missing_file_id_returns_404(client):
 def test_thumb_stale_cache_returns_404(patched_scan, client):
     _write(patched_scan, "IMG_001.JPG")
     _scan(client)
-    file_id = next(iter(ci._cache))  # grab any valid id before wiping
+    file_id = next(iter(ci._scan_cache._entries))  # grab any valid id before wiping
 
-    ci._cache = {}  # simulate server reload
+    ci._scan_cache._entries = {}  # simulate server reload
 
     assert client.get(f"/camera-import/thumbs/{file_id}").status_code == 404
 
@@ -483,7 +483,7 @@ def test_is_safe_returns_false_on_exception():
 def test_lookup_cached_entry_returns_none_when_size_changes(patched_scan, client):
     _write(patched_scan, "IMG_001.JPG", b"ORIGINAL")
     _scan(client)
-    file_id = next(iter(ci._cache))
+    file_id = next(iter(ci._scan_cache._entries))
     (patched_scan / "IMG_001.JPG").write_bytes(b"DIFFERENT_SIZE_CONTENT_HERE")
     assert ci.lookup_cached_entry(file_id) is None
 
@@ -491,7 +491,7 @@ def test_lookup_cached_entry_returns_none_when_size_changes(patched_scan, client
 def test_lookup_cached_entry_returns_none_on_oserror(patched_scan, client):
     _write(patched_scan, "IMG_001.JPG")
     _scan(client)
-    file_id = next(iter(ci._cache))
+    file_id = next(iter(ci._scan_cache._entries))
     (patched_scan / "IMG_001.JPG").unlink()
     assert ci.lookup_cached_entry(file_id) is None
 
@@ -543,7 +543,7 @@ def test_get_thumbnail_returns_404_when_jpeg_unreadable(patched_scan, client):
     real_path = _write(patched_scan, "IMG_001.JPG", content)
     _scan(client)
     file_id = _file_id_for("IMG_001.JPG")
-    ci._cache[file_id]["path"] = _mock_unreadable_path(real_path)
+    ci._scan_cache._entries[file_id]["path"] = _mock_unreadable_path(real_path)
     assert client.get(f"/camera-import/thumbs/{file_id}").status_code == 404
 
 
@@ -587,7 +587,7 @@ def test_import_file_read_error_returns_failed(patched_scan, client):
     content = b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9"
     real_path = _write(patched_scan, "IMG_001.JPG", content)
     file_id = _do_scan(client)[0]["id"]
-    ci._cache[file_id]["path"] = _mock_unreadable_path(real_path)
+    ci._scan_cache._entries[file_id]["path"] = _mock_unreadable_path(real_path)
     r = client.post("/camera-import/import", json={"file_ids": [file_id]})
     data = r.json()
     assert len(data["failed"]) == 1
