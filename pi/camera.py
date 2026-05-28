@@ -13,15 +13,16 @@ class FakeCamera:
 
 class PiCamera:
     def capture(self) -> bytes:
+        import io
         from picamera2 import Picamera2  # only available on real Pi hardware
+        from PIL import Image
         cam = Picamera2()
         cam.start()
-        buf = cam.capture_array()
-        cam.stop()
-        cam.close()
-        # encode to JPEG bytes
-        import io
-        from PIL import Image
+        try:
+            buf = cam.capture_array()
+        finally:
+            cam.stop()
+            cam.close()
         img = Image.fromarray(buf)
         out = io.BytesIO()
         img.save(out, format="JPEG")
