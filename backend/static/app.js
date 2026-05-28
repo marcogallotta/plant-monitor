@@ -2,8 +2,9 @@ import { state } from './state.js';
 import { getLocations, getGrowingUnits, getLabels } from './api.js';
 import {
   initSdImport,
-  toggleSdPanel, handleSdFolderInput,
+  toggleSdPanel, handleSdFolderInput, handleSdScan,
   sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
+  sdAddGroup, sdAddMore,
 } from './sdImport.js';
 import {
   initEvents,
@@ -28,6 +29,7 @@ import {
   applyFilter, clearFilter,
   selectA, selectB,
   flickerToggle, flickerAuto, stopAuto,
+  gridRotate,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -76,7 +78,7 @@ Object.assign(window, {
   openModal, closeModal, modalImgClick,
   modalPrev, modalNext,
   selectA, selectB,
-  rotatePhoto,
+  rotatePhoto, gridRotate,
   handleLabelInput, handleLabelKeydown,
   flickerToggle, flickerAuto,
   tlPrev, tlPlayPause, tlNext,
@@ -85,7 +87,7 @@ Object.assign(window, {
   toggleSdPanel, sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
   toggleManagePanel, createLocation, createUnit,
   toggleEventsPanel, logEvent,
-  handleSdFolderInput,
+  handleSdFolderInput, handleSdScan, sdAddGroup, sdAddMore,
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
 });

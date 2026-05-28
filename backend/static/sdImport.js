@@ -1,8 +1,8 @@
 import { state } from './state.js';
-import { uploadPhoto } from './api.js';
+import { uploadPhoto, scanCameraImport, importCameraPhotos, getThumbnailBatch } from './api.js';
 import {
   isImportablePhoto, isRawPhoto, sortCameraFiles, detectSessionBoundary,
-  scanForJpeg, deriveTimestamp, buildUploadFormData,
+  detectAllBoundaries, scanForJpeg, deriveTimestamp, buildUploadFormData,
 } from './sdImportCore.js';
 
 const SD_PAGE = 20;
@@ -10,7 +10,56 @@ const SD_TZ   = 'Europe/Rome';
 
 let sdFiles = [];
 let sdShown = 0;
+let sdMode  = 'browser'; // 'browser' | 'backend'
 let _loadPhotos = null;
+
+// Session batch state — [{start, end}], newest first
+let sdBatches = [];
+let sdSelectedBatchCount = 0; // leading batches that are selected
+let sdRevealedBatchCount = 0; // leading batches that are rendered
+
+function _buildBatches(n, boundaries) {
+  var starts = [0].concat(boundaries).concat([n]);
+  return starts.slice(0, -1).map(function(s, i) { return {start: s, end: starts[i + 1]}; });
+}
+
+function _timestamps(files) {
+  return files.map(function(e) { return e.mtimeMs || (e.file && e.file.lastModified) || 0; });
+}
+
+function _initBatches() {
+  var boundaries = detectAllBoundaries(_timestamps(sdFiles));
+  sdBatches = _buildBatches(sdFiles.length, boundaries);
+  sdSelectedBatchCount = 0;
+  sdRevealedBatchCount = 0;
+}
+
+function _autoSelectFirstBatch() {
+  if (sdBatches.length === 0) return;
+  var b = sdBatches[0];
+  for (var i = b.start; i < b.end; i++) sdFiles[i].selected = true;
+  sdSelectedBatchCount = 1;
+}
+
+function _revealBatch(idx) {
+  if (idx >= sdBatches.length) return;
+  var b = sdBatches[idx];
+  // Mark separator at start of this batch
+  sdFiles[b.start].sessionBreak = true;
+  sdRevealedBatchCount = idx + 1;
+  // Render only the first page; load more handles the rest
+  sdAppendThumbs(Math.min(SD_PAGE, b.end - sdShown));
+  _updateBatchControls();
+}
+
+function _updateBatchControls() {
+  var hasOlder = sdRevealedBatchCount > sdSelectedBatchCount;
+  var hasMore  = sdRevealedBatchCount < sdBatches.length;
+  var addGroupBtn = document.getElementById('sd-add-group-btn');
+  var addMoreBtn  = document.getElementById('sd-add-more-btn');
+  if (addGroupBtn) addGroupBtn.style.display = hasOlder ? '' : 'none';
+  if (addMoreBtn)  addMoreBtn.style.display  = hasMore  ? '' : 'none';
+}
 
 export function initSdImport(loadPhotos) {
   _loadPhotos = loadPhotos;
@@ -23,6 +72,80 @@ export function toggleSdPanel() {
   label.textContent = open ? '▾ collapse' : '▸ expand';
 }
 
+export async function handleSdScan() {
+  var status = document.getElementById('sd-folder-status');
+  var btn    = document.getElementById('sd-scan-btn');
+  status.textContent = 'Scanning…';
+  if (btn) btn.disabled = true;
+
+  sdFiles.forEach(function(e) { if (e.thumbUrl && e.mode === 'browser') URL.revokeObjectURL(e.thumbUrl); });
+  sdFiles = [];
+  sdShown = 0;
+  sdMode  = 'backend';
+  document.getElementById('sd-grid-controls').style.display = 'none';
+  document.getElementById('sd-load-more-row').style.display = 'none';
+  document.getElementById('sd-grid').innerHTML = '';
+
+  var data;
+  try {
+    data = await scanCameraImport();
+  } catch(e) {
+    status.textContent = 'Scan failed: ' + e.message;
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  if (btn) btn.disabled = false;
+
+  var candidates = data.candidates || [];
+
+  if (candidates.length === 0) {
+    var msg = 'No camera/card photos found.';
+    if (data.already_imported_count > 0) msg = 'All ' + data.already_imported_count + ' already imported.';
+    status.textContent = msg;
+    return;
+  }
+
+  sdFiles = candidates.map(function(c) {
+    return {
+      fileId:          c.id,
+      filename:        c.filename,
+      selected:        false,
+      isRaw:           c.is_raw,
+      thumbUrl:        c.thumbnail_url,
+      capturedAt:      c.captured_at,
+      tsBadge:         'mtime',
+      mtimeMs:         c.mtime_ms,
+      alreadyImported: c.already_imported,
+      sessionBreak:    false,
+      mode:            'backend',
+      rotation:        0,
+    };
+  });
+
+  _initBatches();
+  _autoSelectFirstBatch();
+
+  var b0count = sdBatches.length > 0 ? sdBatches[0].end : sdFiles.length;
+  var batchLabel = sdBatches.length > 1 ? ' — ' + b0count + ' in latest batch' : '';
+  var label = data.sources && data.sources[0] ? data.sources[0].label : 'card';
+  status.textContent = label + ': ' + candidates.length + ' photo' + (candidates.length === 1 ? '' : 's') + batchLabel;
+
+  // Auto-expand so the grid is visible without a manual click
+  var form = document.getElementById('sd-form');
+  var toggleLabel = document.getElementById('sd-toggle-label');
+  if (!form.classList.contains('open')) {
+    form.classList.add('open');
+    if (toggleLabel) toggleLabel.textContent = '▾ collapse';
+  }
+
+  document.getElementById('sd-grid-controls').style.display = 'flex';
+  sdRevealedBatchCount = 1;
+  sdAppendThumbs(sdBatches.length > 1 ? b0count : SD_PAGE);
+  if (sdBatches.length > 1) _revealBatch(1);
+  else _updateBatchControls();
+}
+
 export async function handleSdFolderInput(event) {
   var status = document.getElementById('sd-folder-status');
   status.textContent = 'Loading…';
@@ -30,9 +153,10 @@ export async function handleSdFolderInput(event) {
   // Ensure state.allPhotos is current before computing already-uploaded set
   if (_loadPhotos) await _loadPhotos();
 
-  sdFiles.forEach(function(e) { if (e.thumbUrl) URL.revokeObjectURL(e.thumbUrl); });
+  sdFiles.forEach(function(e) { if (e.thumbUrl && e.mode === 'browser') URL.revokeObjectURL(e.thumbUrl); });
   sdFiles = [];
   sdShown = 0;
+  sdMode  = 'browser';
   document.getElementById('sd-grid-controls').style.display = 'none';
   document.getElementById('sd-load-more-row').style.display = 'none';
   document.getElementById('sd-grid').innerHTML = '';
@@ -55,6 +179,7 @@ export async function handleSdFolderInput(event) {
     var isRaw  = isRawPhoto(f.name);
     return {
       file:        f,
+      filename:    f.name,
       selected:    false,
       isRaw:       isRaw,
       thumbUrl:    isRaw ? null : URL.createObjectURL(f),
@@ -62,20 +187,23 @@ export async function handleSdFolderInput(event) {
       capturedAt:  null,
       tsBadge:     null,
       sessionBreak: false,
+      mode:        'browser',
+      rotation:    0,
     };
   });
 
-  var batchEnd = detectSessionBoundary(sdFiles.map(function(e) { return e.file.lastModified; }));
-  if (batchEnd > 0) {
-    sdFiles[batchEnd].sessionBreak = true;
-    for (var i = 0; i < batchEnd; i++) sdFiles[i].selected = true;
-  }
+  _initBatches();
+  _autoSelectFirstBatch();
 
-  var batchLabel  = batchEnd > 0 ? ' — ' + batchEnd + ' in latest batch' : '';
-  var skipLabel   = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
+  var b0count = sdBatches.length > 0 ? sdBatches[0].end : sdFiles.length;
+  var batchLabel = sdBatches.length > 1 ? ' — ' + b0count + ' in latest batch' : '';
+  var skipLabel  = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
   status.textContent = sdFiles.length + ' photo' + (sdFiles.length === 1 ? '' : 's') + batchLabel + skipLabel;
   document.getElementById('sd-grid-controls').style.display = 'flex';
-  sdAppendThumbs(batchEnd > 0 ? batchEnd + 3 : SD_PAGE);
+  sdRevealedBatchCount = 1;
+  sdAppendThumbs(sdBatches.length > 1 ? b0count : SD_PAGE);
+  if (sdBatches.length > 1) _revealBatch(1);
+  else _updateBatchControls();
 }
 
 function sdAppendThumbs(count) {
@@ -89,8 +217,27 @@ function sdAppendThumbs(count) {
   sdShown = end;
   sdUpdateLoadMore();
   sdUpdateCount();
-  sdExtractRawThumbs(from, end);
-  sdParseExif(from, end);
+  if (sdMode === 'backend') {
+    sdBatchLoadThumbs(from, end);
+  } else {
+    sdExtractRawThumbs(from, end);
+    sdParseExif(from, end);
+  }
+}
+
+async function sdBatchLoadThumbs(from, to) {
+  var fileIds = [];
+  for (var i = from; i < to; i++) {
+    if (sdFiles[i] && sdFiles[i].mode === 'backend') fileIds.push(sdFiles[i].fileId);
+  }
+  if (fileIds.length === 0) return;
+  try {
+    var data = await getThumbnailBatch(fileIds);
+    for (var fid in data.thumbs) {
+      var img = document.querySelector('img[data-fileid="' + fid + '"]');
+      if (img) img.src = 'data:image/jpeg;base64,' + data.thumbs[fid];
+    }
+  } catch(e) { console.warn('batch thumb load failed', e); }
 }
 
 function sdMakeSeparator() {
@@ -108,9 +255,12 @@ function sdMakeThumb(i) {
   wrap.addEventListener('click', function() { sdToggle(i); });
 
   var img = document.createElement('img');
-  img.alt     = entry.file.name;
+  img.alt     = entry.filename;
   img.loading = 'lazy';
-  if (entry.thumbUrl) {
+  if (entry.mode === 'backend') {
+    img.dataset.fileid = entry.fileId;
+    // src filled in by sdBatchLoadThumbs after render
+  } else if (entry.thumbUrl) {
     img.src = entry.thumbUrl;
   } else {
     img.style.display = 'none';
@@ -124,7 +274,7 @@ function sdMakeThumb(i) {
   var caption = document.createElement('div');
   caption.className = 'sd-thumb-caption';
   var nameSpan = document.createElement('div');
-  nameSpan.textContent = entry.file.name;
+  nameSpan.textContent = entry.filename;
   var tsSpan = document.createElement('div');
   tsSpan.className = 'sd-ts-line';
   tsSpan.id        = 'sd-ts-line-' + i;
@@ -136,7 +286,21 @@ function sdMakeThumb(i) {
   var check = document.createElement('div');
   check.className = 'sd-thumb-check';
 
+  var rotBtns = document.createElement('div');
+  rotBtns.className = 'sd-rot-btns';
+  var rotL = document.createElement('button');
+  rotL.textContent = '↺';
+  rotL.title = 'Rotate left';
+  rotL.addEventListener('click', function(e) { e.stopPropagation(); sdRotate(i, -90); });
+  var rotR = document.createElement('button');
+  rotR.textContent = '↻';
+  rotR.title = 'Rotate right';
+  rotR.addEventListener('click', function(e) { e.stopPropagation(); sdRotate(i, 90); });
+  rotBtns.appendChild(rotL);
+  rotBtns.appendChild(rotR);
+
   wrap.appendChild(img);
+  wrap.appendChild(rotBtns);
   wrap.appendChild(caption);
   wrap.appendChild(check);
   return wrap;
@@ -160,7 +324,7 @@ async function extractEmbeddedJpeg(file) {
 async function sdExtractRawThumbs(from, to) {
   for (var i = from; i < to; i++) {
     var entry = sdFiles[i];
-    if (!entry.isRaw || entry.thumbUrl) continue;
+    if (entry.mode === 'backend' || !entry.isRaw || entry.thumbUrl) continue;
     try {
       var jpegBytes = await extractEmbeddedJpeg(entry.file);
       if (!jpegBytes) continue;
@@ -190,7 +354,7 @@ function sdFmtTs(iso) {
 async function sdParseExif(from, to) {
   for (var i = from; i < to; i++) {
     var entry = sdFiles[i];
-    if (entry.capturedAt) continue;
+    if (entry.mode === 'backend' || entry.capturedAt) continue;
     var exif = null;
     try {
       // exifr can read JPEG and ARW; ORF is not supported — will return null
@@ -209,6 +373,15 @@ function sdToggle(i) {
   var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
   if (wrap) wrap.className = 'sd-thumb-wrap' + (sdFiles[i].selected ? ' selected' : '');
   sdUpdateCount();
+}
+
+function sdRotate(i, delta) {
+  sdFiles[i].rotation = ((sdFiles[i].rotation || 0) + delta + 360) % 360;
+  var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+  if (wrap) {
+    var img = wrap.querySelector('img');
+    if (img) img.style.transform = sdFiles[i].rotation ? 'rotate(' + sdFiles[i].rotation + 'deg)' : '';
+  }
 }
 
 function sdUpdateCount() {
@@ -236,6 +409,42 @@ function sdUpdateLoadMore() {
 }
 
 export function sdLoadMore() { sdAppendThumbs(SD_PAGE); }
+
+export function sdAddMore() {
+  if (sdRevealedBatchCount >= sdBatches.length) return;
+  _revealBatch(sdRevealedBatchCount);
+}
+
+export function sdAddGroup() {
+  if (sdRevealedBatchCount <= sdSelectedBatchCount) return;
+
+  // Select all revealed-but-unselected files and remove their separators from the DOM
+  for (var b = sdSelectedBatchCount; b < sdRevealedBatchCount; b++) {
+    var batch = sdBatches[b];
+    for (var i = batch.start; i < batch.end; i++) {
+      sdFiles[i].selected = true;
+      var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+      if (wrap) wrap.className = 'sd-thumb-wrap selected';
+    }
+    // Remove separator DOM node before the first thumb of this batch
+    var firstWrap = document.querySelector('.sd-thumb-wrap[data-idx="' + batch.start + '"]');
+    if (firstWrap) {
+      var prev = firstWrap.previousElementSibling;
+      if (prev && prev.classList.contains('sd-session-break')) prev.remove();
+    }
+    sdFiles[batch.start].sessionBreak = false;
+  }
+  sdSelectedBatchCount = sdRevealedBatchCount;
+
+  sdUpdateCount();
+
+  // Reveal next batch as the new "older" section
+  if (sdRevealedBatchCount < sdBatches.length) {
+    _revealBatch(sdRevealedBatchCount);
+  } else {
+    _updateBatchControls();
+  }
+}
 
 export function sdSelectAllVisible() {
   for (var i = 0; i < sdShown; i++) {
@@ -276,6 +485,63 @@ export async function sdUploadSelected() {
   if (queue.length === 0) return;
 
   btn.disabled = true;
+
+  if (sdMode === 'backend') {
+    await sdUploadBackend(queue, btn, status);
+  } else {
+    await sdUploadBrowser(queue, btn, status);
+  }
+}
+
+async function sdUploadBackend(queue, btn, status) {
+  var ptype     = document.getElementById('sd-photo-type').value;
+  var fileIds   = queue.map(function(q) { return q.entry.fileId; });
+  var rotations = {};
+  queue.forEach(function(q) { if (q.entry.rotation) rotations[q.entry.fileId] = q.entry.rotation; });
+
+  queue.forEach(function(q) { sdSetThumbStatus(q.idx, 'uploading'); });
+  status.textContent = 'Importing…';
+
+  var result;
+  try {
+    result = await importCameraPhotos({file_ids: fileIds, photo_type: ptype || null, rotations: rotations});
+  } catch(e) {
+    status.textContent = 'Import failed: ' + e.message;
+    queue.forEach(function(q) { sdSetThumbStatus(q.idx, 'error', e.message); });
+    btn.disabled = false;
+    return;
+  }
+
+  var idxByFileId = {};
+  queue.forEach(function(q) { idxByFileId[q.entry.fileId] = q.idx; });
+
+  (result.created || []).forEach(function(r) {
+    var idx = idxByFileId[r.file_id];
+    if (idx !== undefined) sdSetThumbStatus(idx, 'done');
+  });
+  (result.skipped || []).forEach(function(r) {
+    var idx = idxByFileId[r.file_id];
+    if (idx !== undefined) sdSetThumbStatus(idx, 'done', 'already imported');
+  });
+  (result.failed || []).forEach(function(r) {
+    var idx = idxByFileId[r.file_id];
+    if (idx !== undefined) sdSetThumbStatus(idx, 'error', r.reason);
+  });
+
+  var nc = (result.created || []).length;
+  var ns = (result.skipped || []).length;
+  var nf = (result.failed  || []).length;
+  var parts = [];
+  if (nc > 0) parts.push(nc + ' imported');
+  if (ns > 0) parts.push(ns + ' skipped');
+  if (nf > 0) parts.push(nf + ' failed');
+  status.textContent = parts.join(', ') || 'Nothing imported';
+
+  btn.disabled = false;
+  if (nc > 0 && _loadPhotos) _loadPhotos();
+}
+
+async function sdUploadBrowser(queue, btn, status) {
   var done = 0, failed = 0;
 
   for (var q = 0; q < queue.length; q++) {
@@ -284,7 +550,6 @@ export async function sdUploadSelected() {
     status.textContent = (q + 1) + ' / ' + queue.length + '…';
     sdSetThumbStatus(idx, 'uploading');
 
-    // For RAW files, wait for extraction if not done yet
     if (entry.isRaw && !entry.uploadFile) {
       try {
         var jpegBytes = await extractEmbeddedJpeg(entry.file);
@@ -307,9 +572,9 @@ export async function sdUploadSelected() {
 
     if (!entry.uploadFile) { sdSetThumbStatus(idx, 'error'); failed++; continue; }
 
-    var ts = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
+    var ts    = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
     var ptype = document.getElementById('sd-photo-type').value;
-    var fd = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype);
+    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype, entry.rotation || 0);
 
     try {
       await uploadPhoto(fd);

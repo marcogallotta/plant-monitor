@@ -14,7 +14,7 @@ vi.mock('@/photos.js', () => ({
   loadPhotos: mockFn(),
   applyFilter: vi.fn(), clearFilter: vi.fn(),
   selectA: vi.fn(), selectB: vi.fn(),
-  flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(),
+  flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(),
 }));
 
 vi.mock('@/modal.js', () => ({
@@ -51,7 +51,8 @@ vi.mock('@/events.js', () => ({
 
 vi.mock('@/sdImport.js', () => ({
   initSdImport: vi.fn(),
-  toggleSdPanel: vi.fn(), handleSdFolderInput: vi.fn(),
+  toggleSdPanel: vi.fn(), handleSdFolderInput: vi.fn(), handleSdScan: vi.fn(),
+  sdAddGroup: vi.fn(), sdAddMore: vi.fn(),
   sdSelectAllVisible: vi.fn(), sdDeselectAll: vi.fn(),
   sdLoadMore: vi.fn(), sdUploadSelected: mockFn(),
 }));
@@ -71,14 +72,14 @@ describe('window exports', () => {
     'selectA', 'selectB',
     'rotatePhoto',
     'handleLabelInput', 'handleLabelKeydown',
-    'flickerToggle', 'flickerAuto',
+    'flickerToggle', 'flickerAuto', 'gridRotate',
     'tlPrev', 'tlPlayPause', 'tlNext',
     'noteSave', 'noteDelete', 'noteCancel',
     'toggleUploadPanel', 'submitManualUpload',
     'toggleSdPanel', 'sdSelectAllVisible', 'sdDeselectAll', 'sdLoadMore', 'sdUploadSelected',
     'toggleManagePanel', 'createLocation', 'createUnit',
     'toggleEventsPanel', 'logEvent',
-    'handleSdFolderInput',
+    'handleSdFolderInput', 'handleSdScan', 'sdAddGroup', 'sdAddMore',
     'identityUpdate',
     'toggleModalLogEvent', 'logModalEvent',
   ];

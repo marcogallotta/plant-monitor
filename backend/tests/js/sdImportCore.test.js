@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   isImportablePhoto, isRawPhoto, sortCameraFiles, detectSessionBoundary,
-  scanForJpeg, deriveTimestamp, buildUploadFormData, SD_TIME_GAP,
+  detectAllBoundaries, scanForJpeg, deriveTimestamp, buildUploadFormData, SD_TIME_GAP,
 } from '@/sdImportCore.js';
 
 // ── isImportablePhoto ─────────────────────────────────────
@@ -228,5 +228,37 @@ describe('buildUploadFormData', () => {
   it('omits photo_type when falsy', () => {
     expect(buildUploadFormData(file, 'DSC001.JPG', ts, '').has('photo_type')).toBe(false);
     expect(buildUploadFormData(file, 'DSC001.JPG', ts, null).has('photo_type')).toBe(false);
+  });
+});
+
+// ── detectAllBoundaries ───────────────────────────────────
+
+describe('detectAllBoundaries', () => {
+  const GAP = SD_TIME_GAP;
+
+  it('returns empty array when no gaps', () => {
+    const now = Date.now();
+    expect(detectAllBoundaries([now, now - GAP / 2])).toEqual([]);
+  });
+
+  it('returns single boundary for one gap', () => {
+    const now = Date.now();
+    expect(detectAllBoundaries([now, now - GAP - 1])).toEqual([1]);
+  });
+
+  it('returns all boundary indices for multiple gaps', () => {
+    const now = Date.now();
+    const ts = [now, now - GAP - 1, now - GAP * 2 - 2, now - GAP * 4 - 3];
+    expect(detectAllBoundaries(ts)).toEqual([1, 2, 3]);
+  });
+
+  it('returns empty for empty or single-element array', () => {
+    expect(detectAllBoundaries([])).toEqual([]);
+    expect(detectAllBoundaries([Date.now()])).toEqual([]);
+  });
+
+  it('skips pairs where either timestamp is 0', () => {
+    const now = Date.now();
+    expect(detectAllBoundaries([now, 0, now - GAP * 3])).toEqual([]);
   });
 });

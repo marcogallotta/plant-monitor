@@ -47,6 +47,7 @@ def clean_tables(engine):
 @pytest.fixture(autouse=True)
 def isolated_photos_dir(tmp_path, monkeypatch):
     monkeypatch.setattr("app.main.PHOTOS_DIR", tmp_path)
+    monkeypatch.setattr("app.camera_import.PHOTOS_DIR", tmp_path)
     yield tmp_path
 
 

@@ -18,6 +18,7 @@
       <option value="">All sources</option>
       <option value="pi">Pi</option>
       <option value="manual">Manual</option>
+      <option value="sd">SD / camera</option>
       <option value="seed">Seed</option>
     </select>
   </label>
@@ -102,20 +103,23 @@
 
 <!-- SD card import panel -->
 <div class="upload-panel">
-  <div class="upload-panel-header" onclick="toggleSdPanel()">
-    <h2>SD card import</h2>
-    <span id="sd-toggle-label" class="panel-toggle">▸ expand</span>
+  <div class="upload-panel-header">
+    <h2 onclick="toggleSdPanel()" style="cursor:pointer;">SD card import</h2>
+    <button id="sd-scan-btn" onclick="handleSdScan()">Scan camera/card</button>
+    <span id="sd-folder-status" class="status-msg" style="margin-left:0.5rem;"></span>
+    <span id="sd-toggle-label" class="panel-toggle" onclick="toggleSdPanel()">▸ expand</span>
   </div>
   <div class="upload-form" id="sd-form">
     <div class="upload-row">
       <input type="file" id="sd-folder-input" webkitdirectory accept=".jpg,.jpeg,.orf,.arw" style="display:none" onchange="handleSdFolderInput(event)">
       <button onclick="document.getElementById('sd-folder-input').click()">Choose folder</button>
-      <span id="sd-folder-status" class="status-msg" style="margin-left:0.5rem;"></span>
     </div>
     <div class="upload-row" id="sd-grid-controls" style="display:none;">
       <span id="sd-selected-count" class="status-msg" style="flex:1;"></span>
       <button onclick="sdSelectAllVisible()">Select all visible</button>
       <button onclick="sdDeselectAll()">Deselect all</button>
+      <button id="sd-add-group-btn" onclick="sdAddGroup()" style="display:none;">Add group ↑</button>
+      <button id="sd-add-more-btn" onclick="sdAddMore()" style="display:none;">Show older</button>
     </div>
     <div class="sd-grid" id="sd-grid"></div>
     <div class="upload-row" id="sd-load-more-row" style="display:none;justify-content:center;">
