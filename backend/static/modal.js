@@ -4,6 +4,7 @@ import { renderLabelSection } from './labels.js';
 import { resetZoom } from './zoom.js';
 import { noteCancel, loadNotes } from './notes.js';
 import { setStatus, formatDate, rotTransform } from './utils.js';
+import { loadPhotoSensorContext } from './sensors.js';
 
 export async function rotatePhoto(delta) {
   state.currentRotation = ((state.currentRotation + delta) % 360 + 360) % 360;
@@ -40,6 +41,7 @@ export function showModalPhoto(index) {
   showIdentityPanel(p);
   renderLabelSection(p);
   loadNotes();
+  loadPhotoSensorContext(p.id);
   document.getElementById('modal-event-panel').classList.add('hidden');
   document.getElementById('modal-event-type').selectedIndex = 0;
   document.getElementById('modal-event-note').value = '';

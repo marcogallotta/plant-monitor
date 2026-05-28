@@ -55,3 +55,6 @@ export function createEvent(body)              { return apiJson('/events', 'POST
 export function getEvents()                    { return apiRequest('/events'); }
 
 export function uploadPhoto(formData)          { return apiRequest('/manual-photos', {method: 'POST', body: formData}); }
+
+export function getSensorLatest()              { return apiRequest('/sensors/latest'); }
+export function getSensorPhotoContext(photoId) { return apiRequest('/sensors/photos/' + photoId); }

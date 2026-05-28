@@ -22,6 +22,7 @@ import {
   toggleModalLogEvent, logModalEvent,
 } from './modal.js';
 import { handleLabelInput, handleLabelKeydown } from './labels.js';
+import { loadSensorStrip } from './sensors.js';
 import {
   loadPhotos,
   applyFilter, clearFilter,
@@ -68,6 +69,7 @@ initUpload(loadPhotos);
 initSdImport(loadPhotos);
 initEvents(loadDropdownData);
 loadDropdownData().then(loadPhotos);
+loadSensorStrip();
 
 Object.assign(window, {
   applyFilter, clearFilter,

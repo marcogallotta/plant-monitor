@@ -99,6 +99,27 @@ Standard CRUD via `/locations` and `/growing-units`. Both support `GET` (list), 
 
 `/assistant/*` is a read-only sub-router protected by a Bearer token from the `ASSISTANT_API_TOKEN` env var. It exposes `GET /assistant/summary`, `/assistant/photos`, `/assistant/photos/{id}`, `/assistant/photos/{id}/context`, `/assistant/photos/{id}/thumbnail`, `/assistant/growing-units`, `/assistant/growing-units/{id}/context`, `/assistant/locations`, `/assistant/events`, and `/assistant/unclassified`. The thumbnail endpoint resizes to 256×256 via Pillow and returns JPEG bytes. A simple in-process rate limiter allows 60 requests per 60-second window per token.
 
+### Sensor proxy
+
+`app/sensors.py` contains a `SensorState` class that reads through to an external sensor API (the `esp32-home-display` server). Configuration comes from three env vars:
+
+| Var | Example |
+|-----|---------|
+| `SENSOR_API_URL` | `https://laptop.local:8000` |
+| `SENSOR_API_KEY` | `happydevilelephantsmoking` |
+| `SENSOR_SENSORS` | `[{"mac":"D5:3A:42:86:2C:63","name":"South"},…]` |
+
+If `SENSOR_API_URL` is not set (or `SENSOR_SENSORS` is invalid JSON), `get_state()` returns `None` and all sensor endpoints return `{"available": false, "sensors": []}` — the dashboard degrades gracefully with no errors.
+
+`SensorState` resolves MACs → sensor UUIDs lazily via `GET /sensors` on the upstream API and caches the result. It uses `verify=False` for TLS (self-signed cert on LAN).
+
+Two proxy endpoints:
+
+- `GET /sensors/latest` — latest temp/humidity/staleness for each configured sensor.
+- `GET /sensors/photos/{photo_id}` — readings ±60 min around `photo.captured_at`, one entry per configured sensor.
+
+The dashboard renders a compact sensor strip (top of page, auto-loaded at boot) and sensor context in the photo modal (loaded per-photo). Both are implemented in `static/sensors.js`.
+
 ---
 
 ## Session and connection lifecycle

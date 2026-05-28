@@ -213,6 +213,18 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .sd-status-overlay[data-state="done"]      { background: rgba(0,50,20,0.55); color: #4e8; }
 .sd-status-overlay[data-state="error"]     { background: rgba(50,0,0,0.55); color: #e44; }
 
+/* Sensor strip */
+.sensor-strip { padding: 0.35rem 1.5rem; display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.75rem; color: #888; min-height: 1.6rem; }
+.sensor-item { color: #8cf; }
+.sensor-item.sensor-stale { color: #a84; }
+
+/* Sensor context in modal */
+.modal-sensor-context { padding: 0 0.5rem; font-size: 0.72rem; color: #666; }
+.sensor-context-header { color: #555; margin-bottom: 0.3rem; font-size: 0.7rem; }
+.sensor-context-block { display: inline-block; margin-right: 1.25rem; margin-bottom: 0.25rem; vertical-align: top; }
+.sensor-context-name { color: #888; margin-right: 0.4rem; }
+.sensor-context-row { color: #666; }
+
 .pb { padding-bottom: 2rem; }
 
 .label-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
