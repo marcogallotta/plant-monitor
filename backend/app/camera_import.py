@@ -51,6 +51,12 @@ _thumb_executor = ThreadPoolExecutor(max_workers=4)
 # Shared photo save helper (used by /manual-photos and /camera-import/import)
 # ---------------------------------------------------------------------------
 
+def _check_growing_units_exist(ids: list[int], db: Session) -> None:
+    for uid in ids:
+        if not db.query(GrowingUnit).filter_by(id=uid).first():
+            raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+
+
 def save_photo(
     db: Session,
     image_bytes: bytes,
@@ -377,9 +383,7 @@ def import_photos(body: ImportRequest, db: Session = Depends(get_db)):
     if body.location_id is not None:
         if not db.query(Location).filter_by(id=body.location_id).first():
             raise HTTPException(status_code=404, detail="location not found")
-    for uid in body.growing_unit_ids:
-        if not db.query(GrowingUnit).filter_by(id=uid).first():
-            raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+    _check_growing_units_exist(body.growing_unit_ids, db)
 
     created = []
     skipped = []

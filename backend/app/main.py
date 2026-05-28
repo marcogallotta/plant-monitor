@@ -19,7 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .camera_import import router as camera_import_router, save_photo
+from .camera_import import router as camera_import_router, save_photo, _check_growing_units_exist
 from .database import get_db
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote
 
@@ -465,9 +465,7 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
             raise HTTPException(status_code=422, detail="rotation cannot be null")
         photo.rotation = body.rotation
     if body.growing_unit_ids is not None:
-        for uid in body.growing_unit_ids:
-            if not db.query(GrowingUnit).filter_by(id=uid).first():
-                raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+        _check_growing_units_exist(body.growing_unit_ids, db)
         db.query(PhotoGrowingUnit).filter_by(photo_id=photo_id).delete()
         for uid in body.growing_unit_ids:
             db.add(PhotoGrowingUnit(photo_id=photo_id, growing_unit_id=uid))
@@ -492,9 +490,7 @@ async def upload_manual_photo(
         raise HTTPException(status_code=415, detail="manual uploads must be JPEG")
 
     _check_location_exists(location_id, db)
-    for uid in (growing_unit_ids or []):
-        if not db.query(GrowingUnit).filter_by(id=uid).first():
-            raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+    _check_growing_units_exist(growing_unit_ids or [], db)
 
     if rotation not in VALID_ROTATIONS:
         raise HTTPException(status_code=422, detail="rotation must be 0, 90, 180, or 270")
@@ -716,9 +712,7 @@ def _event_out(ev: Event, db: Session) -> EventOut:
 @app.post("/events", response_model=EventOut, status_code=201)
 def create_event(body: EventCreate, db: Session = Depends(get_db)):
     _check_location_exists(body.location_id, db)
-    for uid in (body.growing_unit_ids or []):
-        if not db.query(GrowingUnit).filter_by(id=uid).first():
-            raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+    _check_growing_units_exist(body.growing_unit_ids or [], db)
     for pid in (body.photo_ids or []):
         if not db.query(Photo).filter_by(id=pid).first():
             raise HTTPException(status_code=404, detail=f"photo {pid} not found")
