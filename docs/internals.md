@@ -48,6 +48,10 @@ docker compose run --rm backend alembic revision -m "describe the change"
 
 The column has a `server_default=func.now()` for insert, but there is no `onupdate` trigger. The `PUT /notes/{note_id}` endpoint sets `note.updated_at = datetime.now(timezone.utc)` explicitly before committing. If you add another code path that mutates a note, do the same.
 
+### Note rectangle clearing
+
+`PUT /notes/{note_id}` uses `model_fields_set` to apply updates, so sending `x2: null, y2: null` explicitly clears an existing rectangle. Fields omitted from the request body are left unchanged. The `x2_y2_must_be_paired` validator on `NoteUpdate` enforces that both are provided or both are omitted, so you cannot clear only one.
+
 ---
 
 ## Photo upload flow
@@ -72,6 +76,10 @@ After files are on disk, `_upsert_photo_record()` creates the DB row if one does
 ### Manual upload
 
 `POST /manual-photos` accepts a multipart upload from the dashboard. Only `image` (JPEG) is required; `captured_at`, `photo_type`, `location_id`, `growing_unit_ids`, and `note_text` are optional form fields. The filename is a random UUID hex — no timestamp stem requirement. `source` is always set to `"manual"` and `original_filename` records the browser filename. If `note_text` is supplied a `PhotoNote` with `x=0, y=0` is created in the same transaction.
+
+### Rotation validation
+
+`rotation` must be one of `0`, `90`, `180`, `270` in all write paths. It is enforced by a `field_validator` on `PhotoClassify` (PUT /photos/{id}), an inline check in the manual upload endpoint, and a `field_validator` on `ImportRequest.rotations` for SD import. `save_photo()` raises `ValueError` as a final guard before any file I/O — invalid rotation never reaches disk.
 
 ### Photo classification
 
@@ -163,7 +171,7 @@ Opens a plain session from the engine. No transaction wrapping — tests commit 
 
 **`clean_tables` (autouse, function-scoped)**
 
-After each test, truncates `photo_notes` and `photos` with `RESTART IDENTITY CASCADE`. This keeps tests independent regardless of commit behaviour inside them.
+After each test, truncates all data tables with `RESTART IDENTITY CASCADE`, then re-inserts the seven seed labels from migration `0007` (`aphids`, `yellowing`, `mildew`, `damage`, `new_growth`, `recovery`, `watch`). This keeps tests independent regardless of commit behaviour inside them and ensures the `labels` table is always in a known state — custom labels created by one test do not leak into the next.
 
 **`isolated_photos_dir` (autouse, function-scoped)**
 
@@ -270,6 +278,8 @@ make seed   # runs inside Docker, hits http://backend:8000
 `pi/camera.py` mocks the Raspberry Pi hardware (`picamera2`) until the device is available. The mock returns stub image bytes (`b"FAKEJPEG"`) so the upload and cleanup scripts can be tested without physical hardware.
 
 Upload attempts are retried if the backend is unreachable. Photos are cleaned up locally after 7 days.
+
+`run_upload()` checks the archive destination **before** reading bytes or POSTing. If both destination files already exist the source pair is deleted immediately (the archive is complete; no POST needed). If only one destination file exists the pair is left untouched — that is a partial-archive state that requires manual investigation. This pre-check prevents an infinite retry loop that would otherwise occur when a POST succeeds but the archive move is skipped due to a destination collision.
 
 ---
 
