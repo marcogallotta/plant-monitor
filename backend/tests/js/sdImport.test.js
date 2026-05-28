@@ -132,7 +132,31 @@ describe('handleSdFolderInput', () => {
 
   it('shows "All N already imported." when all photos already uploaded', async () => {
     const { state } = await import('@/state.js');
-    state.allPhotos = [{ original_filename: 'DSC001.jpg' }];
+    state.allPhotos = [{ original_filename: 'DSC001.jpg', original_size_bytes: 1000 }];
+    await handleSdFolderInput(makeEvent([makeFile('DSC001.jpg')]));
+    expect(document.getElementById('sd-folder-status').textContent).toBe('All 1 already imported.');
+    state.allPhotos = [];
+  });
+
+  it('deduplicates by filename+size: same name different size is not a duplicate', async () => {
+    const { state } = await import('@/state.js');
+    state.allPhotos = [{ original_filename: 'DSC001.ARW', original_size_bytes: 99999 }];
+    await handleSdFolderInput(makeEvent([makeFile('DSC001.ARW')])); // makeFile size is 1000
+    expect(document.getElementById('sd-folder-status').textContent).toContain('1 photo');
+    state.allPhotos = [];
+  });
+
+  it('deduplicates by filename+size: same name same size is a duplicate', async () => {
+    const { state } = await import('@/state.js');
+    state.allPhotos = [{ original_filename: 'DSC001.ARW', original_size_bytes: 1000 }];
+    await handleSdFolderInput(makeEvent([makeFile('DSC001.ARW')])); // makeFile size is 1000
+    expect(document.getElementById('sd-folder-status').textContent).toBe('All 1 already imported.');
+    state.allPhotos = [];
+  });
+
+  it('falls back to filename-only dedup when original_size_bytes is missing', async () => {
+    const { state } = await import('@/state.js');
+    state.allPhotos = [{ original_filename: 'DSC001.jpg', original_size_bytes: null }];
     await handleSdFolderInput(makeEvent([makeFile('DSC001.jpg')]));
     expect(document.getElementById('sd-folder-status').textContent).toBe('All 1 already imported.');
     state.allPhotos = [];
@@ -152,7 +176,7 @@ describe('handleSdFolderInput', () => {
 
   it('shows skip label when some files were already imported', async () => {
     const { state } = await import('@/state.js');
-    state.allPhotos = [{ original_filename: 'DSC001.jpg' }];
+    state.allPhotos = [{ original_filename: 'DSC001.jpg', original_size_bytes: 1000 }];
     await handleSdFolderInput(makeEvent([makeFile('DSC001.jpg'), makeFile('DSC002.jpg')]));
     expect(document.getElementById('sd-folder-status').textContent).toContain('already imported');
     state.allPhotos = [];

@@ -164,11 +164,23 @@ export async function handleSdFolderInput(event) {
   document.getElementById('sd-load-more-row').style.display = 'none';
   document.getElementById('sd-grid').innerHTML = '';
 
-  var uploaded = new Set(state.allPhotos.map(function(p) { return p.original_filename; }).filter(Boolean));
+  var uploadedByNameSize = new Set();
+  var uploadedByNameOnly = new Set();
+  state.allPhotos.forEach(function(p) {
+    if (!p.original_filename) return;
+    if (p.original_size_bytes != null) {
+      uploadedByNameSize.add(p.original_filename + ':' + p.original_size_bytes);
+    } else {
+      uploadedByNameOnly.add(p.original_filename);
+    }
+  });
+  function isDuplicate(f) {
+    return uploadedByNameOnly.has(f.name) || uploadedByNameSize.has(f.name + ':' + f.size);
+  }
 
   var all = Array.from(event.target.files);
-  var photos = all.filter(function(f) { return isImportablePhoto(f.name) && !uploaded.has(f.name); });
-  var skipped = all.filter(function(f) { return isImportablePhoto(f.name) && uploaded.has(f.name); }).length;
+  var photos = all.filter(function(f) { return isImportablePhoto(f.name) && !isDuplicate(f); });
+  var skipped = all.filter(function(f) { return isImportablePhoto(f.name) && isDuplicate(f); }).length;
 
   if (photos.length === 0) {
     status.textContent = skipped > 0 ? 'All ' + skipped + ' already imported.' : 'No photos found.';

@@ -121,6 +121,7 @@ class PhotoOut(BaseModel):
     source: Optional[str] = None
     photo_type: Optional[str] = None
     original_filename: Optional[str] = None
+    original_size_bytes: Optional[int] = None
     location_id: Optional[int] = None
     location_name: Optional[str] = None
     growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
@@ -352,6 +353,7 @@ def _photo_out(p: Photo, db: Session) -> PhotoOut:
         source=p.source,
         photo_type=p.photo_type,
         original_filename=p.original_filename,
+        original_size_bytes=p.original_size_bytes,
         location_id=p.location_id,
         location_name=location_name,
         growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in units],
