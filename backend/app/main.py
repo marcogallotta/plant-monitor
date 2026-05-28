@@ -303,15 +303,18 @@ def update_location(location_id: int, body: LocationUpdate, db: Session = Depend
     loc = db.query(Location).filter_by(id=location_id).first()
     if not loc:
         raise HTTPException(status_code=404, detail="location not found")
-    updates = body.model_dump(exclude_unset=True)
+    _apply_named_updates(loc, body.model_dump(exclude_unset=True), db)
+    return loc
+
+
+def _apply_named_updates(obj, updates: dict, db: Session) -> None:
     if updates.get("name") is None and "name" in updates:
         raise HTTPException(status_code=422, detail="name cannot be null")
     for field, value in updates.items():
-        setattr(loc, field, value)
-    loc.updated_at = datetime.now(timezone.utc)
+        setattr(obj, field, value)
+    obj.updated_at = datetime.now(timezone.utc)
     db.commit()
-    db.refresh(loc)
-    return loc
+    db.refresh(obj)
 
 
 def _check_location_exists(location_id: Optional[int], db: Session) -> None:
@@ -348,15 +351,9 @@ def update_growing_unit(unit_id: int, body: GrowingUnitUpdate, db: Session = Dep
     if not unit:
         raise HTTPException(status_code=404, detail="growing unit not found")
     updates = body.model_dump(exclude_unset=True)
-    if updates.get("name") is None and "name" in updates:
-        raise HTTPException(status_code=422, detail="name cannot be null")
     if "current_location_id" in updates:
         _check_location_exists(updates["current_location_id"], db)
-    for field, value in updates.items():
-        setattr(unit, field, value)
-    unit.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(unit)
+    _apply_named_updates(unit, updates, db)
     return unit
 
 
