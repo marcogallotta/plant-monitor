@@ -8,6 +8,10 @@ import httpx
 _STALE_SECONDS = 30 * 60
 _WINDOW_MINUTES = 60
 
+
+def _parse_iso8601(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
 _state: "SensorState | None" = None
 
 
@@ -52,7 +56,7 @@ class SensorState:
             mac = entry["mac"]
             if mac not in mac_to_name:
                 continue
-            ts = datetime.fromisoformat(entry["latest_timestamp"].replace("Z", "+00:00"))
+            ts = _parse_iso8601(entry["latest_timestamp"])
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
             stale = (now - ts).total_seconds() > _STALE_SECONDS

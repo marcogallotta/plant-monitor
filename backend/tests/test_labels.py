@@ -1,4 +1,3 @@
-import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -225,11 +224,11 @@ def test_create_label_integrity_error_returns_existing_label():
     mock_db = MagicMock()
     mock_db.query.return_value.filter_by.return_value.first.side_effect = [None, existing]
     mock_db.commit.side_effect = SAIntegrityError(statement=None, params=None, orig=Exception("unique"))
+    mock_response = MagicMock()
 
-    result = create_label(body=LabelCreate(name="rust"), db=mock_db)
+    result = create_label(body=LabelCreate(name="rust"), response=mock_response, db=mock_db)
 
-    assert result.status_code == 200
-    data = json.loads(result.body)
-    assert data["name"] == "rust"
-    assert data["id"] == 42
+    assert result.name == "rust"
+    assert result.id == 42
     mock_db.rollback.assert_called_once()
+    mock_response.status_code == 200

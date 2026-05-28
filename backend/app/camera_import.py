@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -23,6 +24,7 @@ from .models import GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote
 router = APIRouter(prefix="/camera-import")
 
 PHOTOS_DIR = Path("data/photos")
+VALID_ROTATIONS = {0, 90, 180, 270}
 
 _IMPORTABLE_EXTS = {".jpg", ".jpeg", ".arw", ".orf"}
 _RAW_EXTS = {".arw", ".orf"}
@@ -63,7 +65,7 @@ def save_photo(
     rotation: int = 0,
 ) -> Photo:
     """Write image bytes to disk and create a Photo DB row. Commits the transaction."""
-    if rotation not in {0, 90, 180, 270}:
+    if rotation not in VALID_ROTATIONS:
         raise ValueError(f"rotation must be 0, 90, 180, or 270; got {rotation}")
 
     stem = uuid.uuid4().hex
@@ -343,7 +345,6 @@ class BatchThumbRequest(BaseModel):
 
 @router.post("/thumbs/batch")
 async def get_thumbnails_batch(body: BatchThumbRequest):
-    import asyncio
     loop = asyncio.get_running_loop()
     futures = [loop.run_in_executor(_thumb_executor, _make_thumb, fid) for fid in body.file_ids]
     results = await asyncio.gather(*futures)
@@ -365,7 +366,7 @@ class ImportRequest(BaseModel):
     @field_validator("rotations")
     @classmethod
     def rotations_must_be_cardinal(cls, v: dict[str, int]) -> dict[str, int]:
-        invalid = {k: r for k, r in v.items() if r not in {0, 90, 180, 270}}
+        invalid = {k: r for k, r in v.items() if r not in VALID_ROTATIONS}
         if invalid:
             raise ValueError(f"rotation must be 0, 90, 180, or 270; got {invalid}")
         return v

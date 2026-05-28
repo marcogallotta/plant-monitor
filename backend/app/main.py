@@ -28,6 +28,18 @@ app.include_router(camera_import_router)
 
 PHOTOS_DIR = Path("data/photos")
 _STATIC_DIR = Path(__file__).parent.parent / "static"
+VALID_ROTATIONS = {0, 90, 180, 270}
+
+
+def _parse_iso8601(s: str) -> datetime:
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def _location_name(location_id: Optional[int], db: Session) -> Optional[str]:
+    if not location_id:
+        return None
+    loc = db.query(Location).filter_by(id=location_id).first()
+    return loc.name if loc else None
 
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
@@ -60,17 +72,6 @@ class LocationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class GrowingUnitCreate(BaseModel):
-    name: str
-    unit_type: Optional[str] = None
-    species: Optional[str] = None
-    variety: Optional[str] = None
-    source: Optional[str] = None
-    started_at: Optional[datetime] = None
-    notes: Optional[str] = None
-    current_location_id: Optional[int] = None
-
-
 class GrowingUnitUpdate(BaseModel):
     name: Optional[str] = None
     unit_type: Optional[str] = None
@@ -80,6 +81,10 @@ class GrowingUnitUpdate(BaseModel):
     started_at: Optional[datetime] = None
     notes: Optional[str] = None
     current_location_id: Optional[int] = None
+
+
+class GrowingUnitCreate(GrowingUnitUpdate):
+    name: str
 
 
 class GrowingUnitOut(BaseModel):
@@ -223,7 +228,7 @@ def _validated_metadata(raw: bytes, expected_image_filename: str) -> dict:
         raise HTTPException(status_code=422, detail="metadata 'filename' does not match uploaded image filename")
 
     try:
-        datetime.fromisoformat(meta["captured_at"].replace("Z", "+00:00"))
+        _parse_iso8601(meta["captured_at"])
     except (ValueError, AttributeError):
         raise HTTPException(status_code=422, detail="metadata 'captured_at' is not a valid ISO 8601 timestamp")
 
@@ -233,7 +238,7 @@ def _validated_metadata(raw: bytes, expected_image_filename: str) -> dict:
 def _upsert_photo_record(db: Session, stem: str, meta: dict) -> None:
     if db.query(Photo).filter_by(filename=f"{stem}.jpg").first():
         return
-    captured_at = datetime.fromisoformat(meta["captured_at"].replace("Z", "+00:00"))
+    captured_at = _parse_iso8601(meta["captured_at"])
     db.add(Photo(
         filename=f"{stem}.jpg",
         captured_at=captured_at,
@@ -329,10 +334,7 @@ def update_growing_unit(unit_id: int, body: GrowingUnitUpdate, db: Session = Dep
 
 
 def _photo_out(p: Photo, db: Session) -> PhotoOut:
-    location_name = None
-    if p.location_id:
-        loc = db.query(Location).filter_by(id=p.location_id).first()
-        location_name = loc.name if loc else None
+    location_name = _location_name(p.location_id, db)
     units = (
         db.query(GrowingUnit)
         .join(PhotoGrowingUnit, PhotoGrowingUnit.growing_unit_id == GrowingUnit.id)
@@ -443,7 +445,7 @@ class PhotoClassify(BaseModel):
     @field_validator("rotation")
     @classmethod
     def rotation_must_be_valid(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v not in {0, 90, 180, 270}:
+        if v is not None and v not in VALID_ROTATIONS:
             raise ValueError("rotation must be 0, 90, 180, or 270")
         return v
 
@@ -494,12 +496,12 @@ async def upload_manual_photo(
         if not db.query(GrowingUnit).filter_by(id=uid).first():
             raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
 
-    if rotation not in {0, 90, 180, 270}:
+    if rotation not in VALID_ROTATIONS:
         raise HTTPException(status_code=422, detail="rotation must be 0, 90, 180, or 270")
 
     if captured_at is not None:
         try:
-            parsed_at = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+            parsed_at = _parse_iso8601(captured_at)
         except ValueError:
             raise HTTPException(status_code=422, detail="invalid captured_at format")
     else:
@@ -592,14 +594,15 @@ def list_labels(db: Session = Depends(get_db)):
     )
 
 
-@app.post("/labels")
-def create_label(body: LabelCreate, db: Session = Depends(get_db)):
+@app.post("/labels", response_model=LabelOut, status_code=201)
+def create_label(body: LabelCreate, response: Response, db: Session = Depends(get_db)):
     name = re.sub(r"\s+", "_", body.name.strip().lower())
     if not name:
         raise HTTPException(status_code=422, detail="name must not be empty")
     existing = db.query(Label).filter_by(name=name).first()
     if existing:
-        return JSONResponse(status_code=200, content={"id": existing.id, "name": existing.name})
+        response.status_code = 200
+        return existing
     label = Label(name=name)
     db.add(label)
     try:
@@ -607,9 +610,10 @@ def create_label(body: LabelCreate, db: Session = Depends(get_db)):
     except IntegrityError:
         db.rollback()
         existing = db.query(Label).filter_by(name=name).first()
-        return JSONResponse(status_code=200, content={"id": existing.id, "name": existing.name})
+        response.status_code = 200
+        return existing
     db.refresh(label)
-    return JSONResponse(status_code=201, content={"id": label.id, "name": label.name})
+    return label
 
 
 @app.post("/photos/{photo_id}/labels/{label_id}", response_model=PhotoOut)
@@ -682,10 +686,7 @@ class EventOut(BaseModel):
 
 
 def _event_out(ev: Event, db: Session) -> EventOut:
-    location_name = None
-    if ev.location_id:
-        loc = db.query(Location).filter_by(id=ev.location_id).first()
-        location_name = loc.name if loc else None
+    location_name = _location_name(ev.location_id, db)
     units = (
         db.query(GrowingUnit)
         .join(EventGrowingUnit, EventGrowingUnit.growing_unit_id == GrowingUnit.id)
