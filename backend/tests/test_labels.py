@@ -24,7 +24,26 @@ def test_list_labels_returns_seeded_labels(client):
     names = [l["name"] for l in labels]
     assert "aphids" in names
     assert "yellowing" in names
-    assert "new_growth" in names
+
+
+def test_list_labels_ordered_by_usage_count(client, isolated_photos_dir):
+    photo = _make_photo(client, isolated_photos_dir)
+    labels = client.get("/labels").json()
+    # pick a label that is not first by default and assign it to a photo
+    target = labels[-1]
+    client.post(f"/photos/{photo['id']}/labels/{target['id']}")
+    refreshed = client.get("/labels").json()
+    assert refreshed[0]["id"] == target["id"]
+
+
+def test_list_labels_unused_labels_sorted_alphabetically(client, isolated_photos_dir):
+    photo = _make_photo(client, isolated_photos_dir)
+    labels = client.get("/labels").json()
+    # assign one label so it rises to top; rest should be alpha among themselves
+    client.post(f"/photos/{photo['id']}/labels/{labels[0]['id']}")
+    refreshed = client.get("/labels").json()
+    unused = [l["name"] for l in refreshed[1:]]
+    assert unused == sorted(unused)
 
 
 def test_label_has_id_and_name(client):

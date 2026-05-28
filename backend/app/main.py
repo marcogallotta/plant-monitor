@@ -15,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -582,7 +583,17 @@ class LabelCreate(BaseModel):
 
 @app.get("/labels", response_model=list[LabelOut])
 def list_labels(db: Session = Depends(get_db)):
-    return db.query(Label).order_by(Label.id).all()
+    usage = (
+        db.query(PhotoLabel.label_id, func.count(PhotoLabel.label_id).label("cnt"))
+        .group_by(PhotoLabel.label_id)
+        .subquery()
+    )
+    return (
+        db.query(Label)
+        .outerjoin(usage, Label.id == usage.c.label_id)
+        .order_by(func.coalesce(usage.c.cnt, 0).desc(), Label.name)
+        .all()
+    )
 
 
 @app.post("/labels")
