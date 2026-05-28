@@ -205,6 +205,22 @@ def test_list_photos_includes_rotation(client, db_session):
 
 # --- Pi upload sets source='pi' ---
 
+def test_classify_photo_clears_growing_units_with_empty_list(client, db_session):
+    u1 = client.post("/growing-units", json={"name": "Thai basil plant 1"}).json()
+    photo = _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
+    client.put(f"/photos/{photo.id}", json={"growing_unit_ids": [u1["id"]]})
+    r = client.put(f"/photos/{photo.id}", json={"growing_unit_ids": []})
+    assert r.status_code == 200
+    assert r.json()["growing_units"] == []
+
+
+def test_classify_only_rotation_does_not_clear_photo_type(client, db_session):
+    photo = _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z", photo_type="overview")
+    r = client.put(f"/photos/{photo.id}", json={"rotation": 90})
+    assert r.status_code == 200
+    assert r.json()["photo_type"] == "overview"
+
+
 def test_pi_upload_sets_source_pi(client, isolated_photos_dir):
     import json as _json
     stem = "2026-05-26T100000Z"

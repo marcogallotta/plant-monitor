@@ -134,3 +134,76 @@ def test_photo_growing_units_growing_unit_id_indexed(engine):
 def test_growing_units_current_location_id_indexed(engine):
     idxs = inspect(engine).get_indexes("growing_units")
     assert any("current_location_id" in idx["column_names"] for idx in idxs)
+
+
+# --- events ---
+
+def test_events_table_exists(engine):
+    assert inspect(engine).has_table("events")
+
+
+def test_events_columns(engine):
+    cols = {c["name"] for c in inspect(engine).get_columns("events")}
+    assert cols == {"id", "event_type", "event_at", "note_text", "location_id", "created_at", "updated_at"}
+
+
+def test_events_location_id_fk(engine):
+    fks = inspect(engine).get_foreign_keys("events")
+    assert any(
+        fk["referred_table"] == "locations" and "location_id" in fk["constrained_columns"]
+        for fk in fks
+    )
+
+
+# --- event_growing_units ---
+
+def test_event_growing_units_table_exists(engine):
+    assert inspect(engine).has_table("event_growing_units")
+
+
+def test_event_growing_units_columns(engine):
+    cols = {c["name"] for c in inspect(engine).get_columns("event_growing_units")}
+    assert cols == {"event_id", "growing_unit_id"}
+
+
+def test_event_growing_units_event_fk(engine):
+    fks = inspect(engine).get_foreign_keys("event_growing_units")
+    assert any(
+        fk["referred_table"] == "events" and "event_id" in fk["constrained_columns"]
+        for fk in fks
+    )
+
+
+def test_event_growing_units_growing_unit_fk(engine):
+    fks = inspect(engine).get_foreign_keys("event_growing_units")
+    assert any(
+        fk["referred_table"] == "growing_units" and "growing_unit_id" in fk["constrained_columns"]
+        for fk in fks
+    )
+
+
+# --- event_photos ---
+
+def test_event_photos_table_exists(engine):
+    assert inspect(engine).has_table("event_photos")
+
+
+def test_event_photos_columns(engine):
+    cols = {c["name"] for c in inspect(engine).get_columns("event_photos")}
+    assert cols == {"event_id", "photo_id"}
+
+
+def test_event_photos_event_fk(engine):
+    fks = inspect(engine).get_foreign_keys("event_photos")
+    assert any(
+        fk["referred_table"] == "events" and "event_id" in fk["constrained_columns"]
+        for fk in fks
+    )
+
+
+def test_event_photos_photo_fk(engine):
+    fks = inspect(engine).get_foreign_keys("event_photos")
+    assert any(
+        fk["referred_table"] == "photos" and "photo_id" in fk["constrained_columns"]
+        for fk in fks
+    )

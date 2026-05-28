@@ -75,7 +75,7 @@ def _photo(db, stem="2026-05-26T100000Z", photo_type=None, location_id=None):
     return photo
 
 
-def _event(db, event_type="watering", location_id=None):
+def _event(db, event_type="watered", location_id=None):
     ev = Event(
         event_type=event_type,
         event_at=datetime(2026, 5, 26, 10, 0, tzinfo=timezone.utc),
