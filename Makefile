@@ -6,7 +6,7 @@ VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.ve
 test: test-backend test-pi test-js
 
 test-backend:
-	$(TEST_COMPOSE) run --rm backend pytest tests/ -v
+	$(TEST_COMPOSE) run --rm backend pytest tests/ -v --cov=app --cov-report=term-missing
 	$(TEST_COMPOSE) down -v
 
 test-pi:
