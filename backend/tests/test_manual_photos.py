@@ -135,6 +135,17 @@ def test_manual_upload_bad_captured_at_returns_422(client):
     assert r.status_code == 422
 
 
+def test_manual_upload_invalid_rotation_returns_422(client):
+    r = _upload(client, rotation=45)
+    assert r.status_code == 422
+
+
+def test_manual_upload_valid_rotations_accepted(client):
+    for deg in (0, 90, 180, 270):
+        r = _upload(client, rotation=deg)
+        assert r.status_code == 201, f"rotation={deg} should be accepted"
+
+
 # --- serve uploaded manual photo ---
 
 def test_manual_upload_photo_is_servable(client, isolated_photos_dir):

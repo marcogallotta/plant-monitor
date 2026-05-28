@@ -220,6 +220,11 @@ def _validated_metadata(raw: bytes, expected_image_filename: str) -> dict:
     if meta["filename"] != expected_image_filename:
         raise HTTPException(status_code=422, detail="metadata 'filename' does not match uploaded image filename")
 
+    try:
+        datetime.fromisoformat(meta["captured_at"].replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=422, detail="metadata 'captured_at' is not a valid ISO 8601 timestamp")
+
     return meta
 
 
@@ -478,6 +483,9 @@ async def upload_manual_photo(
         if not db.query(GrowingUnit).filter_by(id=uid).first():
             raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
 
+    if rotation not in {0, 90, 180, 270}:
+        raise HTTPException(status_code=422, detail="rotation must be 0, 90, 180, or 270")
+
     if captured_at is not None:
         try:
             parsed_at = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
@@ -526,16 +534,8 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
     note = db.query(PhotoNote).filter_by(id=note_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="note not found")
-    if body.note_text is not None:
-        note.note_text = body.note_text
-    if body.x is not None:
-        note.x = body.x
-    if body.y is not None:
-        note.y = body.y
-    if body.x2 is not None:
-        note.x2 = body.x2
-    if body.y2 is not None:
-        note.y2 = body.y2
+    for field in body.model_fields_set:
+        setattr(note, field, getattr(body, field))
     note.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(note)

@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from PIL import Image
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -63,6 +63,9 @@ def save_photo(
     rotation: int = 0,
 ) -> Photo:
     """Write image bytes to disk and create a Photo DB row. Commits the transaction."""
+    if rotation not in {0, 90, 180, 270}:
+        raise ValueError(f"rotation must be 0, 90, 180, or 270; got {rotation}")
+
     stem = uuid.uuid4().hex
     filename = f"{stem}.jpg"
     PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
@@ -85,7 +88,7 @@ def save_photo(
         original_filename=original_filename,
         original_size_bytes=original_size_bytes,
         location_id=location_id,
-        rotation=rotation % 360,
+        rotation=rotation,
     )
     db.add(photo)
     db.flush()
@@ -358,6 +361,14 @@ class ImportRequest(BaseModel):
     growing_unit_ids: list[int] = Field(default_factory=list)
     note_text: Optional[str] = None
     rotations: dict[str, int] = Field(default_factory=dict)  # file_id -> degrees
+
+    @field_validator("rotations")
+    @classmethod
+    def rotations_must_be_cardinal(cls, v: dict[str, int]) -> dict[str, int]:
+        invalid = {k: r for k, r in v.items() if r not in {0, 90, 180, 270}}
+        if invalid:
+            raise ValueError(f"rotation must be 0, 90, 180, or 270; got {invalid}")
+        return v
 
 
 @router.post("/import")

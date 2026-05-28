@@ -207,13 +207,11 @@ def test_delete_note_unknown_returns_404(client):
     assert client.delete("/notes/99999").status_code == 404
 
 
-def test_update_note_x2_null_does_not_clear_existing_value(client, db_session):
-    # Documents current behaviour: sending x2=null does not clear an existing x2 value,
-    # because the update handler only writes x2/y2 when they are non-null.
+def test_update_note_x2_null_clears_existing_rect(client, db_session):
     photo = _photo(db_session)
     note = _note(db_session, photo.id, x=0.1, y=0.2, x2=0.7, y2=0.8)
     resp = client.put(f"/notes/{note.id}", json={"x2": None, "y2": None})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["x2"] == 0.7
-    assert data["y2"] == 0.8
+    assert data["x2"] is None
+    assert data["y2"] is None

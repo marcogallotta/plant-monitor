@@ -343,14 +343,12 @@ def test_import_duplicate_is_skipped(patched_scan, client):
 
     client.post("/camera-import/import", json={"file_ids": [file_id]})
 
-    # Rescan so cache still valid, try import again
-    _do_scan(client)
-    file_id2 = next(c["id"] for c in _do_scan(client) if False) if False else file_id
-
     r = client.post("/camera-import/import", json={"file_ids": [file_id]})
     data = r.json()
-    # After first import, same file_id is still in cache but DB now has a match
-    assert data["skipped"] or data["failed"]  # either skipped (duplicate) or failed (stale id)
+    assert len(data["skipped"]) == 1
+    assert data["skipped"][0]["reason"] == "already_imported"
+    assert data["skipped"][0]["original_filename"] == "IMG_001.JPG"
+    assert data["created"] == [] and data["failed"] == []
 
 
 def test_import_stale_file_id_returns_failed(client):
@@ -383,6 +381,14 @@ def test_import_raw_no_embedded_jpeg_returns_failed(patched_scan, client):
     data = r.json()
     assert len(data["failed"]) == 1
     assert data["failed"][0]["reason"] == "raw_preview_not_found"
+
+
+def test_import_invalid_rotation_returns_422(patched_scan, client):
+    content = b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9"
+    _write(patched_scan, "IMG_001.JPG", content)
+    file_id = _do_scan(client)[0]["id"]
+    r = client.post("/camera-import/import", json={"file_ids": [file_id], "rotations": {file_id: 45}})
+    assert r.status_code == 422
 
 
 def test_import_card_filename_rollover_not_duplicate(patched_scan, client, db_session):

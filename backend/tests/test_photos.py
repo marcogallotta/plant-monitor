@@ -140,3 +140,7 @@ def test_missing_filename_returns_422(client):
 def test_metadata_filename_mismatch_returns_422(client):
     meta = {"captured_at": "2026-05-26T10:30:00Z", "filename": "2026-05-26T110000Z.jpg"}
     assert _upload(client, meta=meta).status_code == 422
+
+
+def test_invalid_captured_at_returns_422(client):
+    assert _upload(client, meta={"captured_at": "not-a-date", "filename": f"{VALID_STEM}.jpg"}).status_code == 422
