@@ -70,6 +70,10 @@ beforeEach(async () => {
   document.getElementById('filter-photo-type').value = '';
   document.getElementById('filter-location').value = '';
   document.getElementById('filter-unit').value = '';
+  document.getElementById('flicker-view').classList.remove('visible');
+  document.getElementById('img-a').style.transform = '';
+  document.getElementById('img-b').style.transform = '';
+  document.getElementById('flicker-img').style.transform = '';
   vi.useFakeTimers();
 });
 
@@ -183,5 +187,60 @@ describe('stopAuto', () => {
   it('resets btn-auto text', () => {
     stopAuto();
     expect(document.getElementById('btn-auto').textContent).toBe('Auto flicker');
+  });
+});
+
+// ── rotation in compare / flicker ─────────────────────────
+
+const ROTATED_PHOTOS = [
+  {id: 3, url: '/photos/c.jpg', filename: 'c.jpg', captured_at: '2026-01-03T10:00:00Z', rotation: 90,  growing_units: []},
+  {id: 4, url: '/photos/d.jpg', filename: 'd.jpg', captured_at: '2026-01-04T10:00:00Z', rotation: 270, growing_units: []},
+];
+
+describe('compare slot rotation', () => {
+  it('applies rotation transform to img-a when selecting a rotated photo', () => {
+    state.allPhotos = ROTATED_PHOTOS;
+    const e = {stopPropagation: vi.fn()};
+    selectA(e, 0);
+    expect(document.getElementById('img-a').style.transform).toBe('rotate(90deg)');
+  });
+
+  it('applies rotation transform to img-b when selecting a rotated photo', () => {
+    state.allPhotos = ROTATED_PHOTOS;
+    const e = {stopPropagation: vi.fn()};
+    selectB(e, 1);
+    expect(document.getElementById('img-b').style.transform).toBe('rotate(270deg)');
+  });
+
+  it('uses rotate(0deg) for a photo with rotation=0', () => {
+    state.allPhotos = PHOTOS;
+    const e = {stopPropagation: vi.fn()};
+    selectA(e, 0);
+    expect(document.getElementById('img-a').style.transform).toBe('rotate(0deg)');
+  });
+
+  it('uses rotate(0deg) for a photo with no rotation field', () => {
+    const noRot = [{id: 5, url: '/photos/e.jpg', filename: 'e.jpg', captured_at: '2026-01-05T10:00:00Z', growing_units: []}];
+    state.allPhotos = noRot;
+    const e = {stopPropagation: vi.fn()};
+    selectA(e, 0);
+    expect(document.getElementById('img-a').style.transform).toBe('rotate(0deg)');
+  });
+});
+
+describe('flicker frame rotation', () => {
+  it('applies rotation of the shown photo to flicker-img', () => {
+    state.photoA = ROTATED_PHOTOS[0]; // rotation 90
+    state.photoB = ROTATED_PHOTOS[1]; // rotation 270
+    flickerToggle(); // shows A
+    expect(document.getElementById('flicker-img').style.transform).toBe('rotate(90deg)');
+  });
+
+  it('updates rotation when toggling to the other photo', () => {
+    state.photoA = ROTATED_PHOTOS[0]; // rotation 90
+    state.photoB = ROTATED_PHOTOS[1]; // rotation 270
+    flickerToggle(); // shows A (90)
+    flickerToggle(); // shows B (270)
+    expect(document.getElementById('flicker-img').style.transform).toBe('rotate(270deg)');
   });
 });
