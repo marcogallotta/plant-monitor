@@ -45,12 +45,20 @@ async function loadDropdownData() {
   populateSelect('new-event-units',     state.allUnits,     null);
 }
 
+function modalPrev() {
+  if (state.currentIndex > 0) showModalPhoto(state.currentIndex - 1);
+}
+
+function modalNext() {
+  if (state.currentIndex < state.allPhotos.length - 1) showModalPhoto(state.currentIndex + 1);
+}
+
 document.addEventListener('keydown', function(e) {
   const modalOpen = !document.getElementById('modal').classList.contains('hidden');
   if (e.key === 'Escape') { closeModal(); stopAuto(); }
   if (modalOpen) {
-    if (e.key === 'ArrowRight' && state.currentIndex < state.allPhotos.length - 1) showModalPhoto(state.currentIndex + 1);
-    if (e.key === 'ArrowLeft'  && state.currentIndex > 0)                    showModalPhoto(state.currentIndex - 1);
+    if (e.key === 'ArrowRight') modalNext();
+    if (e.key === 'ArrowLeft')  modalPrev();
   }
   if (e.key === 'f' || e.key === 'F') flickerToggle();
 });
@@ -64,6 +72,7 @@ loadDropdownData().then(loadPhotos);
 Object.assign(window, {
   applyFilter, clearFilter,
   openModal, closeModal, modalImgClick,
+  modalPrev, modalNext,
   selectA, selectB,
   rotatePhoto,
   handleLabelInput, handleLabelKeydown,

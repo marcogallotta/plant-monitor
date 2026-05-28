@@ -35,6 +35,8 @@ export function showModalPhoto(index) {
   document.getElementById('modal-img').src = p.url;
   document.getElementById('modal-caption').textContent =
     formatDate(p.captured_at) + ' — ' + p.filename;
+  document.getElementById('modal-prev').disabled = index === 0;
+  document.getElementById('modal-next').disabled = index === state.allPhotos.length - 1;
   showIdentityPanel(p);
   renderLabelSection(p);
   loadNotes();

@@ -38,6 +38,8 @@ beforeAll(async () => {
   document.body.innerHTML = `
     <div id="status"></div>
     <div id="modal" class="hidden">
+      <button id="modal-prev" disabled></button>
+      <button id="modal-next" disabled></button>
       <div id="modal-img-wrap">
         <img id="modal-img" src="">
         <div id="note-pins"></div>
@@ -166,6 +168,27 @@ describe('showModalPhoto', () => {
     document.getElementById('modal-event-status').textContent = 'Logged.';
     showModalPhoto(0);
     expect(document.getElementById('modal-event-status').textContent).toBe('');
+  });
+
+  it('disables modal-prev when at first photo', () => {
+    state.allPhotos = [PHOTO, PHOTO];
+    showModalPhoto(0);
+    expect(document.getElementById('modal-prev').disabled).toBe(true);
+    expect(document.getElementById('modal-next').disabled).toBe(false);
+  });
+
+  it('disables modal-next when at last photo', () => {
+    state.allPhotos = [PHOTO, PHOTO];
+    showModalPhoto(1);
+    expect(document.getElementById('modal-prev').disabled).toBe(false);
+    expect(document.getElementById('modal-next').disabled).toBe(true);
+  });
+
+  it('enables both buttons when in the middle', () => {
+    state.allPhotos = [PHOTO, PHOTO, PHOTO];
+    showModalPhoto(1);
+    expect(document.getElementById('modal-prev').disabled).toBe(false);
+    expect(document.getElementById('modal-next').disabled).toBe(false);
   });
 });
 

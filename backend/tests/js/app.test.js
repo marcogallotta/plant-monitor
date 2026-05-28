@@ -67,6 +67,7 @@ describe('window exports', () => {
   const expected = [
     'applyFilter', 'clearFilter',
     'openModal', 'closeModal', 'modalImgClick',
+    'modalPrev', 'modalNext',
     'selectA', 'selectB',
     'rotatePhoto',
     'handleLabelInput', 'handleLabelKeydown',
