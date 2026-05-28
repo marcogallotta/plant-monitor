@@ -35,6 +35,33 @@ def _parse_iso8601(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+def _filtered_photo_query(
+    db: Session,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    source: Optional[str] = None,
+    photo_type: Optional[str] = None,
+    location_id: Optional[int] = None,
+    growing_unit_id: Optional[int] = None,
+):
+    q = db.query(Photo).order_by(Photo.captured_at)
+    if start is not None:
+        q = q.filter(Photo.captured_at >= start)
+    if end is not None:
+        q = q.filter(Photo.captured_at <= end)
+    if source is not None:
+        q = q.filter(Photo.source == source)
+    if photo_type is not None:
+        q = q.filter(Photo.photo_type == photo_type)
+    if location_id is not None:
+        q = q.filter(Photo.location_id == location_id)
+    if growing_unit_id is not None:
+        q = q.join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id).filter(
+            PhotoGrowingUnit.growing_unit_id == growing_unit_id
+        )
+    return q
+
+
 def _location_name(location_id: Optional[int], db: Session) -> Optional[str]:
     if not location_id:
         return None
@@ -418,21 +445,7 @@ def list_photos(
     growing_unit_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Photo).order_by(Photo.captured_at)
-    if start is not None:
-        q = q.filter(Photo.captured_at >= start)
-    if end is not None:
-        q = q.filter(Photo.captured_at <= end)
-    if source is not None:
-        q = q.filter(Photo.source == source)
-    if photo_type is not None:
-        q = q.filter(Photo.photo_type == photo_type)
-    if location_id is not None:
-        q = q.filter(Photo.location_id == location_id)
-    if growing_unit_id is not None:
-        q = q.join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id).filter(
-            PhotoGrowingUnit.growing_unit_id == growing_unit_id
-        )
+    q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
     return [_photo_out(p, db) for p in q.all()]
 
 
@@ -885,21 +898,7 @@ def assistant_list_photos(
     growing_unit_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Photo).order_by(Photo.captured_at)
-    if start is not None:
-        q = q.filter(Photo.captured_at >= start)
-    if end is not None:
-        q = q.filter(Photo.captured_at <= end)
-    if source is not None:
-        q = q.filter(Photo.source == source)
-    if photo_type is not None:
-        q = q.filter(Photo.photo_type == photo_type)
-    if location_id is not None:
-        q = q.filter(Photo.location_id == location_id)
-    if growing_unit_id is not None:
-        q = q.join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id).filter(
-            PhotoGrowingUnit.growing_unit_id == growing_unit_id
-        )
+    q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
     return [_photo_out(p, db) for p in q.all()]
 
 
