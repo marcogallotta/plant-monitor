@@ -119,6 +119,7 @@ export async function handleSdScan() {
       alreadyImported: c.already_imported,
       sessionBreak:    false,
       mode:            'backend',
+      rotation:        0,
     };
   });
 
@@ -187,6 +188,7 @@ export async function handleSdFolderInput(event) {
       tsBadge:     null,
       sessionBreak: false,
       mode:        'browser',
+      rotation:    0,
     };
   });
 
@@ -262,7 +264,21 @@ function sdMakeThumb(i) {
   var check = document.createElement('div');
   check.className = 'sd-thumb-check';
 
+  var rotBtns = document.createElement('div');
+  rotBtns.className = 'sd-rot-btns';
+  var rotL = document.createElement('button');
+  rotL.textContent = '↺';
+  rotL.title = 'Rotate left';
+  rotL.addEventListener('click', function(e) { e.stopPropagation(); sdRotate(i, -90); });
+  var rotR = document.createElement('button');
+  rotR.textContent = '↻';
+  rotR.title = 'Rotate right';
+  rotR.addEventListener('click', function(e) { e.stopPropagation(); sdRotate(i, 90); });
+  rotBtns.appendChild(rotL);
+  rotBtns.appendChild(rotR);
+
   wrap.appendChild(img);
+  wrap.appendChild(rotBtns);
   wrap.appendChild(caption);
   wrap.appendChild(check);
   return wrap;
@@ -335,6 +351,15 @@ function sdToggle(i) {
   var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
   if (wrap) wrap.className = 'sd-thumb-wrap' + (sdFiles[i].selected ? ' selected' : '');
   sdUpdateCount();
+}
+
+function sdRotate(i, delta) {
+  sdFiles[i].rotation = ((sdFiles[i].rotation || 0) + delta + 360) % 360;
+  var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+  if (wrap) {
+    var img = wrap.querySelector('img');
+    if (img) img.style.transform = sdFiles[i].rotation ? 'rotate(' + sdFiles[i].rotation + 'deg)' : '';
+  }
 }
 
 function sdUpdateCount() {
@@ -447,15 +472,17 @@ export async function sdUploadSelected() {
 }
 
 async function sdUploadBackend(queue, btn, status) {
-  var ptype   = document.getElementById('sd-photo-type').value;
-  var fileIds = queue.map(function(q) { return q.entry.fileId; });
+  var ptype     = document.getElementById('sd-photo-type').value;
+  var fileIds   = queue.map(function(q) { return q.entry.fileId; });
+  var rotations = {};
+  queue.forEach(function(q) { if (q.entry.rotation) rotations[q.entry.fileId] = q.entry.rotation; });
 
   queue.forEach(function(q) { sdSetThumbStatus(q.idx, 'uploading'); });
   status.textContent = 'Importing…';
 
   var result;
   try {
-    result = await importCameraPhotos({file_ids: fileIds, photo_type: ptype || null});
+    result = await importCameraPhotos({file_ids: fileIds, photo_type: ptype || null, rotations: rotations});
   } catch(e) {
     status.textContent = 'Import failed: ' + e.message;
     queue.forEach(function(q) { sdSetThumbStatus(q.idx, 'error', e.message); });
@@ -525,7 +552,7 @@ async function sdUploadBrowser(queue, btn, status) {
 
     var ts    = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
     var ptype = document.getElementById('sd-photo-type').value;
-    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype);
+    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype, entry.rotation || 0);
 
     try {
       await uploadPhoto(fd);

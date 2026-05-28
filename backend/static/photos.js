@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getPhotos } from './api.js';
+import { getPhotos, updatePhoto } from './api.js';
 import { setStatus, formatDate, rotTransform } from './utils.js';
 import { tlInit } from './timelapse.js';
 
@@ -44,6 +44,10 @@ function renderGrid(photos) {
       '<div class="card-ab">' +
         '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
         '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
+      '</div>' +
+      '<div class="card-rot">' +
+        '<button onclick="gridRotate(event,' + p.id + ',-90)">↺</button>' +
+        '<button onclick="gridRotate(event,' + p.id + ',90)">↻</button>' +
       '</div>' +
       '<div class="caption">' + ts + '</div>';
     grid.appendChild(card);
@@ -147,6 +151,26 @@ export function stopAuto() {
   if (state.flickerTimer) { clearInterval(state.flickerTimer); state.flickerTimer = null; }
   document.getElementById('btn-auto').classList.remove('active');
   document.getElementById('btn-auto').textContent = 'Auto flicker';
+}
+
+export async function gridRotate(e, photoId, delta) {
+  e.stopPropagation();
+  const photo = state.allPhotos.find(p => p.id === photoId);
+  if (!photo) return;
+  const newRot = ((photo.rotation || 0) + delta + 360) % 360;
+  photo.rotation = newRot;
+  // Update the img transform in-place without re-rendering the whole grid
+  const card = document.querySelector('.photo-card[data-id="' + photoId + '"]');
+  if (card) {
+    const img = card.querySelector('img');
+    if (img) img.style.transform = newRot ? 'rotate(' + newRot + 'deg)' : '';
+  }
+  try {
+    await updatePhoto(photoId, {rotation: newRot});
+  } catch(err) {
+    console.warn('gridRotate failed', err);
+    photo.rotation = ((newRot - delta) + 360) % 360;
+  }
 }
 
 function flickerFps() {

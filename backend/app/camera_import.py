@@ -47,6 +47,7 @@ def save_photo(
     location_id: Optional[int] = None,
     growing_unit_ids: Optional[list[int]] = None,
     note_text: Optional[str] = None,
+    rotation: int = 0,
 ) -> Photo:
     """Write image bytes to disk and create a Photo DB row. Commits the transaction."""
     stem = uuid.uuid4().hex
@@ -71,6 +72,7 @@ def save_photo(
         original_filename=original_filename,
         original_size_bytes=original_size_bytes,
         location_id=location_id,
+        rotation=rotation % 360,
     )
     db.add(photo)
     db.flush()
@@ -313,6 +315,7 @@ class ImportRequest(BaseModel):
     location_id: Optional[int] = None
     growing_unit_ids: list[int] = Field(default_factory=list)
     note_text: Optional[str] = None
+    rotations: dict[str, int] = Field(default_factory=dict)  # file_id -> degrees
 
 
 @router.post("/import")
@@ -372,6 +375,7 @@ def import_photos(body: ImportRequest, db: Session = Depends(get_db)):
                 location_id=body.location_id,
                 growing_unit_ids=body.growing_unit_ids,
                 note_text=body.note_text,
+                rotation=body.rotations.get(file_id, 0),
             )
             created.append({
                 "file_id": file_id,

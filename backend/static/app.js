@@ -29,6 +29,7 @@ import {
   applyFilter, clearFilter,
   selectA, selectB,
   flickerToggle, flickerAuto, stopAuto,
+  gridRotate,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -77,7 +78,7 @@ Object.assign(window, {
   openModal, closeModal, modalImgClick,
   modalPrev, modalNext,
   selectA, selectB,
-  rotatePhoto,
+  rotatePhoto, gridRotate,
   handleLabelInput, handleLabelKeydown,
   flickerToggle, flickerAuto,
   tlPrev, tlPlayPause, tlNext,

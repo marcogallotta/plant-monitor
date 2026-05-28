@@ -467,6 +467,7 @@ async def upload_manual_photo(
     location_id: Optional[int] = Form(None),
     growing_unit_ids: Optional[List[int]] = Form(None),
     note_text: Optional[str] = Form(None),
+    rotation: int = Form(0),
     db: Session = Depends(get_db),
 ):
     if image.content_type not in {"image/jpeg", "image/jpg"}:
@@ -497,6 +498,7 @@ async def upload_manual_photo(
         location_id=location_id,
         growing_unit_ids=list(growing_unit_ids) if growing_unit_ids else None,
         note_text=note_text,
+        rotation=rotation,
     )
     return _photo_out(photo, db)
 

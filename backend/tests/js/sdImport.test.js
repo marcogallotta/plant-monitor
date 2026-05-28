@@ -287,7 +287,7 @@ describe('sdUploadSelected', () => {
     sdSelectAllVisible();
     await sdUploadSelected();
     expect(core.buildUploadFormData).toHaveBeenCalledWith(
-      expect.anything(), expect.any(String), expect.any(String), 'overview',
+      expect.anything(), expect.any(String), expect.any(String), 'overview', expect.any(Number),
     );
   });
 
