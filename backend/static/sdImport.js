@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { uploadPhoto, scanCameraImport, importCameraPhotos } from './api.js';
+import { uploadPhoto, scanCameraImport, importCameraPhotos, getThumbnailBatch } from './api.js';
 import {
   isImportablePhoto, isRawPhoto, sortCameraFiles, detectSessionBoundary,
   detectAllBoundaries, scanForJpeg, deriveTimestamp, buildUploadFormData,
@@ -47,8 +47,8 @@ function _revealBatch(idx) {
   // Mark separator at start of this batch
   sdFiles[b.start].sessionBreak = true;
   sdRevealedBatchCount = idx + 1;
-  // Render all files in this batch
-  sdAppendThumbs(b.end - sdShown);
+  // Render only the first page; load more handles the rest
+  sdAppendThumbs(Math.min(SD_PAGE, b.end - sdShown));
   _updateBatchControls();
 }
 
@@ -217,8 +217,27 @@ function sdAppendThumbs(count) {
   sdShown = end;
   sdUpdateLoadMore();
   sdUpdateCount();
-  sdExtractRawThumbs(from, end);
-  sdParseExif(from, end);
+  if (sdMode === 'backend') {
+    sdBatchLoadThumbs(from, end);
+  } else {
+    sdExtractRawThumbs(from, end);
+    sdParseExif(from, end);
+  }
+}
+
+async function sdBatchLoadThumbs(from, to) {
+  var fileIds = [];
+  for (var i = from; i < to; i++) {
+    if (sdFiles[i] && sdFiles[i].mode === 'backend') fileIds.push(sdFiles[i].fileId);
+  }
+  if (fileIds.length === 0) return;
+  try {
+    var data = await getThumbnailBatch(fileIds);
+    for (var fid in data.thumbs) {
+      var img = document.querySelector('img[data-fileid="' + fid + '"]');
+      if (img) img.src = 'data:image/jpeg;base64,' + data.thumbs[fid];
+    }
+  } catch(e) { console.warn('batch thumb load failed', e); }
 }
 
 function sdMakeSeparator() {
@@ -238,7 +257,10 @@ function sdMakeThumb(i) {
   var img = document.createElement('img');
   img.alt     = entry.filename;
   img.loading = 'lazy';
-  if (entry.thumbUrl) {
+  if (entry.mode === 'backend') {
+    img.dataset.fileid = entry.fileId;
+    // src filled in by sdBatchLoadThumbs after render
+  } else if (entry.thumbUrl) {
     img.src = entry.thumbUrl;
   } else {
     img.style.display = 'none';

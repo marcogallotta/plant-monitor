@@ -1,14 +1,18 @@
+import base64
 import hashlib
 import hmac
+import io
 import os
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
+from PIL import Image
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -30,6 +34,11 @@ _CACHE_TTL = int(os.environ.get("IMPORT_SCAN_CACHE_TTL_SECONDS", "600"))
 _cache: dict[str, dict] = {}
 _cache_built_at: float = 0.0
 _HMAC_SECRET = os.urandom(32)
+
+# Thumbnail cache: file_id -> downscaled JPEG bytes
+_thumb_cache: dict[str, bytes] = {}
+_THUMB_MAX_PX = 160  # matches the ~120-160px display size in the SD grid
+_thumb_executor = ThreadPoolExecutor(max_workers=4)
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +275,7 @@ def scan(
 
     if time.monotonic() - _cache_built_at > _CACHE_TTL:
         _cache = {}
+        _thumb_cache.clear()
 
     rows = (
         db.query(Photo.original_filename, Photo.original_size_bytes)
@@ -283,30 +293,61 @@ def scan(
     return result
 
 
+def _make_thumb(file_id: str) -> Optional[bytes]:
+    """Extract, downscale, and cache a thumbnail. Returns None on failure. Thread-safe."""
+    if file_id in _thumb_cache:
+        return _thumb_cache[file_id]
+    entry = lookup_cached_entry(file_id)
+    if entry is None:
+        return None
+    try:
+        raw = entry["path"].read_bytes()
+    except OSError:
+        return None
+    jpeg = _extract_embedded_jpeg(raw) if entry["is_raw"] else raw
+    if not jpeg:
+        return None
+    try:
+        img = Image.open(io.BytesIO(jpeg))
+        img.thumbnail((_THUMB_MAX_PX, _THUMB_MAX_PX), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75, optimize=True)
+        result = buf.getvalue()
+    except Exception:
+        result = jpeg  # fall back to raw if Pillow fails
+    _thumb_cache[file_id] = result
+    return result
+
+
 @router.get("/thumbs/{file_id}")
 def get_thumbnail(file_id: str):
     entry = lookup_cached_entry(file_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="file not found or scan expired")
-
-    try:
-        data = entry["path"].read_bytes()
-    except OSError:
-        raise HTTPException(status_code=404, detail="file not found or scan expired")
-
-    if entry["is_raw"]:
-        jpeg = _extract_embedded_jpeg(data)
-        if jpeg is None:
+    content = _make_thumb(file_id)
+    if content is None:
+        if entry["is_raw"]:
             raise HTTPException(status_code=422, detail="no embedded JPEG preview in RAW file")
-        content = jpeg
-    else:
-        content = data
+        raise HTTPException(status_code=404, detail="file not found or scan expired")
+    return Response(content=content, media_type="image/jpeg",
+                    headers={"Cache-Control": "private, max-age=300"})
 
-    return Response(
-        content=content,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "private, max-age=300"},
-    )
+
+class BatchThumbRequest(BaseModel):
+    file_ids: list[str]
+
+
+@router.post("/thumbs/batch")
+async def get_thumbnails_batch(body: BatchThumbRequest):
+    import asyncio
+    loop = asyncio.get_event_loop()
+    futures = [loop.run_in_executor(_thumb_executor, _make_thumb, fid) for fid in body.file_ids]
+    results = await asyncio.gather(*futures)
+    thumbs = {}
+    for fid, data in zip(body.file_ids, results):
+        if data is not None:
+            thumbs[fid] = base64.b64encode(data).decode()
+    return {"thumbs": thumbs}
 
 
 class ImportRequest(BaseModel):
