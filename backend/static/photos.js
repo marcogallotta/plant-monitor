@@ -157,19 +157,22 @@ export async function gridRotate(e, photoId, delta) {
   e.stopPropagation();
   const photo = state.allPhotos.find(p => p.id === photoId);
   if (!photo) return;
-  const newRot = ((photo.rotation || 0) + delta + 360) % 360;
+  const oldRot = photo.rotation || 0;
+  const newRot = (oldRot + delta + 360) % 360;
   photo.rotation = newRot;
   // Update the img transform in-place without re-rendering the whole grid
   const card = document.querySelector('.photo-card[data-id="' + photoId + '"]');
+  let img = null;
   if (card) {
-    const img = card.querySelector('img');
+    img = card.querySelector('img');
     if (img) img.style.transform = newRot ? 'rotate(' + newRot + 'deg)' : '';
   }
   try {
     await updatePhoto(photoId, {rotation: newRot});
   } catch(err) {
     console.warn('gridRotate failed', err);
-    photo.rotation = ((newRot - delta) + 360) % 360;
+    photo.rotation = oldRot;
+    if (img) img.style.transform = oldRot ? 'rotate(' + oldRot + 'deg)' : '';
   }
 }
 

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import io
 import os
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -33,7 +34,10 @@ _CACHE_TTL = int(os.environ.get("IMPORT_SCAN_CACHE_TTL_SECONDS", "600"))
 # In-process scan cache: file_id -> entry dict; populated by /scan, consumed by /thumbs and /import
 _cache: dict[str, dict] = {}
 _cache_built_at: float = 0.0
-_HMAC_SECRET = os.urandom(32)
+_hmac_secret_env = os.environ.get("CAMERA_IMPORT_HMAC_SECRET", "")
+_HMAC_SECRET = _hmac_secret_env.encode() if _hmac_secret_env else os.urandom(32)
+
+_scan_lock = threading.Lock()
 
 # Thumbnail cache: file_id -> downscaled JPEG bytes
 _thumb_cache: dict[str, bytes] = {}
@@ -271,12 +275,6 @@ def scan(
     include_imported: bool = False,
     db: Session = Depends(get_db),
 ):
-    global _cache, _cache_built_at
-
-    if time.monotonic() - _cache_built_at > _CACHE_TTL:
-        _cache = {}
-        _thumb_cache.clear()
-
     rows = (
         db.query(Photo.original_filename, Photo.original_size_bytes)
         .filter(Photo.original_filename.isnot(None))
@@ -285,7 +283,10 @@ def scan(
     exact_imported = {(name, size) for name, size in rows if size is not None}
     name_imported = {name for name, size in rows if size is None}
 
-    result = _build_cache(_SCAN_PATH, exact_imported, name_imported)
+    with _scan_lock:
+        if time.monotonic() - _cache_built_at > _CACHE_TTL:
+            _thumb_cache.clear()
+        result = _build_cache(_SCAN_PATH, exact_imported, name_imported)
 
     if not include_imported:
         result = {**result, "candidates": [c for c in result["candidates"] if not c["already_imported"]]}
@@ -340,7 +341,7 @@ class BatchThumbRequest(BaseModel):
 @router.post("/thumbs/batch")
 async def get_thumbnails_batch(body: BatchThumbRequest):
     import asyncio
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     futures = [loop.run_in_executor(_thumb_executor, _make_thumb, fid) for fid in body.file_ids]
     results = await asyncio.gather(*futures)
     thumbs = {}

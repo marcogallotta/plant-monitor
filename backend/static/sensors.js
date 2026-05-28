@@ -19,7 +19,8 @@ export async function loadSensorStrip() {
       if (s.stale) item.title = 'Stale reading';
       strip.appendChild(item);
     });
-  } catch (_) {
+  } catch (err) {
+    console.warn('loadSensorStrip failed', err);
     strip.innerHTML = '';
   }
 }
@@ -56,7 +57,8 @@ export async function loadPhotoSensorContext(photoId) {
       });
       container.appendChild(block);
     });
-  } catch (_) {
+  } catch (err) {
+    console.warn('loadPhotoSensorContext failed', err);
     container.innerHTML = '';
   }
 }

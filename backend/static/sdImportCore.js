@@ -89,6 +89,6 @@ export function buildUploadFormData(uploadFile, originalName, capturedAt, photoT
   fd.append('image', uploadFile, originalName);
   fd.append('captured_at', capturedAt);
   if (photoType) fd.append('photo_type', photoType);
-  if (rotation)  fd.append('rotation', rotation);
+  if (rotation != null) fd.append('rotation', rotation);
   return fd;
 }

@@ -140,10 +140,13 @@ export async function handleSdScan() {
   }
 
   document.getElementById('sd-grid-controls').style.display = 'flex';
-  sdRevealedBatchCount = 1;
   sdAppendThumbs(sdBatches.length > 1 ? b0count : SD_PAGE);
-  if (sdBatches.length > 1) _revealBatch(1);
-  else _updateBatchControls();
+  if (sdBatches.length > 1) {
+    _revealBatch(1);
+  } else {
+    sdRevealedBatchCount = 1;
+    _updateBatchControls();
+  }
 }
 
 export async function handleSdFolderInput(event) {
@@ -200,10 +203,13 @@ export async function handleSdFolderInput(event) {
   var skipLabel  = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
   status.textContent = sdFiles.length + ' photo' + (sdFiles.length === 1 ? '' : 's') + batchLabel + skipLabel;
   document.getElementById('sd-grid-controls').style.display = 'flex';
-  sdRevealedBatchCount = 1;
   sdAppendThumbs(sdBatches.length > 1 ? b0count : SD_PAGE);
-  if (sdBatches.length > 1) _revealBatch(1);
-  else _updateBatchControls();
+  if (sdBatches.length > 1) {
+    _revealBatch(1);
+  } else {
+    sdRevealedBatchCount = 1;
+    _updateBatchControls();
+  }
 }
 
 function sdAppendThumbs(count) {
@@ -497,7 +503,7 @@ async function sdUploadBackend(queue, btn, status) {
   var ptype     = document.getElementById('sd-photo-type').value;
   var fileIds   = queue.map(function(q) { return q.entry.fileId; });
   var rotations = {};
-  queue.forEach(function(q) { if (q.entry.rotation) rotations[q.entry.fileId] = q.entry.rotation; });
+  queue.forEach(function(q) { if (q.entry.rotation != null) rotations[q.entry.fileId] = q.entry.rotation; });
 
   queue.forEach(function(q) { sdSetThumbStatus(q.idx, 'uploading'); });
   status.textContent = 'Importing…';
