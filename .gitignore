@@ -7,4 +7,6 @@ CLAUDE.md
 data/
 pi/config.json
 pi/capture/
+backend/.coverage
+backend/coverage/
 backend/node_modules/
