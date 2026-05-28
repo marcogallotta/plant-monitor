@@ -206,7 +206,7 @@ def test_assistant_photo_context_includes_linked_events(client, db_session):
     db_session.commit()
     data = client.get(f"/assistant/photos/{photo.id}/context").json()
     assert len(data["events"]) == 1
-    assert data["events"][0]["event_type"] == "watering"
+    assert data["events"][0]["event_type"] == "watered"
 
 
 def test_assistant_photo_context_not_found(client):
@@ -304,7 +304,7 @@ def test_assistant_growing_unit_context_includes_events(client, db_session):
     db_session.commit()
     data = client.get(f"/assistant/growing-units/{unit.id}/context").json()
     assert len(data["events"]) == 1
-    assert data["events"][0]["event_type"] == "watering"
+    assert data["events"][0]["event_type"] == "watered"
 
 
 def test_assistant_growing_unit_context_not_found(client):
@@ -334,7 +334,7 @@ def test_assistant_events_returns_events(client, db_session):
     _event(db_session)
     data = client.get("/assistant/events").json()
     assert len(data) == 1
-    assert data[0]["event_type"] == "watering"
+    assert data[0]["event_type"] == "watered"
 
 
 # --- GET /assistant/unclassified ---
