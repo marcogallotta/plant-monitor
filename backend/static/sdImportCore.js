@@ -26,6 +26,17 @@ export function detectSessionBoundary(timestamps, timeGap = SD_TIME_GAP) {
   return -1;
 }
 
+// Returns all boundary indices (start of each older session), newest-first order.
+export function detectAllBoundaries(timestamps, timeGap = SD_TIME_GAP) {
+  const boundaries = [];
+  for (let i = 0; i < timestamps.length - 1; i++) {
+    const tA = timestamps[i];
+    const tB = timestamps[i + 1];
+    if (tA > 0 && tB > 0 && (tA - tB) > timeGap) boundaries.push(i + 1);
+  }
+  return boundaries;
+}
+
 // Scan a Uint8Array for the largest complete embedded JPEG (FF D8 FF ... FF D9).
 // Returns {jpeg: Uint8Array|null, truncated: bool}.
 // truncated=true means a JPEG started but its FFD9 end marker wasn't found.

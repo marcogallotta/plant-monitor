@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { uploadPhoto, scanCameraImport, importCameraPhotos } from './api.js';
 import {
   isImportablePhoto, isRawPhoto, sortCameraFiles, detectSessionBoundary,
-  scanForJpeg, deriveTimestamp, buildUploadFormData,
+  detectAllBoundaries, scanForJpeg, deriveTimestamp, buildUploadFormData,
 } from './sdImportCore.js';
 
 const SD_PAGE = 20;
@@ -12,6 +12,54 @@ let sdFiles = [];
 let sdShown = 0;
 let sdMode  = 'browser'; // 'browser' | 'backend'
 let _loadPhotos = null;
+
+// Session batch state — [{start, end}], newest first
+let sdBatches = [];
+let sdSelectedBatchCount = 0; // leading batches that are selected
+let sdRevealedBatchCount = 0; // leading batches that are rendered
+
+function _buildBatches(n, boundaries) {
+  var starts = [0].concat(boundaries).concat([n]);
+  return starts.slice(0, -1).map(function(s, i) { return {start: s, end: starts[i + 1]}; });
+}
+
+function _timestamps(files) {
+  return files.map(function(e) { return e.mtimeMs || (e.file && e.file.lastModified) || 0; });
+}
+
+function _initBatches() {
+  var boundaries = detectAllBoundaries(_timestamps(sdFiles));
+  sdBatches = _buildBatches(sdFiles.length, boundaries);
+  sdSelectedBatchCount = 0;
+  sdRevealedBatchCount = 0;
+}
+
+function _autoSelectFirstBatch() {
+  if (sdBatches.length === 0) return;
+  var b = sdBatches[0];
+  for (var i = b.start; i < b.end; i++) sdFiles[i].selected = true;
+  sdSelectedBatchCount = 1;
+}
+
+function _revealBatch(idx) {
+  if (idx >= sdBatches.length) return;
+  var b = sdBatches[idx];
+  // Mark separator at start of this batch
+  sdFiles[b.start].sessionBreak = true;
+  sdRevealedBatchCount = idx + 1;
+  // Render all files in this batch
+  sdAppendThumbs(b.end - sdShown);
+  _updateBatchControls();
+}
+
+function _updateBatchControls() {
+  var hasOlder = sdRevealedBatchCount > sdSelectedBatchCount;
+  var hasMore  = sdRevealedBatchCount < sdBatches.length;
+  var addGroupBtn = document.getElementById('sd-add-group-btn');
+  var addMoreBtn  = document.getElementById('sd-add-more-btn');
+  if (addGroupBtn) addGroupBtn.style.display = hasOlder ? '' : 'none';
+  if (addMoreBtn)  addMoreBtn.style.display  = hasMore  ? '' : 'none';
+}
 
 export function initSdImport(loadPhotos) {
   _loadPhotos = loadPhotos;
@@ -74,13 +122,11 @@ export async function handleSdScan() {
     };
   });
 
-  var batchEnd = detectSessionBoundary(sdFiles.map(function(e) { return e.mtimeMs; }));
-  if (batchEnd > 0) {
-    sdFiles[batchEnd].sessionBreak = true;
-    for (var i = 0; i < batchEnd; i++) sdFiles[i].selected = true;
-  }
+  _initBatches();
+  _autoSelectFirstBatch();
 
-  var batchLabel = batchEnd > 0 ? ' — ' + batchEnd + ' in latest batch' : '';
+  var b0count = sdBatches.length > 0 ? sdBatches[0].end : sdFiles.length;
+  var batchLabel = sdBatches.length > 1 ? ' — ' + b0count + ' in latest batch' : '';
   var label = data.sources && data.sources[0] ? data.sources[0].label : 'card';
   status.textContent = label + ': ' + candidates.length + ' photo' + (candidates.length === 1 ? '' : 's') + batchLabel;
 
@@ -93,7 +139,10 @@ export async function handleSdScan() {
   }
 
   document.getElementById('sd-grid-controls').style.display = 'flex';
-  sdAppendThumbs(batchEnd > 0 ? batchEnd + 3 : SD_PAGE);
+  sdRevealedBatchCount = 1;
+  sdAppendThumbs(sdBatches.length > 1 ? b0count : SD_PAGE);
+  if (sdBatches.length > 1) _revealBatch(1);
+  else _updateBatchControls();
 }
 
 export async function handleSdFolderInput(event) {
@@ -141,17 +190,18 @@ export async function handleSdFolderInput(event) {
     };
   });
 
-  var batchEnd = detectSessionBoundary(sdFiles.map(function(e) { return e.file.lastModified; }));
-  if (batchEnd > 0) {
-    sdFiles[batchEnd].sessionBreak = true;
-    for (var i = 0; i < batchEnd; i++) sdFiles[i].selected = true;
-  }
+  _initBatches();
+  _autoSelectFirstBatch();
 
-  var batchLabel  = batchEnd > 0 ? ' — ' + batchEnd + ' in latest batch' : '';
-  var skipLabel   = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
+  var b0count = sdBatches.length > 0 ? sdBatches[0].end : sdFiles.length;
+  var batchLabel = sdBatches.length > 1 ? ' — ' + b0count + ' in latest batch' : '';
+  var skipLabel  = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
   status.textContent = sdFiles.length + ' photo' + (sdFiles.length === 1 ? '' : 's') + batchLabel + skipLabel;
   document.getElementById('sd-grid-controls').style.display = 'flex';
-  sdAppendThumbs(batchEnd > 0 ? batchEnd + 3 : SD_PAGE);
+  sdRevealedBatchCount = 1;
+  sdAppendThumbs(sdBatches.length > 1 ? b0count : SD_PAGE);
+  if (sdBatches.length > 1) _revealBatch(1);
+  else _updateBatchControls();
 }
 
 function sdAppendThumbs(count) {
@@ -312,6 +362,42 @@ function sdUpdateLoadMore() {
 }
 
 export function sdLoadMore() { sdAppendThumbs(SD_PAGE); }
+
+export function sdAddMore() {
+  if (sdRevealedBatchCount >= sdBatches.length) return;
+  _revealBatch(sdRevealedBatchCount);
+}
+
+export function sdAddGroup() {
+  if (sdRevealedBatchCount <= sdSelectedBatchCount) return;
+
+  // Select all revealed-but-unselected files and remove their separators from the DOM
+  for (var b = sdSelectedBatchCount; b < sdRevealedBatchCount; b++) {
+    var batch = sdBatches[b];
+    for (var i = batch.start; i < batch.end; i++) {
+      sdFiles[i].selected = true;
+      var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + i + '"]');
+      if (wrap) wrap.className = 'sd-thumb-wrap selected';
+    }
+    // Remove separator DOM node before the first thumb of this batch
+    var firstWrap = document.querySelector('.sd-thumb-wrap[data-idx="' + batch.start + '"]');
+    if (firstWrap) {
+      var prev = firstWrap.previousElementSibling;
+      if (prev && prev.classList.contains('sd-session-break')) prev.remove();
+    }
+    sdFiles[batch.start].sessionBreak = false;
+  }
+  sdSelectedBatchCount = sdRevealedBatchCount;
+
+  sdUpdateCount();
+
+  // Reveal next batch as the new "older" section
+  if (sdRevealedBatchCount < sdBatches.length) {
+    _revealBatch(sdRevealedBatchCount);
+  } else {
+    _updateBatchControls();
+  }
+}
 
 export function sdSelectAllVisible() {
   for (var i = 0; i < sdShown; i++) {

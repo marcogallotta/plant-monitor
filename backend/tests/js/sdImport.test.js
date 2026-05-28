@@ -13,6 +13,7 @@ vi.mock('@/sdImportCore.js', () => ({
   isRawPhoto:        vi.fn(name => /\.(arw|orf)$/i.test(name)),
   sortCameraFiles:   vi.fn(arr => [...arr].sort((a, b) => b.name.localeCompare(a.name))),
   detectSessionBoundary: vi.fn(() => -1),
+  detectAllBoundaries:   vi.fn(() => []),
   scanForJpeg:       vi.fn(() => ({ jpeg: null, truncated: false })),
   deriveTimestamp:   vi.fn(() => ({ iso: '2026-05-28T10:00:00.000Z', badge: 'ok' })),
   buildUploadFormData: vi.fn(() => new FormData()),
@@ -26,7 +27,7 @@ function makeEvent(files) {
   return { target: { files } };
 }
 
-let toggleSdPanel, handleSdFolderInput, handleSdScan, sdLoadMore, sdSelectAllVisible, sdDeselectAll, sdUploadSelected;
+let toggleSdPanel, handleSdFolderInput, handleSdScan, sdLoadMore, sdSelectAllVisible, sdDeselectAll, sdUploadSelected, sdAddGroup, sdAddMore;
 let core, api;
 
 beforeAll(async () => {
@@ -40,7 +41,10 @@ beforeAll(async () => {
     </div>
     <button id="sd-scan-btn">Scan camera/card</button>
     <span id="sd-folder-status"></span>
-    <div id="sd-grid-controls" style="display:none"></div>
+    <div id="sd-grid-controls" style="display:none">
+      <button id="sd-add-group-btn" style="display:none">Add group</button>
+      <button id="sd-add-more-btn" style="display:none">Show older</button>
+    </div>
     <div id="sd-load-more-row" style="display:none">
       <span id="sd-load-more-label"></span>
     </div>
@@ -57,7 +61,8 @@ beforeAll(async () => {
   api  = await import('@/api.js');
 
   ({ toggleSdPanel, handleSdFolderInput, handleSdScan, sdLoadMore,
-     sdSelectAllVisible, sdDeselectAll, sdUploadSelected } = await import('@/sdImport.js'));
+     sdSelectAllVisible, sdDeselectAll, sdUploadSelected,
+     sdAddGroup, sdAddMore } = await import('@/sdImport.js'));
 
   const { initSdImport } = await import('@/sdImport.js');
   initSdImport(mockLoadPhotos);
@@ -73,6 +78,7 @@ beforeEach(() => {
   vi.mocked(api.uploadPhoto).mockResolvedValue({});
   vi.mocked(api.scanCameraImport).mockResolvedValue({ candidates: [], already_imported_count: 0, sources: [], warnings: [] });
   vi.mocked(api.importCameraPhotos).mockResolvedValue({ created: [], skipped: [], failed: [] });
+  vi.mocked(core.detectAllBoundaries).mockReturnValue([]);
   document.getElementById('sd-folder-status').textContent = '';
   document.getElementById('sd-grid').innerHTML = '';
   document.getElementById('sd-grid-controls').style.display = 'none';
@@ -167,7 +173,7 @@ describe('handleSdFolderInput', () => {
   });
 
   it('auto-selects the batch and shows batch label when session boundary detected', async () => {
-    vi.mocked(core.detectSessionBoundary).mockReturnValue(1);
+    vi.mocked(core.detectAllBoundaries).mockReturnValue([1]);
     await handleSdFolderInput(makeEvent([
       makeFile('DSC001.jpg'), makeFile('DSC002.jpg'), makeFile('DSC003.jpg'),
     ]));
@@ -371,7 +377,7 @@ describe('handleSdScan', () => {
   });
 
   it('auto-selects latest batch using mtime_ms', async () => {
-    vi.mocked(core.detectSessionBoundary).mockReturnValue(1);
+    vi.mocked(core.detectAllBoundaries).mockReturnValue([1]);
     vi.mocked(api.scanCameraImport).mockResolvedValue({
       candidates: [makeCandidate('DSC001.JPG'), makeCandidate('DSC002.JPG'), makeCandidate('DSC003.JPG')],
       already_imported_count: 0, sources: [{label: 'CARD'}], warnings: [],

@@ -51,7 +51,8 @@ vi.mock('@/events.js', () => ({
 
 vi.mock('@/sdImport.js', () => ({
   initSdImport: vi.fn(),
-  toggleSdPanel: vi.fn(), handleSdFolderInput: vi.fn(),
+  toggleSdPanel: vi.fn(), handleSdFolderInput: vi.fn(), handleSdScan: vi.fn(),
+  sdAddGroup: vi.fn(), sdAddMore: vi.fn(),
   sdSelectAllVisible: vi.fn(), sdDeselectAll: vi.fn(),
   sdLoadMore: vi.fn(), sdUploadSelected: mockFn(),
 }));
@@ -78,7 +79,7 @@ describe('window exports', () => {
     'toggleSdPanel', 'sdSelectAllVisible', 'sdDeselectAll', 'sdLoadMore', 'sdUploadSelected',
     'toggleManagePanel', 'createLocation', 'createUnit',
     'toggleEventsPanel', 'logEvent',
-    'handleSdFolderInput',
+    'handleSdFolderInput', 'handleSdScan', 'sdAddGroup', 'sdAddMore',
     'identityUpdate',
     'toggleModalLogEvent', 'logModalEvent',
   ];

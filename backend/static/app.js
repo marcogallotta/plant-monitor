@@ -4,6 +4,7 @@ import {
   initSdImport,
   toggleSdPanel, handleSdFolderInput, handleSdScan,
   sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
+  sdAddGroup, sdAddMore,
 } from './sdImport.js';
 import {
   initEvents,
@@ -85,7 +86,7 @@ Object.assign(window, {
   toggleSdPanel, sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
   toggleManagePanel, createLocation, createUnit,
   toggleEventsPanel, logEvent,
-  handleSdFolderInput, handleSdScan,
+  handleSdFolderInput, handleSdScan, sdAddGroup, sdAddMore,
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
 });
