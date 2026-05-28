@@ -383,6 +383,39 @@ def test_import_raw_no_embedded_jpeg_returns_failed(patched_scan, client):
     assert data["failed"][0]["reason"] == "raw_preview_not_found"
 
 
+def test_save_photo_bad_location_id_does_not_orphan_file(db_session, isolated_photos_dir):
+    from datetime import datetime, timezone
+    import pytest
+    from app.camera_import import save_photo
+    with pytest.raises(Exception):
+        save_photo(
+            db_session,
+            b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9",
+            "IMG_001.JPG",
+            100,
+            datetime.now(timezone.utc),
+            "sd",
+            location_id=99999,
+        )
+    assert list(isolated_photos_dir.glob("*.jpg")) == []
+
+
+def test_import_bad_location_id_returns_404(patched_scan, client):
+    content = b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9"
+    _write(patched_scan, "IMG_001.JPG", content)
+    file_id = _do_scan(client)[0]["id"]
+    r = client.post("/camera-import/import", json={"file_ids": [file_id], "location_id": 99999})
+    assert r.status_code == 404
+
+
+def test_import_bad_growing_unit_id_returns_404(patched_scan, client):
+    content = b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9"
+    _write(patched_scan, "IMG_001.JPG", content)
+    file_id = _do_scan(client)[0]["id"]
+    r = client.post("/camera-import/import", json={"file_ids": [file_id], "growing_unit_ids": [99999]})
+    assert r.status_code == 404
+
+
 def test_import_invalid_rotation_returns_422(patched_scan, client):
     content = b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9"
     _write(patched_scan, "IMG_001.JPG", content)

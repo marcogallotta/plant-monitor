@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Photo, PhotoGrowingUnit, PhotoNote
+from .models import GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote
 
 router = APIRouter(prefix="/camera-import")
 
@@ -90,16 +90,16 @@ def save_photo(
         location_id=location_id,
         rotation=rotation,
     )
-    db.add(photo)
-    db.flush()
-
-    for uid in (growing_unit_ids or []):
-        db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=uid))
-
-    if note_text:
-        db.add(PhotoNote(photo_id=photo.id, note_text=note_text, x=0.0, y=0.0))
-
     try:
+        db.add(photo)
+        db.flush()
+
+        for uid in (growing_unit_ids or []):
+            db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=uid))
+
+        if note_text:
+            db.add(PhotoNote(photo_id=photo.id, note_text=note_text, x=0.0, y=0.0))
+
         db.commit()
     except Exception:
         db.rollback()
@@ -373,6 +373,13 @@ class ImportRequest(BaseModel):
 
 @router.post("/import")
 def import_photos(body: ImportRequest, db: Session = Depends(get_db)):
+    if body.location_id is not None:
+        if not db.query(Location).filter_by(id=body.location_id).first():
+            raise HTTPException(status_code=404, detail="location not found")
+    for uid in body.growing_unit_ids:
+        if not db.query(GrowingUnit).filter_by(id=uid).first():
+            raise HTTPException(status_code=404, detail=f"growing unit {uid} not found")
+
     created = []
     skipped = []
     failed = []

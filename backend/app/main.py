@@ -536,6 +536,8 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="note not found")
     for field in body.model_fields_set:
         setattr(note, field, getattr(body, field))
+    if (note.x2 is None) != (note.y2 is None):
+        raise HTTPException(status_code=422, detail="x2 and y2 must both be set or both cleared")
     note.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(note)
