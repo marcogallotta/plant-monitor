@@ -18,10 +18,12 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .camera_import import router as camera_import_router, save_photo
 from .database import get_db
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote
 
 app = FastAPI()
+app.include_router(camera_import_router)
 
 PHOTOS_DIR = Path("data/photos")
 _STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -484,48 +486,18 @@ async def upload_manual_photo(
         parsed_at = datetime.now(timezone.utc)
 
     image_bytes = await image.read()
-    original_filename = image.filename
-
-    stem = uuid.uuid4().hex
-    filename = f"{stem}.jpg"
-
-    PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
-    image_path = PHOTOS_DIR / filename
-    tmp_path = image_path.with_suffix(".jpg.tmp")
-    try:
-        tmp_path.write_bytes(image_bytes)
-        tmp_path.rename(image_path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
-
-    photo = Photo(
-        filename=filename,
-        captured_at=parsed_at,
-        storage_path=str(image_path),
-        metadata_path="",
-        source="manual",
+    photo = save_photo(
+        db,
+        image_bytes,
+        image.filename,
+        len(image_bytes),
+        parsed_at,
+        "manual",
         photo_type=photo_type,
-        original_filename=original_filename,
         location_id=location_id,
+        growing_unit_ids=list(growing_unit_ids) if growing_unit_ids else None,
+        note_text=note_text,
     )
-    db.add(photo)
-    db.flush()
-
-    for uid in (growing_unit_ids or []):
-        db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=uid))
-
-    if note_text:
-        db.add(PhotoNote(photo_id=photo.id, note_text=note_text, x=0.0, y=0.0))
-
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        image_path.unlink(missing_ok=True)
-        raise
-
-    db.refresh(photo)
     return _photo_out(photo, db)
 
 

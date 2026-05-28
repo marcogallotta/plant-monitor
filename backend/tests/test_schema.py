@@ -10,7 +10,7 @@ def test_photos_columns(engine):
     cols = {c["name"] for c in inspect(engine).get_columns("photos")}
     assert cols == {
         "id", "filename", "captured_at", "storage_path", "metadata_path", "created_at",
-        "source", "photo_type", "original_filename", "location_id", "rotation",
+        "source", "photo_type", "original_filename", "original_size_bytes", "location_id", "rotation",
     }
 
 
