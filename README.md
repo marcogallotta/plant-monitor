@@ -1,6 +1,6 @@
 # plant-monitoring
 
-A small plant-tracking system for a balcony setup. A Raspberry Pi camera node takes scheduled photos and uploads them to a laptop backend. The backend stores photos and metadata in Postgres and serves a dashboard for review, comparison, timelapse playback, and notes.
+A small plant-tracking system for a balcony setup. A Raspberry Pi camera node takes scheduled photos and uploads them to a laptop backend. The backend stores photos and metadata in Postgres and serves a dashboard for review, comparison, timelapse playback, notes, and SD card import.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ Raspberry Pi Zero 2W + Camera
 FastAPI backend + Postgres (laptop)
         |
         +--> data/photos/   (image files on disk)
-        +--> Postgres        (photo records, notes)
+        +--> Postgres        (photo records, notes, labels, locations, growing units, events)
         +--> /              (dashboard)
 ```
 
@@ -45,7 +45,8 @@ make seed
 ```sh
 make test-backend   # backend (runs in isolated Docker Compose stack)
 make test-pi        # Pi camera scripts
-make test           # both
+make test-js        # JavaScript dashboard modules (Vitest)
+make test           # all three
 ```
 
 ## Project structure
@@ -53,36 +54,29 @@ make test           # both
 ```
 backend/
   app/
-    main.py         # FastAPI app, routes
-    models.py       # SQLAlchemy ORM models (Photo, PhotoNote)
-    database.py     # engine, session factory, get_db dependency
-  alembic/          # database migrations
-  scripts/seed.py   # dev seed script (downloads Picsum images, uploads via API)
-  static/index.html # dashboard
+    main.py             # FastAPI app, routes
+    models.py           # SQLAlchemy ORM models
+    database.py         # engine, session factory, get_db dependency
+    camera_import.py    # SD card scan and import logic
+    sensors.py          # proxy to external sensor API (esp32-home-display)
+  alembic/              # database migrations
+  scripts/seed.py       # dev seed script (downloads Picsum images, uploads via API)
+  static/
+    index.html          # dashboard (no build step)
+    app.js              # ES module entry point
+    *.js                # focused sibling modules (zoom, sdImport, sensors, …)
   tests/
+    *.py                # backend pytest tests
+    js/                 # Vitest tests for pure-logic dashboard modules
 
 pi/
-  camera.py         # photo capture
-  upload.py         # upload to backend
-  cleanup.py        # prune old local photos
+  camera.py             # photo capture (mocks picamera2 until Pi is available)
+  upload.py             # upload to backend with retry
+  cleanup.py            # prune old local photos after 7 days
 
-data/photos/        # stored image files (gitignored)
-docs/               # design documents and roadmap
+data/photos/            # stored image files (gitignored)
+docs/                   # design documents and roadmap
 ```
-
-## API
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/photos` | Upload photo + metadata JSON |
-| `GET` | `/photos` | List photos (`?start=&end=` filter) |
-| `GET` | `/photos/{filename}` | Serve image file |
-| `POST` | `/photos/{photo_id}/notes` | Create note linked to photo |
-| `GET` | `/photos/{photo_id}/notes` | List notes for photo |
-| `PUT` | `/notes/{note_id}` | Update note |
-| `DELETE` | `/notes/{note_id}` | Delete note |
-
-Notes store normalized image coordinates (`x`, `y` in `[0.0, 1.0]`).
 
 ## Dashboard features
 
@@ -91,7 +85,12 @@ Notes store normalized image coordinates (`x`, `y` in `[0.0, 1.0]`).
 - A/B comparison: select two photos and view side by side
 - Flicker comparison: toggle or auto-flicker between A and B to spot changes
 - Timelapse: play/pause, prev/next, speed control
-- Notes: click on a photo to pin a note at that position; edit and delete notes
+- Notes: click to pin a point note; shift+drag for a region note; edit and delete
+- Labels: chip buttons in the modal for quick tagging
+- Classify: set photo type, location, rotation, and growing unit assignments
+- Manual upload: drag-and-drop or file-picker for photos taken outside the Pi
+- SD card import: backend scanner (primary) or browser folder-picker (fallback); auto-detects current shooting session by timestamp gap
+- Sensor strip: live temp/humidity at the top of the page; per-photo sensor context in the modal
 
 ## Roadmap
 
