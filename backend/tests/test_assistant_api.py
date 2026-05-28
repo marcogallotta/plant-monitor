@@ -157,6 +157,42 @@ def test_assistant_photos_filter_source(client, db_session):
     assert len(data) == 1
 
 
+def test_assistant_photos_filter_end(client, db_session):
+    _photo(db_session, "2026-05-26T090000Z")
+    _photo(db_session, "2026-05-26T110000Z")
+    data = client.get("/assistant/photos?end=2026-05-26T10:00:00Z").json()
+    assert len(data) == 1
+    assert data[0]["filename"] == "2026-05-26T090000Z.jpg"
+
+
+def test_assistant_photos_filter_photo_type(client, db_session):
+    _photo(db_session, "2026-05-26T090000Z", photo_type="overview")
+    _photo(db_session, "2026-05-26T110000Z", photo_type="closeup")
+    data = client.get("/assistant/photos?photo_type=overview").json()
+    assert len(data) == 1
+    assert data[0]["filename"] == "2026-05-26T090000Z.jpg"
+
+
+def test_assistant_photos_filter_location_id(client, db_session):
+    loc = _location(db_session)
+    _photo(db_session, "2026-05-26T090000Z", location_id=loc.id)
+    _photo(db_session, "2026-05-26T110000Z")
+    data = client.get(f"/assistant/photos?location_id={loc.id}").json()
+    assert len(data) == 1
+    assert data[0]["filename"] == "2026-05-26T090000Z.jpg"
+
+
+def test_assistant_photos_filter_growing_unit_id(client, db_session):
+    unit = _growing_unit(db_session)
+    photo_with = _photo(db_session, "2026-05-26T090000Z")
+    _photo(db_session, "2026-05-26T110000Z")
+    db_session.add(PhotoGrowingUnit(photo_id=photo_with.id, growing_unit_id=unit.id))
+    db_session.commit()
+    data = client.get(f"/assistant/photos?growing_unit_id={unit.id}").json()
+    assert len(data) == 1
+    assert data[0]["filename"] == "2026-05-26T090000Z.jpg"
+
+
 def test_assistant_photos_includes_growing_units(client, db_session):
     unit = _growing_unit(db_session)
     photo = _photo(db_session)

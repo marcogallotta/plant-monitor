@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 import app.camera_import as ci
@@ -422,6 +424,174 @@ def test_import_invalid_rotation_returns_422(patched_scan, client):
     file_id = _do_scan(client)[0]["id"]
     r = client.post("/camera-import/import", json={"file_ids": [file_id], "rotations": {file_id: 45}})
     assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# save_photo – direct unit tests for error branches
+# ---------------------------------------------------------------------------
+
+def test_save_photo_invalid_rotation_raises(db_session, isolated_photos_dir):
+    from datetime import datetime, timezone
+    from app.camera_import import save_photo
+    with pytest.raises(ValueError, match="rotation"):
+        save_photo(
+            db_session,
+            b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9",
+            "IMG_001.JPG",
+            100,
+            datetime.now(timezone.utc),
+            "sd",
+            rotation=45,
+        )
+
+
+def test_save_photo_cleans_up_tmp_on_write_error(db_session, isolated_photos_dir, monkeypatch):
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from app.camera_import import save_photo
+
+    monkeypatch.setattr(Path, "write_bytes", lambda self, data: (_ for _ in ()).throw(OSError("disk full")))
+
+    with pytest.raises(OSError):
+        save_photo(
+            db_session,
+            b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9",
+            "IMG_001.JPG",
+            100,
+            datetime.now(timezone.utc),
+            "sd",
+        )
+    assert list(isolated_photos_dir.glob("*.jpg")) == []
+    assert list(isolated_photos_dir.glob("*.tmp")) == []
+
+
+# ---------------------------------------------------------------------------
+# _is_safe – exception branch
+# ---------------------------------------------------------------------------
+
+def test_is_safe_returns_false_on_exception():
+    from pathlib import Path
+    mock_path = MagicMock(spec=Path)
+    mock_path.is_symlink.side_effect = OSError("permission denied")
+    assert ci._is_safe(mock_path, Path("/root")) is False
+
+
+# ---------------------------------------------------------------------------
+# lookup_cached_entry – stale and OSError branches
+# ---------------------------------------------------------------------------
+
+def test_lookup_cached_entry_returns_none_when_size_changes(patched_scan, client):
+    _write(patched_scan, "IMG_001.JPG", b"ORIGINAL")
+    _scan(client)
+    file_id = next(iter(ci._cache))
+    (patched_scan / "IMG_001.JPG").write_bytes(b"DIFFERENT_SIZE_CONTENT_HERE")
+    assert ci.lookup_cached_entry(file_id) is None
+
+
+def test_lookup_cached_entry_returns_none_on_oserror(patched_scan, client):
+    _write(patched_scan, "IMG_001.JPG")
+    _scan(client)
+    file_id = next(iter(ci._cache))
+    (patched_scan / "IMG_001.JPG").unlink()
+    assert ci.lookup_cached_entry(file_id) is None
+
+
+# ---------------------------------------------------------------------------
+# Scan – limit hit
+# ---------------------------------------------------------------------------
+
+def test_scan_limit_hit_adds_warning(patched_scan, client, monkeypatch):
+    monkeypatch.setattr(ci, "_MAX_FILES", 1)
+    _write(patched_scan, "IMG_001.JPG")
+    _write(patched_scan, "IMG_002.JPG")
+    data = _scan(client).json()
+    assert any("limit" in w.lower() for w in data["warnings"])
+    assert len(data["candidates"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# _make_thumb / thumbnail endpoint – additional branches
+# ---------------------------------------------------------------------------
+
+def test_make_thumb_returns_none_for_unknown_file_id():
+    assert ci._make_thumb("nonexistent_id_000000000000000000") is None
+
+
+def test_thumb_cache_hit_returns_same_result(patched_scan, client):
+    content = b"\xff\xd8\xff\xe0" + b"X" * 50 + b"\xff\xd9"
+    _write(patched_scan, "IMG_001.JPG", content)
+    _scan(client)
+    file_id = _file_id_for("IMG_001.JPG")
+    r1 = client.get(f"/camera-import/thumbs/{file_id}")
+    r2 = client.get(f"/camera-import/thumbs/{file_id}")
+    assert r1.status_code == r2.status_code == 200
+    assert r1.content == r2.content
+
+
+def _mock_unreadable_path(real_path):
+    """Return a MagicMock Path that passes lookup_cached_entry but raises on read_bytes."""
+    m = MagicMock()
+    m.stat.return_value = real_path.stat()
+    m.is_symlink.return_value = False
+    m.resolve.return_value = real_path.resolve()
+    m.read_bytes.side_effect = OSError("permission denied")
+    return m
+
+
+def test_get_thumbnail_returns_404_when_jpeg_unreadable(patched_scan, client):
+    content = b"\xff\xd8\xff\xe0" + b"X" * 50 + b"\xff\xd9"
+    real_path = _write(patched_scan, "IMG_001.JPG", content)
+    _scan(client)
+    file_id = _file_id_for("IMG_001.JPG")
+    ci._cache[file_id]["path"] = _mock_unreadable_path(real_path)
+    assert client.get(f"/camera-import/thumbs/{file_id}").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Batch thumbnail endpoint
+# ---------------------------------------------------------------------------
+
+def test_batch_thumbs_returns_base64_for_known_ids(patched_scan, client):
+    content = b"\xff\xd8\xff\xe0" + b"X" * 50 + b"\xff\xd9"
+    _write(patched_scan, "IMG_001.JPG", content)
+    _scan(client)
+    file_id = _file_id_for("IMG_001.JPG")
+    r = client.post("/camera-import/thumbs/batch", json={"file_ids": [file_id]})
+    assert r.status_code == 200
+    assert file_id in r.json()["thumbs"]
+
+
+def test_batch_thumbs_skips_unknown_ids(client):
+    r = client.post("/camera-import/thumbs/batch", json={"file_ids": ["unknown_id_000000000000000000"]})
+    assert r.status_code == 200
+    assert r.json()["thumbs"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Import – additional branches
+# ---------------------------------------------------------------------------
+
+def test_import_with_explicit_valid_rotation(patched_scan, client, db_session):
+    from app.models import Photo
+    content = b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9"
+    _write(patched_scan, "IMG_001.JPG", content)
+    file_id = _do_scan(client)[0]["id"]
+    r = client.post("/camera-import/import", json={"file_ids": [file_id], "rotations": {file_id: 90}})
+    assert r.status_code == 200
+    assert len(r.json()["created"]) == 1
+    photo = db_session.query(Photo).filter_by(original_filename="IMG_001.JPG").first()
+    assert photo.rotation == 90
+
+
+def test_import_file_read_error_returns_failed(patched_scan, client):
+    content = b"\xff\xd8\xff\xe0" + b"X" * 10 + b"\xff\xd9"
+    real_path = _write(patched_scan, "IMG_001.JPG", content)
+    file_id = _do_scan(client)[0]["id"]
+    ci._cache[file_id]["path"] = _mock_unreadable_path(real_path)
+    r = client.post("/camera-import/import", json={"file_ids": [file_id]})
+    data = r.json()
+    assert len(data["failed"]) == 1
+    assert data["failed"][0]["reason"] == "file_read_error"
 
 
 def test_import_card_filename_rollover_not_duplicate(patched_scan, client, db_session):

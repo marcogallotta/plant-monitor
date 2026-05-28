@@ -339,3 +339,89 @@ class TestSensorEndpoints:
         assert len(data["sensors"]) == 3
         assert data["sensors"][0]["name"] == "South"
         assert data["sensors"][0]["readings"] == READINGS_RESPONSE
+
+    def test_photo_context_naive_datetime_tagged_utc(self, client, db_session):
+        """Photo with tz-naive captured_at should still return readings (UTC is assumed)."""
+        from datetime import datetime
+        from app.models import Photo
+        photo = Photo(
+            filename="2026-01-01T120003Z.jpg",
+            storage_path="/tmp/a.jpg",
+            metadata_path="/tmp/a.json",
+            captured_at=datetime(2026, 1, 1, 12, 0, 0),  # no tzinfo
+            source="pi",
+        )
+        db_session.add(photo)
+        db_session.commit()
+
+        state = _make_state()
+        state._id_map = {"AA:BB:CC:DD:EE:01": "aaaa-0001"}
+        with patch("app.sensors.get_state", return_value=state):
+            with patch.object(state, "readings_around", return_value=[]):
+                resp = client.get(f"/sensors/photos/{photo.id}")
+        assert resp.status_code == 200
+        assert resp.json()["available"] is True
+
+    def test_photo_context_resolve_ids_failure_returns_unavailable(self, client, db_session):
+        from app.models import Photo
+        photo = Photo(
+            filename="2026-01-01T120004Z.jpg",
+            storage_path="/tmp/b.jpg",
+            metadata_path="/tmp/b.json",
+            captured_at=NOW,
+            source="pi",
+        )
+        db_session.add(photo)
+        db_session.commit()
+
+        state = _make_state()
+        with patch("app.sensors.get_state", return_value=state):
+            with patch.object(state, "resolve_ids", side_effect=RuntimeError("upstream down")):
+                resp = client.get(f"/sensors/photos/{photo.id}")
+        assert resp.status_code == 200
+        assert resp.json()["available"] is False
+
+    def test_photo_context_sensor_not_in_id_map(self, client, db_session):
+        """Configured sensors absent from the upstream id_map are silently skipped."""
+        from app.models import Photo
+        photo = Photo(
+            filename="2026-01-01T120005Z.jpg",
+            storage_path="/tmp/c.jpg",
+            metadata_path="/tmp/c.json",
+            captured_at=NOW,
+            source="pi",
+        )
+        db_session.add(photo)
+        db_session.commit()
+
+        state = _make_state()
+        with patch("app.sensors.get_state", return_value=state):
+            with patch.object(state, "resolve_ids", return_value={}):
+                resp = client.get(f"/sensors/photos/{photo.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["available"] is True
+        assert data["sensors"] == []
+
+    def test_photo_context_readings_around_failure_returns_empty(self, client, db_session):
+        from app.models import Photo
+        photo = Photo(
+            filename="2026-01-01T120006Z.jpg",
+            storage_path="/tmp/d.jpg",
+            metadata_path="/tmp/d.json",
+            captured_at=NOW,
+            source="pi",
+        )
+        db_session.add(photo)
+        db_session.commit()
+
+        state = _make_state()
+        id_map = {"AA:BB:CC:DD:EE:01": "aaaa-0001"}
+        with patch("app.sensors.get_state", return_value=state):
+            with patch.object(state, "resolve_ids", return_value=id_map):
+                with patch.object(state, "readings_around", side_effect=RuntimeError("timeout")):
+                    resp = client.get(f"/sensors/photos/{photo.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["available"] is True
+        assert data["sensors"][0]["readings"] == []

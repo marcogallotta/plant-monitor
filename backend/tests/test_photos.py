@@ -144,3 +144,26 @@ def test_metadata_filename_mismatch_returns_422(client):
 
 def test_invalid_captured_at_returns_422(client):
     assert _upload(client, meta={"captured_at": "not-a-date", "filename": f"{VALID_STEM}.jpg"}).status_code == 422
+
+
+def test_valid_image_stem_invalid_metadata_stem_returns_422(client):
+    """Image stem is a valid timestamp; metadata stem is not → 422 on metadata stem check."""
+    response = client.post(
+        "/photos",
+        files={
+            "image": (f"{VALID_STEM}.jpg", b"X", "image/jpeg"),
+            "metadata": ("photo.json", b"{}", "application/json"),
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_non_json_metadata_returns_422(client):
+    response = client.post(
+        "/photos",
+        files={
+            "image": (f"{VALID_STEM}.jpg", b"X", "image/jpeg"),
+            "metadata": (f"{VALID_STEM}.json", b"not valid json {{{{", "application/json"),
+        },
+    )
+    assert response.status_code == 422

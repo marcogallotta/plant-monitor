@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import app.main
 from app.models import Photo
 
@@ -102,3 +102,39 @@ def test_serve_photo_path_traversal_does_not_serve_file(client):
     # URL normalisation collapses ../../ before the request reaches the route handler,
     # so the response is 404 (no matching route), not 422. Either way the file is not served.
     assert client.get("/photos/../../etc/passwd.jpg").status_code != 200
+
+
+_NOW = datetime(2026, 5, 26, 10, 0, 0, tzinfo=timezone.utc)
+
+
+def test_serve_photo_storage_path_outside_photos_dir_returns_404(client, db_session):
+    """DB row whose storage_path points outside PHOTOS_DIR is rejected by the path check."""
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as outside_dir:
+        outside = Path(outside_dir) / "2026-05-26T100000Z.jpg"
+        outside.write_bytes(b"SECRET")
+        photo = Photo(
+            filename="2026-05-26T100000Z.jpg",
+            captured_at=_NOW,
+            storage_path=str(outside),
+            metadata_path="",
+        )
+        db_session.add(photo)
+        db_session.commit()
+        assert client.get("/photos/2026-05-26T100000Z.jpg").status_code == 404
+
+
+def test_serve_photo_file_not_on_disk_returns_404(client, db_session, isolated_photos_dir):
+    """DB row exists but the file was deleted from disk → 404."""
+    stem = "2026-05-26T100000Z"
+    photo = Photo(
+        filename=f"{stem}.jpg",
+        captured_at=_NOW,
+        storage_path=str(isolated_photos_dir / f"{stem}.jpg"),
+        metadata_path="",
+    )
+    db_session.add(photo)
+    db_session.commit()
+    # file is deliberately not written to disk
+    assert client.get(f"/photos/{stem}.jpg").status_code == 404
