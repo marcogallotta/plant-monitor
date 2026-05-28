@@ -31,7 +31,7 @@ function _initBatches() {
   var boundaries = detectAllBoundaries(_timestamps(sdFiles));
   sdBatches = _buildBatches(sdFiles.length, boundaries);
   sdSelectedBatchCount = 0;
-  sdRevealedBatchCount = 0;
+  sdRevealedBatchCount = sdBatches.length > 0 ? 1 : 0;
 }
 
 function _autoSelectFirstBatch() {
@@ -403,9 +403,14 @@ function sdUpdateCount() {
   }
 }
 
+function _revealedEnd() {
+  if (sdRevealedBatchCount === 0 || sdBatches.length === 0) return 0;
+  return sdBatches[Math.min(sdRevealedBatchCount, sdBatches.length) - 1].end;
+}
+
 function sdUpdateLoadMore() {
   var row       = document.getElementById('sd-load-more-row');
-  var remaining = sdFiles.length - sdShown;
+  var remaining = _revealedEnd() - sdShown;
   if (remaining > 0) {
     row.style.display = 'flex';
     document.getElementById('sd-load-more-label').textContent = remaining + ' more';
@@ -414,7 +419,10 @@ function sdUpdateLoadMore() {
   }
 }
 
-export function sdLoadMore() { sdAppendThumbs(SD_PAGE); }
+export function sdLoadMore() {
+  var count = Math.min(SD_PAGE, _revealedEnd() - sdShown);
+  if (count > 0) sdAppendThumbs(count);
+}
 
 export function sdAddMore() {
   if (sdRevealedBatchCount >= sdBatches.length) return;

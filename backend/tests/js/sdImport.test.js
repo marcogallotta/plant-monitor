@@ -262,6 +262,27 @@ describe('sdLoadMore', () => {
     sdLoadMore();
     expect(document.getElementById('sd-load-more-row').style.display).toBe('none');
   });
+
+  it('does not cross into an unrevealed older session', async () => {
+    // 3 batches: [0-24], [25-49], [50-54]. Only first two are revealed on init.
+    vi.mocked(core.detectAllBoundaries).mockReturnValueOnce([25, 50]);
+    const files = Array.from({ length: 55 }, (_, i) =>
+      makeFile('DSC' + String(i).padStart(3, '0') + '.jpg'));
+    await handleSdFolderInput(makeEvent(files));
+    // After init: 25 (batch 0) + 20 (first page of batch 1) = 45 shown
+    sdLoadMore(); // should show remaining 5 from batch 1, not 10 (5 + batch 2)
+    const thumbs = document.getElementById('sd-grid').querySelectorAll('.sd-thumb-wrap');
+    expect(thumbs.length).toBe(50);
+  });
+
+  it('hides load-more after exhausting the revealed session', async () => {
+    vi.mocked(core.detectAllBoundaries).mockReturnValueOnce([25, 50]);
+    const files = Array.from({ length: 55 }, (_, i) =>
+      makeFile('DSC' + String(i).padStart(3, '0') + '.jpg'));
+    await handleSdFolderInput(makeEvent(files));
+    sdLoadMore();
+    expect(document.getElementById('sd-load-more-row').style.display).toBe('none');
+  });
 });
 
 // ── sdUploadSelected ──────────────────────────────────────
