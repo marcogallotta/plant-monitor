@@ -225,9 +225,23 @@ def assistant_photo_vision_context(photo_id: int, db: Session = Depends(get_db))
     if next_photo:
         nearby.append(NearbyPhoto(id=next_photo.id, captured_at=next_photo.captured_at, relation="next"))
     all_units = db.query(GrowingUnit).order_by(GrowingUnit.name).all()
+    thumbnail_data_url = None
+    file_path = Path(photo.storage_path).resolve()
+    if file_path.exists():
+        try:
+            img = Image.open(file_path)
+            img.load()
+            img.thumbnail((256, 256))
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=75)
+            import base64 as _b64
+            thumbnail_data_url = "data:image/jpeg;base64," + _b64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            pass
     return PhotoVisionContext(
         photo_id=photo.id,
         image_url=_photo_url(photo.filename),
+        thumbnail_data_url=thumbnail_data_url,
         rotation=photo.rotation,
         captured_at=photo.captured_at,
         source=photo.source,

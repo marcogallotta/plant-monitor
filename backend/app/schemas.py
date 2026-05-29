@@ -234,6 +234,7 @@ class NearbyPhoto(BaseModel):
 class PhotoVisionContext(BaseModel):
     photo_id: int
     image_url: str
+    thumbnail_data_url: Optional[str]
     rotation: int
     captured_at: datetime
     source: Optional[str]
