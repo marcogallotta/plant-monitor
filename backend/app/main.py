@@ -285,9 +285,10 @@ def list_photos(
     photo_type: Optional[str] = Query(None),
     location_id: Optional[int] = Query(None),
     growing_unit_id: Optional[int] = Query(None),
+    label_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
-    q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
+    q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id, label_id)
     return [_photo_out(p) for p in q.all()]
 
 

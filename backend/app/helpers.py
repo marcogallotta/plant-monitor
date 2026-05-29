@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Event, Photo, PhotoGrowingUnit
+from .models import Event, Photo, PhotoGrowingUnit, PhotoLabel
 from .schemas import EventOut, GrowingUnitBrief, LabelOut, PhotoBrief, PhotoOut
 
 PHOTO_LOAD_OPTIONS = (
@@ -27,6 +27,7 @@ def _filtered_photo_query(
     photo_type: Optional[str] = None,
     location_id: Optional[int] = None,
     growing_unit_id: Optional[int] = None,
+    label_id: Optional[int] = None,
 ):
     q = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at)
     if start is not None:
@@ -42,6 +43,10 @@ def _filtered_photo_query(
     if growing_unit_id is not None:
         q = q.join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id).filter(
             PhotoGrowingUnit.growing_unit_id == growing_unit_id
+        )
+    if label_id is not None:
+        q = q.join(PhotoLabel, PhotoLabel.photo_id == Photo.id).filter(
+            PhotoLabel.label_id == label_id
         )
     return q
 

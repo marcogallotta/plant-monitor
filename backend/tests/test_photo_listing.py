@@ -1,6 +1,6 @@
 from datetime import datetime
 import app.main
-from app.models import Photo, PhotoGrowingUnit
+from app.models import Photo, PhotoGrowingUnit, PhotoLabel
 
 
 def _photo(db_session, stem, captured_at_str, **kwargs):
@@ -104,6 +104,24 @@ def test_filter_by_growing_unit_id(client, db_session):
     data = client.get(f"/photos?growing_unit_id={unit['id']}").json()
     assert len(data) == 1
     assert data[0]["id"] == p1.id
+
+
+def test_filter_by_label_id(client, db_session):
+    label = client.post("/labels", json={"name": "new_growth"}).json()
+    p1 = _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
+    _photo(db_session, "2026-05-26T110000Z", "2026-05-26T11:00:00Z")
+    db_session.add(PhotoLabel(photo_id=p1.id, label_id=label["id"]))
+    db_session.commit()
+    data = client.get(f"/photos?label_id={label['id']}").json()
+    assert len(data) == 1
+    assert data[0]["id"] == p1.id
+
+
+def test_filter_by_label_id_no_match(client, db_session):
+    label = client.post("/labels", json={"name": "new_growth"}).json()
+    _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
+    data = client.get(f"/photos?label_id={label['id']}").json()
+    assert data == []
 
 
 def test_filter_unclassified_still_shows_without_filters(client, db_session):
