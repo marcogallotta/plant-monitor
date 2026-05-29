@@ -21,7 +21,8 @@ e2e-install:
 
 test-e2e:
 	@bash -c 'set -e; \
-	  trap "$(E2E_COMPOSE) down -v" EXIT; \
+	  ROOT=$$PWD; \
+	  trap "docker compose -p plant-monitoring-e2e -f $$ROOT/docker-compose.e2e.yml down -v" EXIT; \
 	  $(E2E_COMPOSE) up -d --build --wait; \
 	  $(E2E_COMPOSE) run --rm backend alembic upgrade head; \
 	  $(E2E_COMPOSE) run --rm backend python scripts/seed.py --backend-url http://backend:8000; \
