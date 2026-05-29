@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import threading
 import time
 from datetime import datetime
@@ -45,6 +46,8 @@ from ..schemas import (
 
 PHOTOS_DIR = Path("data/photos")
 
+_public_router = APIRouter(prefix="/assistant")
+
 _bearer = HTTPBearer(auto_error=False)
 
 _RATE_LIMIT = 60
@@ -87,6 +90,32 @@ def _require_assistant_token(
 router = APIRouter(prefix="/assistant", dependencies=[Depends(_require_assistant_token)])
 
 
+def _photo_url(filename: str) -> str:
+    base = os.environ.get("PUBLIC_URL", "").rstrip("/")
+    return f"{base}/assistant/photos/{filename}"
+
+
+def _assistant_photo_out(p: Photo) -> PhotoOut:
+    out = _photo_out(p)
+    out.url = _photo_url(p.filename)
+    return out
+
+
+@_public_router.get("/photos/{filename}", include_in_schema=False)
+def assistant_photo_file(filename: str):
+    from fastapi.responses import FileResponse
+    if not re.match(r'^[a-f0-9]{32}\.jpg$', filename):
+        raise HTTPException(status_code=404, detail="not found")
+    file_path = (PHOTOS_DIR / filename).resolve()
+    try:
+        file_path.relative_to(PHOTOS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="not found")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="not found")
+    return FileResponse(file_path, media_type="image/jpeg")
+
+
 @router.get("/summary", response_model=AssistantSummary)
 def assistant_summary(db: Session = Depends(get_db)):
     photo_count = db.query(Photo).count()
@@ -101,7 +130,7 @@ def assistant_summary(db: Session = Depends(get_db)):
         growing_unit_count=growing_unit_count,
         location_count=location_count,
         event_count=event_count,
-        recent_photos=[_photo_out(p) for p in recent],
+        recent_photos=[_assistant_photo_out(p) for p in recent],
     )
 
 
@@ -116,7 +145,7 @@ def assistant_list_photos(
     db: Session = Depends(get_db),
 ):
     q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
-    return [_photo_out(p) for p in q.all()]
+    return [_assistant_photo_out(p) for p in q.all()]
 
 
 @router.get("/photos/{photo_id}/context", response_model=PhotoContext)
@@ -133,7 +162,7 @@ def assistant_photo_context(photo_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return PhotoContext(
-        photo=_photo_out(photo),
+        photo=_assistant_photo_out(photo),
         notes=notes,
         events=[_event_out(ev) for ev in events],
     )
@@ -167,7 +196,7 @@ def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
     photo = _get_photo_loaded(db, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="photo not found")
-    return _photo_out(photo)
+    return _assistant_photo_out(photo)
 
 
 @router.get("/growing-units", response_model=list[GrowingUnitOut])
@@ -198,7 +227,7 @@ def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
     )
     return GrowingUnitContext(
         growing_unit=unit,
-        photos=[_photo_out(p) for p in photos],
+        photos=[_assistant_photo_out(p) for p in photos],
         events=[_event_out(ev) for ev in events],
     )
 
@@ -226,4 +255,4 @@ def assistant_openapi(request: Request):
 @router.get("/unclassified", response_model=list[PhotoOut])
 def assistant_unclassified(db: Session = Depends(get_db)):
     photos = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
-    return [_photo_out(p) for p in photos]
+    return [_assistant_photo_out(p) for p in photos]

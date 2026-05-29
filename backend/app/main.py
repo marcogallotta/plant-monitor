@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import re
@@ -19,7 +20,7 @@ from .camera_import import router as camera_import_router, save_photo, _check_gr
 from .database import get_db
 from .helpers import EVENT_LOAD_OPTIONS, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _photo_out
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote
-from .routers.assistant import router as assistant_router
+from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
 from .schemas import (
     VALID_ROTATIONS,
@@ -44,7 +45,26 @@ _public_url = os.environ.get("PUBLIC_URL", "").rstrip("/")
 app = FastAPI(servers=[{"url": _public_url}] if _public_url else [])
 app.include_router(camera_import_router)
 app.include_router(assistant_router)
+app.include_router(assistant_public_router)
 app.include_router(sensors_router)
+
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    if request.url.path.startswith("/assistant"):
+        return await call_next(request)
+    password = os.environ.get("DASHBOARD_PASSWORD", "")
+    if not password:
+        return await call_next(request)
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Basic "):
+        try:
+            _, pwd = base64.b64decode(auth[6:]).decode().split(":", 1)
+            if pwd == password:
+                return await call_next(request)
+        except Exception:
+            pass
+    return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Plant Monitoring"'})
 
 
 @app.get("/assistant-openapi.json", include_in_schema=False)

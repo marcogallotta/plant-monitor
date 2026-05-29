@@ -18,6 +18,7 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/plantmonitoring
       ASSISTANT_API_TOKEN: ${ASSISTANT_API_TOKEN}
       PUBLIC_URL: ${PUBLIC_URL:-}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
       SENSOR_API_URL: ${SENSOR_API_URL:-}
       SENSOR_API_KEY: ${SENSOR_API_KEY:-}
       SENSOR_SENSORS: ${SENSOR_SENSORS:-[]}

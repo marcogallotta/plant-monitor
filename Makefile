@@ -53,14 +53,17 @@ verify-reset:
 	$(VERIFY_COMPOSE) down -v && $(VERIFY_COMPOSE) up -d --build
 
 tunnel:
-	@docker run --rm --network plant-monitoring_default cloudflare/cloudflared:latest \
-	  tunnel --url http://backend:8000 2>&1 | \
-	  while IFS= read -r line; do \
-	    echo "$$line"; \
-	    if echo "$$line" | grep -qo 'https://[a-z0-9-]*\.trycloudflare\.com'; then \
-	      CF_URL=$$(echo "$$line" | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com'); \
-	      sed -i "s|^PUBLIC_URL=.*|PUBLIC_URL=$$CF_URL|" .env; \
-	      docker compose up -d backend; \
-	      echo "Tunnel live at $$CF_URL — backend restarted with PUBLIC_URL"; \
-	    fi; \
-	  done
+	@docker rm -f plant-monitoring-quicktunnel 2>/dev/null || true
+	@docker run -d --name plant-monitoring-quicktunnel --network plant-monitoring_default \
+	  cloudflare/cloudflared:latest tunnel --url http://backend:8000 > /dev/null
+	@echo "Waiting for tunnel URL..."
+	@for i in $$(seq 1 30); do \
+	  CF_URL=$$(docker logs plant-monitoring-quicktunnel 2>&1 | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | head -1); \
+	  if [ -n "$$CF_URL" ]; then \
+	    sed -i "s|^PUBLIC_URL=.*|PUBLIC_URL=$$CF_URL|" .env; \
+	    docker compose up -d backend; \
+	    echo "Tunnel live at $$CF_URL"; \
+	    break; \
+	  fi; \
+	  sleep 1; \
+	done
