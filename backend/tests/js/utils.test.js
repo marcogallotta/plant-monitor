@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rotTransform, formatDate, populateSelect } from '@/utils.js';
+import { rotTransform, orientedUrl, formatDate, populateSelect } from '@/utils.js';
 
 describe('rotTransform', () => {
   it('returns empty string for 0 or falsy', () => {
@@ -14,6 +14,21 @@ describe('rotTransform', () => {
   it('adds scale for 90 and 270', () => {
     expect(rotTransform(90)).toBe('rotate(90deg) scale(1.778)');
     expect(rotTransform(270)).toBe('rotate(270deg) scale(1.778)');
+  });
+});
+
+describe('orientedUrl', () => {
+  it('appends oriented flag and rotation cache-buster', () => {
+    expect(orientedUrl({url: '/photos/a.jpg', rotation: 90})).toBe('/photos/a.jpg?oriented=1&v=90');
+  });
+
+  it('uses v=0 when rotation is missing', () => {
+    expect(orientedUrl({url: '/photos/a.jpg'})).toBe('/photos/a.jpg?oriented=1&v=0');
+  });
+
+  it('uses & when the url already has a query string', () => {
+    expect(orientedUrl({url: '/photos/a.jpg?token=abc', rotation: 180}))
+      .toBe('/photos/a.jpg?token=abc&oriented=1&v=180');
   });
 });
 

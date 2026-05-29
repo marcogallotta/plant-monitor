@@ -1,8 +1,11 @@
 import json
 import re
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
+
+from PIL import Image, UnidentifiedImageError
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -488,8 +491,17 @@ def list_events(db: Session = Depends(get_db)):
     return [_event_out(ev) for ev in events]
 
 
+# Maps a clockwise rotation (degrees) to the PIL transpose that bakes it into the
+# pixels matching the dashboard's CSS `transform: rotate(Ndeg)` (clockwise) direction.
+_ROTATION_TRANSPOSE = {
+    90: Image.Transpose.ROTATE_270,
+    180: Image.Transpose.ROTATE_180,
+    270: Image.Transpose.ROTATE_90,
+}
+
+
 @app.get("/photos/{filename}")
-def serve_photo(filename: str, db: Session = Depends(get_db)):
+def serve_photo(filename: str, oriented: bool = False, db: Session = Depends(get_db)):
     if not _SAFE_FILENAME_RE.match(filename):
         raise HTTPException(status_code=422, detail="invalid filename format")
 
@@ -505,5 +517,23 @@ def serve_photo(filename: str, db: Session = Depends(get_db)):
 
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="photo file not found on disk")
+
+    # `oriented=1` bakes the stored rotation into the returned pixels so consumers that
+    # bypass the dashboard's CSS rotation (e.g. dragging a thumbnail into a browser tab)
+    # see the correct orientation. The on-disk original is never modified.
+    transpose = _ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
+    if transpose is not None:
+        try:
+            with Image.open(file_path) as im:
+                rotated = im.transpose(transpose).convert("RGB")
+                buf = BytesIO()
+                rotated.save(buf, format="JPEG", quality=90)
+        except (UnidentifiedImageError, OSError) as exc:
+            raise HTTPException(status_code=422, detail="could not decode image") from exc
+        return Response(
+            content=buf.getvalue(),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "private, max-age=31536000"},
+        )
 
     return FileResponse(file_path)

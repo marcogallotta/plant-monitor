@@ -114,6 +114,21 @@ describe('loadPhotos', () => {
   });
 });
 
+// ── renderGrid ────────────────────────────────────────────
+
+describe('renderGrid (via loadPhotos)', () => {
+  it('points the grid img at the oriented url and uses no css transform', async () => {
+    const {getPhotos} = await import('@/api.js');
+    getPhotos.mockResolvedValueOnce([
+      {id: 7, url: '/photos/g.jpg', filename: 'g.jpg', captured_at: '2026-01-01T10:00:00Z', rotation: 90, growing_units: []},
+    ]);
+    await loadPhotos();
+    const img = document.querySelector('#photo-grid .photo-card[data-id="7"] img');
+    expect(img.getAttribute('src')).toBe('/photos/g.jpg?oriented=1&v=90');
+    expect(img.style.transform).toBe('');
+  });
+});
+
 // ── clearFilter ───────────────────────────────────────────
 
 describe('clearFilter', () => {
@@ -286,19 +301,19 @@ describe('gridRotate', () => {
     expect(photo.rotation).toBe(270);
   });
 
-  it('updates the img transform in the grid card', async () => {
+  it('points the grid img at the oriented url with the new rotation', async () => {
     const e = {stopPropagation: vi.fn()};
     await gridRotate(e, 10, 90);
     const img = document.querySelector('.photo-card[data-id="10"] img');
-    expect(img.style.transform).toBe('rotate(90deg)');
+    expect(img.getAttribute('src')).toBe('/photos/x.jpg?oriented=1&v=90');
   });
 
-  it('clears the img transform when rotation reaches 0', async () => {
+  it('uses v=0 in the oriented url when rotation reaches 0', async () => {
     photo.rotation = 270;
     const e = {stopPropagation: vi.fn()};
     await gridRotate(e, 10, 90);
     const img = document.querySelector('.photo-card[data-id="10"] img');
-    expect(img.style.transform).toBe('');
+    expect(img.getAttribute('src')).toBe('/photos/x.jpg?oriented=1&v=0');
   });
 
   it('calls updatePhoto with the new rotation', async () => {
@@ -316,12 +331,12 @@ describe('gridRotate', () => {
     expect(photo.rotation).toBe(0);
   });
 
-  it('rolls back img transform on API failure', async () => {
+  it('rolls back the img src on API failure', async () => {
     const api = await import('@/api.js');
     vi.mocked(api.updatePhoto).mockRejectedValueOnce(new Error('network'));
     const e = {stopPropagation: vi.fn()};
     await gridRotate(e, 10, 90);
     const img = document.querySelector('.photo-card[data-id="10"] img');
-    expect(img.style.transform).toBe('');
+    expect(img.getAttribute('src')).toBe('/photos/x.jpg?oriented=1&v=0');
   });
 });

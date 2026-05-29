@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { getPhotos, updatePhoto } from './api.js';
-import { setStatus, formatDate, rotTransform } from './utils.js';
+import { setStatus, formatDate, orientedUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
 export async function loadPhotos() {
@@ -37,10 +37,10 @@ function renderGrid(photos) {
     card.className = 'photo-card';
     card.dataset.id = p.id;
     const ts = formatDate(p.captured_at);
-    const t = rotTransform(p.rotation);
-    const rotStyle = t ? ' style="transform:' + t + '"' : '';
+    // Grid thumbnails use the rotation-baked variant (not CSS rotation) so dragging a
+    // thumbnail into a browser tab opens it in the correct orientation.
     card.innerHTML =
-      '<img src="' + p.url + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')"' + rotStyle + '>' +
+      '<img src="' + orientedUrl(p) + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
       '<div class="card-ab">' +
         '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
         '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
@@ -160,19 +160,19 @@ export async function gridRotate(e, photoId, delta) {
   const oldRot = photo.rotation || 0;
   const newRot = (oldRot + delta + 360) % 360;
   photo.rotation = newRot;
-  // Update the img transform in-place without re-rendering the whole grid
+  // Re-point the thumbnail at the re-oriented variant in-place (no full grid re-render).
   const card = document.querySelector('.photo-card[data-id="' + photoId + '"]');
   let img = null;
   if (card) {
     img = card.querySelector('img');
-    if (img) img.style.transform = newRot ? 'rotate(' + newRot + 'deg)' : '';
+    if (img) img.src = orientedUrl(photo);
   }
   try {
     await updatePhoto(photoId, {rotation: newRot});
   } catch(err) {
     console.warn('gridRotate failed', err);
     photo.rotation = oldRot;
-    if (img) img.style.transform = oldRot ? 'rotate(' + oldRot + 'deg)' : '';
+    if (img) img.src = orientedUrl(photo);
   }
 }
 
