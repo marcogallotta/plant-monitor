@@ -17,7 +17,7 @@ from PIL import Image
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from .camera_import import router as camera_import_router, save_photo, _check_growing_units_exist
 from .database import get_db
@@ -35,6 +35,19 @@ def _parse_iso8601(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+PHOTO_LOAD_OPTIONS = (
+    selectinload(Photo.location),
+    selectinload(Photo.growing_units),
+    selectinload(Photo.labels),
+)
+
+EVENT_LOAD_OPTIONS = (
+    selectinload(Event.location),
+    selectinload(Event.growing_units),
+    selectinload(Event.photos),
+)
+
+
 def _filtered_photo_query(
     db: Session,
     start: Optional[datetime] = None,
@@ -44,7 +57,7 @@ def _filtered_photo_query(
     location_id: Optional[int] = None,
     growing_unit_id: Optional[int] = None,
 ):
-    q = db.query(Photo).order_by(Photo.captured_at)
+    q = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at)
     if start is not None:
         q = q.filter(Photo.captured_at >= start)
     if end is not None:
@@ -62,11 +75,12 @@ def _filtered_photo_query(
     return q
 
 
-def _location_name(location_id: Optional[int], db: Session) -> Optional[str]:
-    if not location_id:
-        return None
-    loc = db.query(Location).filter_by(id=location_id).first()
-    return loc.name if loc else None
+def _get_photo_loaded(db: Session, photo_id: int) -> Optional[Photo]:
+    return db.query(Photo).options(*PHOTO_LOAD_OPTIONS).filter_by(id=photo_id).first()
+
+
+def _get_event_loaded(db: Session, event_id: int) -> Optional[Event]:
+    return db.query(Event).options(*EVENT_LOAD_OPTIONS).filter_by(id=event_id).first()
 
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
@@ -357,20 +371,7 @@ def update_growing_unit(unit_id: int, body: GrowingUnitUpdate, db: Session = Dep
     return unit
 
 
-def _photo_out(p: Photo, db: Session) -> PhotoOut:
-    location_name = _location_name(p.location_id, db)
-    units = (
-        db.query(GrowingUnit)
-        .join(PhotoGrowingUnit, PhotoGrowingUnit.growing_unit_id == GrowingUnit.id)
-        .filter(PhotoGrowingUnit.photo_id == p.id)
-        .all()
-    )
-    labels = (
-        db.query(Label)
-        .join(PhotoLabel, PhotoLabel.label_id == Label.id)
-        .filter(PhotoLabel.photo_id == p.id)
-        .all()
-    )
+def _photo_out(p: Photo) -> PhotoOut:
     return PhotoOut(
         id=p.id,
         filename=p.filename,
@@ -381,9 +382,9 @@ def _photo_out(p: Photo, db: Session) -> PhotoOut:
         original_filename=p.original_filename,
         original_size_bytes=p.original_size_bytes,
         location_id=p.location_id,
-        location_name=location_name,
-        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in units],
-        labels=[LabelOut(id=l.id, name=l.name) for l in labels],
+        location_name=p.location.name if p.location else None,
+        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in p.growing_units],
+        labels=[LabelOut(id=l.id, name=l.name) for l in p.labels],
         rotation=p.rotation,
     )
 
@@ -443,7 +444,7 @@ def list_photos(
     db: Session = Depends(get_db),
 ):
     q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
-    return [_photo_out(p, db) for p in q.all()]
+    return [_photo_out(p) for p in q.all()]
 
 
 class PhotoClassify(BaseModel):
@@ -480,8 +481,10 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
         for uid in body.growing_unit_ids:
             db.add(PhotoGrowingUnit(photo_id=photo_id, growing_unit_id=uid))
     db.commit()
-    db.refresh(photo)
-    return _photo_out(photo, db)
+    loaded = _get_photo_loaded(db, photo_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="photo not found")
+    return _photo_out(loaded)
 
 
 @app.post("/manual-photos", response_model=PhotoOut, status_code=201)
@@ -527,7 +530,10 @@ async def upload_manual_photo(
         note_text=note_text,
         rotation=rotation,
     )
-    return _photo_out(photo, db)
+    loaded = _get_photo_loaded(db, photo.id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="photo not found")
+    return _photo_out(loaded)
 
 
 @app.post("/photos/{photo_id}/notes", response_model=NoteOut, status_code=201)
@@ -634,7 +640,10 @@ def assign_label(photo_id: int, label_id: int, db: Session = Depends(get_db)):
     if not existing:
         db.add(PhotoLabel(photo_id=photo_id, label_id=label_id))
         db.commit()
-    return _photo_out(photo, db)
+    loaded = _get_photo_loaded(db, photo_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="photo not found")
+    return _photo_out(loaded)
 
 
 @app.delete("/photos/{photo_id}/labels/{label_id}", status_code=204)
@@ -691,29 +700,16 @@ class EventOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-def _event_out(ev: Event, db: Session) -> EventOut:
-    location_name = _location_name(ev.location_id, db)
-    units = (
-        db.query(GrowingUnit)
-        .join(EventGrowingUnit, EventGrowingUnit.growing_unit_id == GrowingUnit.id)
-        .filter(EventGrowingUnit.event_id == ev.id)
-        .all()
-    )
-    photos = (
-        db.query(Photo)
-        .join(EventPhoto, EventPhoto.photo_id == Photo.id)
-        .filter(EventPhoto.event_id == ev.id)
-        .all()
-    )
+def _event_out(ev: Event) -> EventOut:
     return EventOut(
         id=ev.id,
         event_type=ev.event_type,
         event_at=ev.event_at,
         note_text=ev.note_text,
         location_id=ev.location_id,
-        location_name=location_name,
-        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in units],
-        photos=[PhotoBrief(id=p.id, filename=p.filename, url=f"/photos/{p.filename}") for p in photos],
+        location_name=ev.location.name if ev.location else None,
+        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in ev.growing_units],
+        photos=[PhotoBrief(id=p.id, filename=p.filename, url=f"/photos/{p.filename}") for p in ev.photos],
         created_at=ev.created_at,
         updated_at=ev.updated_at,
     )
@@ -746,14 +742,16 @@ def create_event(body: EventCreate, db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
         raise
-    db.refresh(ev)
-    return _event_out(ev, db)
+    loaded = _get_event_loaded(db, ev.id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="event not found")
+    return _event_out(loaded)
 
 
 @app.get("/events", response_model=list[EventOut])
 def list_events(db: Session = Depends(get_db)):
-    events = db.query(Event).order_by(Event.event_at.desc()).all()
-    return [_event_out(ev, db) for ev in events]
+    events = db.query(Event).options(*EVENT_LOAD_OPTIONS).order_by(Event.event_at.desc()).all()
+    return [_event_out(ev) for ev in events]
 
 
 # --- Sensor proxy ---
@@ -874,14 +872,14 @@ def assistant_summary(db: Session = Depends(get_db)):
     growing_unit_count = db.query(GrowingUnit).count()
     location_count = db.query(Location).count()
     event_count = db.query(Event).count()
-    recent = db.query(Photo).order_by(Photo.captured_at.desc()).limit(5).all()
+    recent = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at.desc()).limit(5).all()
     return AssistantSummary(
         photo_count=photo_count,
         unclassified_count=unclassified_count,
         growing_unit_count=growing_unit_count,
         location_count=location_count,
         event_count=event_count,
-        recent_photos=[_photo_out(p, db) for p in recent],
+        recent_photos=[_photo_out(p) for p in recent],
     )
 
 
@@ -896,25 +894,26 @@ def assistant_list_photos(
     db: Session = Depends(get_db),
 ):
     q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
-    return [_photo_out(p, db) for p in q.all()]
+    return [_photo_out(p) for p in q.all()]
 
 
 @_assistant.get("/photos/{photo_id}/context", response_model=PhotoContext)
 def assistant_photo_context(photo_id: int, db: Session = Depends(get_db)):
-    photo = db.query(Photo).filter_by(id=photo_id).first()
+    photo = _get_photo_loaded(db, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="photo not found")
     notes = db.query(PhotoNote).filter_by(photo_id=photo_id).all()
     events = (
         db.query(Event)
+        .options(*EVENT_LOAD_OPTIONS)
         .join(EventPhoto, EventPhoto.event_id == Event.id)
         .filter(EventPhoto.photo_id == photo_id)
         .all()
     )
     return PhotoContext(
-        photo=_photo_out(photo, db),
+        photo=_photo_out(photo),
         notes=notes,
-        events=[_event_out(ev, db) for ev in events],
+        events=[_event_out(ev) for ev in events],
     )
 
 
@@ -943,10 +942,10 @@ def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
 
 @_assistant.get("/photos/{photo_id}", response_model=PhotoOut)
 def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
-    photo = db.query(Photo).filter_by(id=photo_id).first()
+    photo = _get_photo_loaded(db, photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="photo not found")
-    return _photo_out(photo, db)
+    return _photo_out(photo)
 
 
 @_assistant.get("/growing-units", response_model=list[GrowingUnitOut])
@@ -961,6 +960,7 @@ def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="growing unit not found")
     photos = (
         db.query(Photo)
+        .options(*PHOTO_LOAD_OPTIONS)
         .join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id)
         .filter(PhotoGrowingUnit.growing_unit_id == unit_id)
         .order_by(Photo.captured_at)
@@ -968,6 +968,7 @@ def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
     )
     events = (
         db.query(Event)
+        .options(*EVENT_LOAD_OPTIONS)
         .join(EventGrowingUnit, EventGrowingUnit.event_id == Event.id)
         .filter(EventGrowingUnit.growing_unit_id == unit_id)
         .order_by(Event.event_at.desc())
@@ -975,8 +976,8 @@ def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
     )
     return GrowingUnitContext(
         growing_unit=unit,
-        photos=[_photo_out(p, db) for p in photos],
-        events=[_event_out(ev, db) for ev in events],
+        photos=[_photo_out(p) for p in photos],
+        events=[_event_out(ev) for ev in events],
     )
 
 
@@ -987,13 +988,13 @@ def assistant_list_locations(db: Session = Depends(get_db)):
 
 @_assistant.get("/events", response_model=list[EventOut])
 def assistant_list_events(db: Session = Depends(get_db)):
-    return [_event_out(ev, db) for ev in db.query(Event).order_by(Event.event_at.desc()).all()]
+    return [_event_out(ev) for ev in db.query(Event).options(*EVENT_LOAD_OPTIONS).order_by(Event.event_at.desc()).all()]
 
 
 @_assistant.get("/unclassified", response_model=list[PhotoOut])
 def assistant_unclassified(db: Session = Depends(get_db)):
-    photos = db.query(Photo).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
-    return [_photo_out(p, db) for p in photos]
+    photos = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
+    return [_photo_out(p) for p in photos]
 
 
 app.include_router(_assistant)

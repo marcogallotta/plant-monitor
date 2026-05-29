@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import BigInteger, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -55,6 +55,14 @@ class Photo(Base):
     rotation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+    location: Mapped[Optional["Location"]] = relationship("Location", lazy="raise", viewonly=True)
+    growing_units: Mapped[list["GrowingUnit"]] = relationship(
+        "GrowingUnit", secondary="photo_growing_units", lazy="raise", viewonly=True
+    )
+    labels: Mapped[list["Label"]] = relationship(
+        "Label", secondary="photo_labels", lazy="raise", viewonly=True
+    )
+
 
 class PhotoGrowingUnit(Base):
     __tablename__ = "photo_growing_units"
@@ -74,6 +82,14 @@ class Event(Base):
     location_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("locations.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    location: Mapped[Optional["Location"]] = relationship("Location", lazy="raise", viewonly=True)
+    growing_units: Mapped[list["GrowingUnit"]] = relationship(
+        "GrowingUnit", secondary="event_growing_units", lazy="raise", viewonly=True
+    )
+    photos: Mapped[list["Photo"]] = relationship(
+        "Photo", secondary="event_photos", lazy="raise", viewonly=True
+    )
 
 
 class EventGrowingUnit(Base):

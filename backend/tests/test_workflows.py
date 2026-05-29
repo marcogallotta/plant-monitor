@@ -142,3 +142,110 @@ def test_filter_by_growing_unit_returns_only_matching_photos(client):
     ids = {p["id"] for p in results}
     assert photo_a["id"] in ids
     assert photo_b["id"] not in ids
+
+
+# ── Relationship eager-load regression ───────────────────
+# Each endpoint that serialises PhotoOut/EventOut must return full
+# location_name, growing_units, and labels without N+1 queries.
+# lazy="raise" on the model relationships guarantees a missed
+# selectinload surfaces here as an exception rather than a silent
+# performance regression.
+
+
+def _setup_rich_fixtures(client):
+    """Return (loc, unit1, unit2, label, photos, event) fully associated."""
+    loc = client.post("/locations", json={"name": "South Window"}).json()
+    unit1 = client.post("/growing-units", json={"name": "Basil A"}).json()
+    unit2 = client.post("/growing-units", json={"name": "Mint B"}).json()
+    label = client.post("/labels", json={"name": "new_growth"}).json()
+
+    def upload(name):
+        r = client.post("/manual-photos",
+                        data={"location_id": loc["id"]},
+                        files={"image": (name, b"FAKEIMAGE", "image/jpeg")})
+        assert r.status_code == 201
+        return r.json()
+
+    p1 = upload("IMG_001.jpg")
+    p2 = upload("IMG_002.jpg")
+    p3 = upload("IMG_003.jpg")
+
+    for p in (p1, p2, p3):
+        client.put(f"/photos/{p['id']}", json={"growing_unit_ids": [unit1["id"], unit2["id"]]})
+        client.post(f"/photos/{p['id']}/labels/{label['id']}")
+
+    event_r = client.post("/events", json={
+        "event_type": "watered",
+        "location_id": loc["id"],
+        "growing_unit_ids": [unit1["id"], unit2["id"]],
+        "photo_ids": [p1["id"], p2["id"]],
+    })
+    assert event_r.status_code == 201
+    event = event_r.json()
+
+    return loc, unit1, unit2, label, (p1, p2, p3), event
+
+
+def _assert_photo_shape(p, loc, unit1, unit2, label):
+    assert p["location_name"] == loc["name"]
+    unit_ids = {u["id"] for u in p["growing_units"]}
+    assert unit1["id"] in unit_ids
+    assert unit2["id"] in unit_ids
+    assert any(l["id"] == label["id"] for l in p["labels"])
+
+
+def _assert_event_shape(e, loc, unit1, unit2):
+    assert e["location_name"] == loc["name"]
+    unit_ids = {u["id"] for u in e["growing_units"]}
+    assert unit1["id"] in unit_ids
+    assert unit2["id"] in unit_ids
+
+
+def test_list_photos_includes_all_related_data(client):
+    loc, unit1, unit2, label, (p1, p2, p3), _ = _setup_rich_fixtures(client)
+    photos = client.get("/photos").json()
+    for pid in (p1["id"], p2["id"], p3["id"]):
+        p = next(x for x in photos if x["id"] == pid)
+        _assert_photo_shape(p, loc, unit1, unit2, label)
+
+
+def test_list_events_includes_all_related_data(client):
+    loc, unit1, unit2, label, (p1, p2, _), event = _setup_rich_fixtures(client)
+    events = client.get("/events").json()
+    e = next(x for x in events if x["id"] == event["id"])
+    _assert_event_shape(e, loc, unit1, unit2)
+    assert any(p["id"] == p1["id"] for p in e["photos"])
+    assert any(p["id"] == p2["id"] for p in e["photos"])
+
+
+def test_classify_photo_response_includes_all_related_data(client):
+    loc = client.post("/locations", json={"name": "Shelf"}).json()
+    unit = client.post("/growing-units", json={"name": "Chilli"}).json()
+    photo = client.post("/manual-photos", files={"image": ("x.jpg", b"FAKEIMAGE", "image/jpeg")}).json()
+    r = client.put(f"/photos/{photo['id']}", json={
+        "location_id": loc["id"],
+        "growing_unit_ids": [unit["id"]],
+    })
+    assert r.status_code == 200
+    p = r.json()
+    assert p["location_name"] == loc["name"]
+    assert any(u["id"] == unit["id"] for u in p["growing_units"])
+
+
+def test_assign_label_response_includes_all_related_data(client):
+    loc = client.post("/locations", json={"name": "Shelf"}).json()
+    photo = client.post("/manual-photos",
+                        data={"location_id": loc["id"]},
+                        files={"image": ("x.jpg", b"FAKEIMAGE", "image/jpeg")}).json()
+    label = client.post("/labels", json={"name": "recovery"}).json()
+    r = client.post(f"/photos/{photo['id']}/labels/{label['id']}")
+    assert r.status_code == 200
+    p = r.json()
+    assert p["location_name"] == loc["name"]
+    assert any(l["id"] == label["id"] for l in p["labels"])
+
+
+def test_create_event_response_includes_all_related_data(client):
+    loc, unit1, unit2, _, (p1, _, _), event = _setup_rich_fixtures(client)
+    _assert_event_shape(event, loc, unit1, unit2)
+    assert any(p["id"] == p1["id"] for p in event["photos"])

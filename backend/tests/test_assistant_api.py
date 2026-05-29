@@ -469,4 +469,127 @@ def test_rate_limit_does_not_apply_to_other_routes(client, monkeypatch):
     monkeypatch.setattr(app.main, "_RATE_LIMIT", 1)
     client.get("/assistant/summary")
     assert client.get("/assistant/summary").status_code == 429
+
+
+# ── Relationship eager-load regression (assistant endpoints) ──────────────
+# These endpoints must serialise full PhotoOut/EventOut (location_name,
+# growing_units, labels/photos) without hitting lazy-load paths.
+# lazy="raise" on the model relationships turns any missed selectinload
+# into an exception rather than a silent N+1.
+
+
+def _setup_assistant_fixtures(client_api):
+    loc_r = client_api.post("/locations", json={"name": "North Shelf"})
+    assert loc_r.status_code == 201
+    loc = loc_r.json()
+
+    unit_r = client_api.post("/growing-units", json={"name": "Parsley"})
+    assert unit_r.status_code == 201
+    unit = unit_r.json()
+
+    label_r = client_api.post("/labels", json={"name": "watch"})
+    assert label_r.status_code == 200 or label_r.status_code == 201
+    label = label_r.json()
+
+    def upload(name):
+        r = client_api.post("/manual-photos",
+                             data={"location_id": loc["id"]},
+                             files={"image": (name, b"FAKEIMAGE", "image/jpeg")})
+        assert r.status_code == 201
+        return r.json()
+
+    p1 = upload("A.jpg")
+    p2 = upload("B.jpg")
+
+    for p in (p1, p2):
+        client_api.put(f"/photos/{p['id']}", json={"growing_unit_ids": [unit["id"]]})
+        client_api.post(f"/photos/{p['id']}/labels/{label['id']}")
+
+    event_r = client_api.post("/events", json={
+        "event_type": "fed_liquid",
+        "location_id": loc["id"],
+        "growing_unit_ids": [unit["id"]],
+        "photo_ids": [p1["id"]],
+    })
+    assert event_r.status_code == 201
+    event = event_r.json()
+
+    return loc, unit, label, p1, p2, event
+
+
+def test_assistant_list_photos_includes_related_data(client):
+    loc, unit, label, p1, p2, _ = _setup_assistant_fixtures(client)
+    photos = client.get("/assistant/photos").json()
+    for pid in (p1["id"], p2["id"]):
+        p = next(x for x in photos if x["id"] == pid)
+        assert p["location_name"] == loc["name"]
+        assert any(u["id"] == unit["id"] for u in p["growing_units"])
+        assert any(l["id"] == label["id"] for l in p["labels"])
+
+
+def test_assistant_get_photo_includes_related_data(client):
+    loc, unit, label, p1, _, _ = _setup_assistant_fixtures(client)
+    p = client.get(f"/assistant/photos/{p1['id']}").json()
+    assert p["location_name"] == loc["name"]
+    assert any(u["id"] == unit["id"] for u in p["growing_units"])
+    assert any(l["id"] == label["id"] for l in p["labels"])
+
+
+def test_assistant_photo_context_includes_related_data(client):
+    loc, unit, label, p1, _, event = _setup_assistant_fixtures(client)
+    ctx = client.get(f"/assistant/photos/{p1['id']}/context").json()
+    assert ctx["photo"]["location_name"] == loc["name"]
+    assert any(u["id"] == unit["id"] for u in ctx["photo"]["growing_units"])
+    assert len(ctx["events"]) >= 1
+    e = next(x for x in ctx["events"] if x["id"] == event["id"])
+    assert e["location_name"] == loc["name"]
+    assert any(u["id"] == unit["id"] for u in e["growing_units"])
+
+
+def test_assistant_growing_unit_context_includes_related_data(client):
+    loc, unit, label, p1, p2, event = _setup_assistant_fixtures(client)
+    ctx = client.get(f"/assistant/growing-units/{unit['id']}/context").json()
+    photo_ids = {p["id"] for p in ctx["photos"]}
+    assert p1["id"] in photo_ids
+    assert p2["id"] in photo_ids
+    for p in ctx["photos"]:
+        assert p["location_name"] == loc["name"]
+    event_ids = {e["id"] for e in ctx["events"]}
+    assert event["id"] in event_ids
+    e = next(x for x in ctx["events"] if x["id"] == event["id"])
+    assert e["location_name"] == loc["name"]
+
+
+def test_assistant_list_events_includes_related_data(client):
+    loc, unit, label, p1, _, event = _setup_assistant_fixtures(client)
+    events = client.get("/assistant/events").json()
+    e = next(x for x in events if x["id"] == event["id"])
+    assert e["location_name"] == loc["name"]
+    assert any(u["id"] == unit["id"] for u in e["growing_units"])
+    assert any(p["id"] == p1["id"] for p in e["photos"])
+
+
+def test_assistant_unclassified_includes_related_data(client):
+    loc = client.post("/locations", json={"name": "Shelf"}).json()
+    unit = client.post("/growing-units", json={"name": "Sage"}).json()
+    p = client.post("/manual-photos",
+                    data={"location_id": loc["id"]},
+                    files={"image": ("u.jpg", b"FAKEIMAGE", "image/jpeg")}).json()
+    client.put(f"/photos/{p['id']}", json={"growing_unit_ids": [unit["id"]]})
+    # photo_type is None → unclassified
+    unclassified = client.get("/assistant/unclassified").json()
+    match = next((x for x in unclassified if x["id"] == p["id"]), None)
+    assert match is not None
+    assert match["location_name"] == loc["name"]
+    assert any(u["id"] == unit["id"] for u in match["growing_units"])
+
+
+def test_assistant_summary_recent_photos_include_related_data(client):
+    loc, unit, label, p1, _, _ = _setup_assistant_fixtures(client)
+    summary = client.get("/assistant/summary").json()
+    recent_ids = {p["id"] for p in summary["recent_photos"]}
+    if p1["id"] in recent_ids:
+        p = next(x for x in summary["recent_photos"] if x["id"] == p1["id"])
+        assert p["location_name"] == loc["name"]
+        assert any(u["id"] == unit["id"] for u in p["growing_units"])
     assert client.get("/photos").status_code == 200
