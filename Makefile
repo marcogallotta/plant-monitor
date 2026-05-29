@@ -1,7 +1,8 @@
-.PHONY: test test-backend test-pi test-js migrate seed up down build verify-up verify-down verify-reset
+.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed up down build verify-up verify-down verify-reset
 
-TEST_COMPOSE   := docker compose -p plant-monitoring-test -f docker-compose.test.yml
+TEST_COMPOSE   := docker compose -p plant-monitoring-test   -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
+E2E_COMPOSE    := docker compose -p plant-monitoring-e2e    -f docker-compose.e2e.yml
 
 test: test-backend test-pi test-js
 
@@ -14,6 +15,17 @@ test-pi:
 
 test-js:
 	cd backend && npm test
+
+e2e-install:
+	cd e2e && npm ci && npx playwright install --with-deps chromium
+
+test-e2e:
+	@bash -c 'set -e; \
+	  trap "$(E2E_COMPOSE) down -v" EXIT; \
+	  $(E2E_COMPOSE) up -d --build --wait; \
+	  $(E2E_COMPOSE) run --rm backend alembic upgrade head; \
+	  $(E2E_COMPOSE) run --rm backend python scripts/seed.py --backend-url http://backend:8000; \
+	  cd e2e && npm test'
 
 migrate:
 	docker compose run --rm backend alembic upgrade head

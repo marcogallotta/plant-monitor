@@ -1,0 +1,29 @@
+services:
+  db-test:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: plantmonitoring_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d plantmonitoring_test"]
+      interval: 2s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db-test:5432/plantmonitoring_test
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db-test:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 3s
+      retries: 20
+      start_period: 10s
