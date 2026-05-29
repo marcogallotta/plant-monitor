@@ -145,8 +145,11 @@ FastAPI wires `get_db()` as a dependency. Tests override it with `app.dependency
 Run all test suites with:
 
 ```sh
-make test   # runs test-backend + test-pi + test-js
+make test        # runs test-backend + test-pi + test-js
+make test-e2e    # Playwright end-to-end tests — NOT included in make test; must be run separately
 ```
+
+**Always run both.** `make test` does not include `make test-e2e`. Any change to the dashboard, API, or photo flow should be followed by both commands.
 
 Tests run inside Docker Compose using `docker-compose.test.yml`, which spins up a separate `db-test` service pointing at the `plantmonitoring_test` database. The test stack uses project name `plant-monitoring-test` so its network (`plant-monitoring-test_default`) is entirely separate from the dev stack's network. Running `make test-backend` cannot interfere with a running `make up`.
 

@@ -26,6 +26,14 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .status-msg    { font-size: 0.8rem; color: #888; }
 .section-label { font-size: 0.8rem; color: #888; margin-bottom: 0.4rem; }
 
+/* Tab bar */
+.tab-bar { display: flex; border-bottom: 1px solid #2a2a2a; background: #111; padding: 0 1.5rem; overflow-x: auto; }
+.tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: #666; padding: 0.55rem 1rem; cursor: pointer; font-size: 0.82rem; margin-bottom: -1px; }
+.tab-btn:hover { background: none; color: #aaa; }
+.tab-btn.active { color: #ddd; border-bottom-color: #4a8; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
 /* Filters */
 .filters {
   padding: 0.75rem 1.5rem; display: flex; align-items: center; gap: 0.75rem;
@@ -86,7 +94,6 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .compare-header { gap: 1rem; }
 .compare-header h2,
 .upload-panel-header h2 { font-size: 0.85rem; font-weight: 600; color: #aaa; }
-.upload-panel-header { cursor: pointer; user-select: none; }
 .upload-panel-header h2 { flex: 1; }
 
 .compare-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #222; }
@@ -117,7 +124,7 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .flicker-label.b { color: #c8f; }
 
 /* Timelapse */
-.tl-view { background: #111; position: relative; min-height: 120px; display: flex; align-items: center; justify-content: center; }
+.tl-view { background: #111; position: relative; min-height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .tl-view img { width: 100%; max-height: 60vh; object-fit: contain; display: block; }
 .tl-empty { color: #444; font-size: 0.85rem; }
 .tl-label { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.6); padding: 0.2rem 0.5rem; border-radius: 3px; font-size: 0.7rem; color: #aaa; }
@@ -173,8 +180,7 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .note-hint { font-size: 0.72rem; color: #555; text-align: center; }
 
 /* Upload form */
-.upload-form      { padding: 0.75rem 1rem; display: none; flex-direction: column; gap: 0.6rem; }
-.upload-form.open { display: flex; }
+.upload-form { padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
 .upload-row       { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .upload-row label { font-size: 0.8rem; color: #888; min-width: 110px; }
 .upload-row input[type="file"],
