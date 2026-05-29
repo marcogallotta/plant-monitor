@@ -55,6 +55,21 @@ zoomViewport.addEventListener('wheel', function(e) {
   applyTransform();
 }, { passive: false });
 
+function endPan() {
+  if (!state.isPanning) return;
+  console.debug('[zoom] endPan called — clearing isPanning');
+  state.isPanning = false;
+  document.getElementById('zoom-viewport').classList.remove('grabbing');
+}
+
+// dragstart fires when the browser initiates a native image drag (e.g. in Brave),
+// stealing the pointer so document mouseup is never delivered. Clean up pan state
+// here so the grabbing cursor and isPanning flag don't get stuck.
+document.getElementById('modal-img').addEventListener('dragstart', function(e) {
+  console.debug('[zoom] dragstart fired — defaultPrevented:', e.defaultPrevented, 'isPanning:', state.isPanning);
+  endPan();
+});
+
 zoomViewport.addEventListener('mousedown', function(e) {
   if (e.button !== 0) return;
   if (e.shiftKey) {
@@ -67,6 +82,7 @@ zoomViewport.addEventListener('mousedown', function(e) {
     return;
   }
   if (state.zoom <= 1) return;
+  console.debug('[zoom] pan mousedown — zoom:', state.zoom.toFixed(2));
   state.isPanning = true;
   state.wasDrag = false;
   state.panStart = { x: e.clientX, y: e.clientY, panX: state.panX, panY: state.panY };
@@ -89,6 +105,7 @@ document.addEventListener('mousemove', function(e) {
     return;
   }
   if (!state.isPanning) return;
+  console.debug('[zoom] pan mousemove — dx:', (e.clientX - state.panStart.x).toFixed(0), 'dy:', (e.clientY - state.panStart.y).toFixed(0));
   var dx = e.clientX - state.panStart.x;
   var dy = e.clientY - state.panStart.y;
   if (Math.abs(dx) > 4 || Math.abs(dy) > 4) state.wasDrag = true;
@@ -114,7 +131,5 @@ document.addEventListener('mouseup', function(e) {
     state.rectStart = null;
     return;
   }
-  if (!state.isPanning) return;
-  state.isPanning = false;
-  document.getElementById('zoom-viewport').classList.remove('grabbing');
+  endPan();
 });
