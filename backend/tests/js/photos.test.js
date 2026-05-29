@@ -2,9 +2,10 @@ import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vite
 
 vi.mock('@/api.js', () => ({
   getPhotos: vi.fn().mockResolvedValue([]),
+  updatePhoto: vi.fn().mockResolvedValue({}),
 }));
 
-let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle;
+let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate;
 let state;
 
 const PHOTOS = [
@@ -50,7 +51,7 @@ beforeAll(async () => {
     <span id="tl-fps"></span>
   `;
 
-  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle} =
+  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate} =
     await import('@/photos.js'));
   ({state} = await import('@/state.js'));
 });
@@ -242,5 +243,85 @@ describe('flicker frame rotation', () => {
     flickerToggle(); // shows A (90)
     flickerToggle(); // shows B (270)
     expect(document.getElementById('flicker-img').style.transform).toBe('rotate(270deg)');
+  });
+});
+
+// ── gridRotate ────────────────────────────────────────────
+
+describe('gridRotate', () => {
+  let photo;
+
+  beforeEach(async () => {
+    photo = {id: 10, url: '/photos/x.jpg', filename: 'x.jpg', captured_at: '2026-01-01T10:00:00Z', rotation: 0, growing_units: []};
+    state.allPhotos = [photo];
+    // Inject a minimal photo card so gridRotate can update the DOM in-place
+    document.getElementById('photo-grid').innerHTML =
+      '<div class="photo-card" data-id="10"><img style=""></div>';
+    const api = await import('@/api.js');
+    vi.mocked(api.updatePhoto).mockResolvedValue({});
+  });
+
+  it('calls stopPropagation on the event', async () => {
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, 90);
+    expect(e.stopPropagation).toHaveBeenCalled();
+  });
+
+  it('does nothing when photoId is not in allPhotos', async () => {
+    const api = await import('@/api.js');
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 99, 90);
+    expect(vi.mocked(api.updatePhoto)).not.toHaveBeenCalled();
+  });
+
+  it('applies the rotation delta and wraps at 360', async () => {
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, 90);
+    expect(photo.rotation).toBe(90);
+  });
+
+  it('wraps backward rotation past 0 to 270', async () => {
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, -90);
+    expect(photo.rotation).toBe(270);
+  });
+
+  it('updates the img transform in the grid card', async () => {
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, 90);
+    const img = document.querySelector('.photo-card[data-id="10"] img');
+    expect(img.style.transform).toBe('rotate(90deg)');
+  });
+
+  it('clears the img transform when rotation reaches 0', async () => {
+    photo.rotation = 270;
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, 90);
+    const img = document.querySelector('.photo-card[data-id="10"] img');
+    expect(img.style.transform).toBe('');
+  });
+
+  it('calls updatePhoto with the new rotation', async () => {
+    const api = await import('@/api.js');
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, 90);
+    expect(vi.mocked(api.updatePhoto)).toHaveBeenCalledWith(10, {rotation: 90});
+  });
+
+  it('rolls back state.rotation on API failure', async () => {
+    const api = await import('@/api.js');
+    vi.mocked(api.updatePhoto).mockRejectedValueOnce(new Error('network'));
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, 90);
+    expect(photo.rotation).toBe(0);
+  });
+
+  it('rolls back img transform on API failure', async () => {
+    const api = await import('@/api.js');
+    vi.mocked(api.updatePhoto).mockRejectedValueOnce(new Error('network'));
+    const e = {stopPropagation: vi.fn()};
+    await gridRotate(e, 10, 90);
+    const img = document.querySelector('.photo-card[data-id="10"] img');
+    expect(img.style.transform).toBe('');
   });
 });
