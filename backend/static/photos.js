@@ -4,8 +4,10 @@ import { setStatus, formatDate, orientedUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
 const FILTER_IDS = ['start', 'end', 'filter-source', 'filter-photo-type', 'filter-location', 'filter-unit', 'filter-label'];
-const PAGE_SIZE = 60;
-let visibleCount = PAGE_SIZE;
+const _rawPageSize = parseInt(new URLSearchParams(window.location.search).get('page_size') || '60', 10);
+const PAGE_SIZE = Number.isFinite(_rawPageSize) ? Math.min(Math.max(_rawPageSize, 1), 500) : 60;
+let currentOffset = 0;
+let lastFilterParams = {};
 
 function updateFilterIndicator() {
   const active = FILTER_IDS.some(id => document.getElementById(id)?.value);
@@ -25,16 +27,21 @@ export async function loadPhotos() {
   updateFilterIndicator();
   setStatus('Loading…');
   try {
-    state.allPhotos = await getPhotos({
+    lastFilterParams = {
       start:    start    ? new Date(start + 'T00:00:00').toISOString() : null,
       end:      end      ? new Date(end   + 'T23:59:59').toISOString() : null,
       source, ptype, location, unit, label,
-    });
-    visibleCount = PAGE_SIZE;
-    renderGrid(state.allPhotos);
-    const total = state.allPhotos.length;
-    const unclassified = state.allPhotos.filter(p => !p.photo_type || !(p.growing_unit_ids && p.growing_unit_ids.length)).length;
-    const base = total === 0 ? 'No photos found.' : total + ' photo' + (total === 1 ? '' : 's');
+    };
+    currentOffset = 0;
+    const result = await getPhotos({...lastFilterParams, limit: PAGE_SIZE, offset: 0});
+    state.allPhotos = result.photos;
+    state.totalPhotos = result.total;
+    renderGrid();
+    const loaded = state.allPhotos.length;
+    const total = state.totalPhotos;
+    const paginated = loaded < total;
+    const unclassified = paginated ? 0 : state.allPhotos.filter(p => !p.photo_type || !(p.growing_unit_ids && p.growing_unit_ids.length)).length;
+    const base = total === 0 ? 'No photos found.' : (paginated ? 'Showing ' + loaded + ' of ' + total : total + ' photo' + (total === 1 ? '' : 's'));
     setStatus(unclassified > 0 ? base + ' · ' + unclassified + ' unclassified' : base);
   } catch (e) {
     setStatus('Error loading photos: ' + e.message);
@@ -45,12 +52,12 @@ FILTER_IDS.forEach(id => {
   document.getElementById(id)?.addEventListener('change', loadPhotos);
 });
 
-function renderGrid(photos) {
+function renderGrid() {
   tlInit();
   const grid = document.getElementById('photo-grid');
   grid.innerHTML = '';
-  const shown = Math.min(visibleCount, photos.length);
-  for (let i = 0; i < shown; i++) {
+  const photos = state.allPhotos;
+  for (let i = 0; i < photos.length; i++) {
     const p = photos[i];
     const isA = state.photoA && state.photoA.id === p.id;
     const isB = state.photoB && state.photoB.id === p.id;
@@ -77,18 +84,32 @@ function renderGrid(photos) {
       '<div class="caption">' + caption + '</div>';
     grid.appendChild(card);
   }
-  if (shown < photos.length) {
+  if (state.allPhotos.length < state.totalPhotos) {
+    const remaining = state.totalPhotos - state.allPhotos.length;
     const row = document.createElement('div');
     row.className = 'load-more-row';
     row.innerHTML = '<button onclick="loadMorePhotos()" class="load-more-btn">' +
-      'Load more (' + (photos.length - shown) + ' remaining)</button>';
+      'Load more (' + remaining + ' remaining)</button>';
     grid.appendChild(row);
   }
 }
 
-export function loadMorePhotos() {
-  visibleCount += PAGE_SIZE;
-  renderGrid(state.allPhotos);
+export async function loadMorePhotos() {
+  currentOffset = state.allPhotos.length;
+  try {
+    const result = await getPhotos({...lastFilterParams, limit: PAGE_SIZE, offset: currentOffset});
+    state.totalPhotos = result.total;
+    state.allPhotos = [...state.allPhotos, ...result.photos];
+    renderGrid();
+    const loaded = state.allPhotos.length;
+    const total = state.totalPhotos;
+    const paginated = loaded < total;
+    const unclassified = paginated ? 0 : state.allPhotos.filter(p => !p.photo_type || !(p.growing_unit_ids && p.growing_unit_ids.length)).length;
+    const base = paginated ? 'Showing ' + loaded + ' of ' + total : total + ' photo' + (total === 1 ? '' : 's');
+    setStatus(unclassified > 0 ? base + ' · ' + unclassified + ' unclassified' : base);
+  } catch (e) {
+    setStatus('Error loading more: ' + e.message);
+  }
 }
 
 export function toggleComparePanel() {
@@ -117,14 +138,14 @@ export function selectA(e, idx) {
   e.stopPropagation();
   state.photoA = state.allPhotos[idx];
   updateCompare();
-  renderGrid(state.allPhotos);
+  renderGrid();
 }
 
 export function selectB(e, idx) {
   e.stopPropagation();
   state.photoB = state.allPhotos[idx];
   updateCompare();
-  renderGrid(state.allPhotos);
+  renderGrid();
 }
 
 function updateCompare() {

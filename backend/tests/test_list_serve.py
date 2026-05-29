@@ -21,17 +21,17 @@ def _photo(db_session, stem, captured_at_str):
 # --- GET /photos ---
 
 def test_list_photos_empty(client):
-    assert client.get("/photos").json() == []
+    assert client.get("/photos").json() == {"photos": [], "total": 0}
 
 
 def test_list_photos_returns_photo(client, db_session):
     _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
     data = client.get("/photos").json()
-    assert len(data) == 1
-    assert data[0]["filename"] == "2026-05-26T100000Z.jpg"
-    assert data[0]["url"] == "/photos/2026-05-26T100000Z.jpg"
-    assert "id" in data[0]
-    assert "captured_at" in data[0]
+    assert len(data["photos"]) == 1
+    assert data["photos"][0]["filename"] == "2026-05-26T100000Z.jpg"
+    assert data["photos"][0]["url"] == "/photos/2026-05-26T100000Z.jpg"
+    assert "id" in data["photos"][0]
+    assert "captured_at" in data["photos"][0]
 
 
 def test_list_photos_sorted_by_captured_at(client, db_session):
@@ -39,7 +39,7 @@ def test_list_photos_sorted_by_captured_at(client, db_session):
     _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
     _photo(db_session, "2026-05-26T110000Z", "2026-05-26T11:00:00Z")
     data = client.get("/photos").json()
-    filenames = [d["filename"] for d in data]
+    filenames = [d["filename"] for d in data["photos"]]
     assert filenames == [
         "2026-05-26T100000Z.jpg",
         "2026-05-26T110000Z.jpg",
@@ -51,16 +51,16 @@ def test_list_photos_filter_start(client, db_session):
     _photo(db_session, "2026-05-26T090000Z", "2026-05-26T09:00:00Z")
     _photo(db_session, "2026-05-26T110000Z", "2026-05-26T11:00:00Z")
     data = client.get("/photos?start=2026-05-26T10:00:00Z").json()
-    assert len(data) == 1
-    assert data[0]["filename"] == "2026-05-26T110000Z.jpg"
+    assert len(data["photos"]) == 1
+    assert data["photos"][0]["filename"] == "2026-05-26T110000Z.jpg"
 
 
 def test_list_photos_filter_end(client, db_session):
     _photo(db_session, "2026-05-26T090000Z", "2026-05-26T09:00:00Z")
     _photo(db_session, "2026-05-26T110000Z", "2026-05-26T11:00:00Z")
     data = client.get("/photos?end=2026-05-26T10:00:00Z").json()
-    assert len(data) == 1
-    assert data[0]["filename"] == "2026-05-26T090000Z.jpg"
+    assert len(data["photos"]) == 1
+    assert data["photos"][0]["filename"] == "2026-05-26T090000Z.jpg"
 
 
 def test_list_photos_filter_range(client, db_session):
@@ -68,8 +68,8 @@ def test_list_photos_filter_range(client, db_session):
     _photo(db_session, "2026-05-26T100000Z", "2026-05-26T10:00:00Z")
     _photo(db_session, "2026-05-26T120000Z", "2026-05-26T12:00:00Z")
     data = client.get("/photos?start=2026-05-26T09:00:00Z&end=2026-05-26T11:00:00Z").json()
-    assert len(data) == 1
-    assert data[0]["filename"] == "2026-05-26T100000Z.jpg"
+    assert len(data["photos"]) == 1
+    assert data["photos"][0]["filename"] == "2026-05-26T100000Z.jpg"
 
 
 # --- GET /photos/{filename} ---

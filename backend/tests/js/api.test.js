@@ -72,17 +72,19 @@ describe('error handling', () => {
 // ── getPhotos query string ────────────────────────────────
 
 describe('getPhotos', () => {
-  it('fetches /photos with no query string when params are empty', async () => {
-    const fetchMock = mockFetch({body: []});
+  it('always includes limit and offset params', async () => {
+    const fetchMock = mockFetch({body: {photos: [], total: 0}});
     vi.stubGlobal('fetch', fetchMock);
     await getPhotos({});
-    expect(fetchMock.mock.calls[0][0]).toBe('/photos');
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).toContain('limit=60');
+    expect(url).toContain('offset=0');
   });
 
   it('builds a query string from all provided params', async () => {
-    const fetchMock = mockFetch({body: []});
+    const fetchMock = mockFetch({body: {photos: [], total: 0}});
     vi.stubGlobal('fetch', fetchMock);
-    await getPhotos({source: 'pi', ptype: 'overview', location: '1', unit: '2'});
+    await getPhotos({source: 'pi', ptype: 'overview', location: '1', unit: '2', limit: 60, offset: 0});
     const url = fetchMock.mock.calls[0][0];
     expect(url).toContain('source=pi');
     expect(url).toContain('photo_type=overview');
@@ -90,11 +92,14 @@ describe('getPhotos', () => {
     expect(url).toContain('growing_unit_id=2');
   });
 
-  it('omits params that are empty/falsy', async () => {
-    const fetchMock = mockFetch({body: []});
+  it('omits filter params that are empty/falsy but always sends limit and offset', async () => {
+    const fetchMock = mockFetch({body: {photos: [], total: 0}});
     vi.stubGlobal('fetch', fetchMock);
     await getPhotos({source: '', ptype: null, location: undefined, unit: ''});
-    expect(fetchMock.mock.calls[0][0]).toBe('/photos');
+    const url = fetchMock.mock.calls[0][0];
+    expect(url).not.toContain('source=');
+    expect(url).toContain('limit=');
+    expect(url).toContain('offset=');
   });
 });
 

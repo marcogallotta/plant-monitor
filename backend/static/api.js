@@ -18,7 +18,7 @@ function apiJson(url, method, body) {
 export function getLocations()    { return apiRequest('/locations'); }
 export function getGrowingUnits() { return apiRequest('/growing-units'); }
 
-export async function getPhotos(params) {
+export async function getPhotos(params = {}) {
   const p = [];
   if (params.start)    p.push('start='           + encodeURIComponent(params.start));
   if (params.end)      p.push('end='             + encodeURIComponent(params.end));
@@ -27,7 +27,9 @@ export async function getPhotos(params) {
   if (params.location) p.push('location_id='     + encodeURIComponent(params.location));
   if (params.unit)     p.push('growing_unit_id=' + encodeURIComponent(params.unit));
   if (params.label)    p.push('label_id='        + encodeURIComponent(params.label));
-  return apiRequest('/photos' + (p.length ? '?' + p.join('&') : ''));
+  p.push('limit='  + encodeURIComponent(params.limit  ?? 60));
+  p.push('offset=' + encodeURIComponent(params.offset ?? 0));
+  return apiRequest('/photos?' + p.join('&'));
 }
 
 export function updatePhoto(id, body)          { return apiJson('/photos/' + id, 'PUT', body); }

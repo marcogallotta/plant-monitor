@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/api.js', () => ({
-  getPhotos: vi.fn().mockResolvedValue([]),
+  getPhotos: vi.fn().mockResolvedValue({photos: [], total: 0}),
   updatePhoto: vi.fn().mockResolvedValue({}),
 }));
 
@@ -64,7 +64,7 @@ beforeEach(async () => {
   state.flickerShowing = 'a';
   vi.clearAllMocks();
   const api = await import('@/api.js');
-  vi.mocked(api.getPhotos).mockResolvedValue([]);
+  vi.mocked(api.getPhotos).mockResolvedValue({photos: [], total: 0});
   document.getElementById('start').value = '';
   document.getElementById('end').value = '';
   document.getElementById('filter-source').value = '';
@@ -108,7 +108,7 @@ describe('loadPhotos', () => {
 
   it('sets state.allPhotos from the api response', async () => {
     const {getPhotos} = await import('@/api.js');
-    getPhotos.mockResolvedValueOnce(PHOTOS);
+    getPhotos.mockResolvedValueOnce({photos: PHOTOS, total: PHOTOS.length});
     await loadPhotos();
     expect(state.allPhotos).toEqual(PHOTOS);
   });
@@ -119,9 +119,10 @@ describe('loadPhotos', () => {
 describe('renderGrid (via loadPhotos)', () => {
   it('points the grid img at the oriented url and uses no css transform', async () => {
     const {getPhotos} = await import('@/api.js');
-    getPhotos.mockResolvedValueOnce([
-      {id: 7, url: '/photos/g.jpg', filename: 'g.jpg', captured_at: '2026-01-01T10:00:00Z', rotation: 90, growing_units: []},
-    ]);
+    getPhotos.mockResolvedValueOnce({
+      photos: [{id: 7, url: '/photos/g.jpg', filename: 'g.jpg', captured_at: '2026-01-01T10:00:00Z', rotation: 90, growing_units: []}],
+      total: 1,
+    });
     await loadPhotos();
     const img = document.querySelector('#photo-grid .photo-card[data-id="7"] img');
     expect(img.getAttribute('src')).toBe('/photos/g.jpg?oriented=1&v=90');

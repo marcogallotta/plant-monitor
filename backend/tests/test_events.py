@@ -9,7 +9,7 @@ def _photo(client, isolated_photos_dir):
         "image":    (f"{stem}.jpg", b"FAKEIMAGE", "image/jpeg"),
         "metadata": (f"{stem}.json", meta, "application/json"),
     })
-    return client.get("/photos").json()[0]
+    return client.get("/photos").json()["photos"][0]
 
 
 # --- POST /events ---

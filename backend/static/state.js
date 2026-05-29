@@ -1,6 +1,7 @@
 export const state = {
   // photos / grid
   allPhotos: [],
+  totalPhotos: 0,
   photoA: null,
   photoB: null,
   allLocations: [],

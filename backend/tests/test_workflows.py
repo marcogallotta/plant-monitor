@@ -25,7 +25,7 @@ def test_classify_photo_all_fields_reflected_in_listing(client):
     })
     assert r.status_code == 200
 
-    listing = client.get("/photos").json()
+    listing = client.get("/photos").json()["photos"]
     p = next(x for x in listing if x["id"] == photo["id"])
     assert p["photo_type"] == "closeup"
     assert p["location_id"] == loc["id"]
@@ -40,7 +40,7 @@ def test_reclassify_replaces_growing_units(client):
     client.put(f"/photos/{photo['id']}", json={"growing_unit_ids": [u1["id"]]})
     client.put(f"/photos/{photo['id']}", json={"growing_unit_ids": [u2["id"]]})
 
-    listing = client.get("/photos").json()
+    listing = client.get("/photos").json()["photos"]
     p = next(x for x in listing if x["id"] == photo["id"])
     unit_ids = {u["id"] for u in p["growing_units"]}
     assert unit_ids == {u2["id"]}
@@ -53,7 +53,7 @@ def test_clear_growing_units_via_empty_array(client):
     client.put(f"/photos/{photo['id']}", json={"growing_unit_ids": [unit["id"]]})
     client.put(f"/photos/{photo['id']}", json={"growing_unit_ids": []})
 
-    listing = client.get("/photos").json()
+    listing = client.get("/photos").json()["photos"]
     p = next(x for x in listing if x["id"] == photo["id"])
     assert p["growing_units"] == []
 
@@ -67,12 +67,12 @@ def test_create_assign_and_remove_label_reflected_in_listing(client):
     label = client.post("/labels", json={"name": "rust"}).json()
     client.post(f"/photos/{photo['id']}/labels/{label['id']}")
 
-    listing = client.get("/photos").json()
+    listing = client.get("/photos").json()["photos"]
     p = next(x for x in listing if x["id"] == photo["id"])
     assert any(l["name"] == "rust" for l in p["labels"])
 
     client.delete(f"/photos/{photo['id']}/labels/{label['id']}")
-    listing = client.get("/photos").json()
+    listing = client.get("/photos").json()["photos"]
     p = next(x for x in listing if x["id"] == photo["id"])
     assert not any(l["name"] == "rust" for l in p["labels"])
 
@@ -120,7 +120,7 @@ def test_filter_by_location_returns_only_matching_photos(client):
         "image": ("IMG_002.jpg", b"FAKEIMAGE", "image/jpeg"),
     }).json()
 
-    results = client.get(f"/photos?location_id={loc_a['id']}").json()
+    results = client.get(f"/photos?location_id={loc_a['id']}").json()["photos"]
     ids = {p["id"] for p in results}
     assert photo_a["id"] in ids
     assert photo_b["id"] not in ids
@@ -138,7 +138,7 @@ def test_filter_by_growing_unit_returns_only_matching_photos(client):
     client.put(f"/photos/{photo_a['id']}", json={"growing_unit_ids": [u1["id"]]})
     client.put(f"/photos/{photo_b['id']}", json={"growing_unit_ids": [u2["id"]]})
 
-    results = client.get(f"/photos?growing_unit_id={u1['id']}").json()
+    results = client.get(f"/photos?growing_unit_id={u1['id']}").json()["photos"]
     ids = {p["id"] for p in results}
     assert photo_a["id"] in ids
     assert photo_b["id"] not in ids
@@ -203,7 +203,7 @@ def _assert_event_shape(e, loc, unit1, unit2):
 
 def test_list_photos_includes_all_related_data(client):
     loc, unit1, unit2, label, (p1, p2, p3), _ = _setup_rich_fixtures(client)
-    photos = client.get("/photos").json()
+    photos = client.get("/photos").json()["photos"]
     for pid in (p1["id"], p2["id"], p3["id"]):
         p = next(x for x in photos if x["id"] == pid)
         _assert_photo_shape(p, loc, unit1, unit2, label)

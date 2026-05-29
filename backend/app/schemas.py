@@ -91,6 +91,11 @@ class PhotoOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PhotoListOut(BaseModel):
+    photos: list[PhotoOut]
+    total: int
+
+
 class NoteCreate(BaseModel):
     note_text: str
     x: float

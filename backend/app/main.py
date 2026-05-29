@@ -38,6 +38,7 @@ from .schemas import (
     NoteOut,
     NoteUpdate,
     PhotoClassify,
+    PhotoListOut,
     PhotoOut,
 )
 
@@ -277,7 +278,7 @@ async def upload_photo(
     return {"status": "ok"}
 
 
-@app.get("/photos", response_model=list[PhotoOut])
+@app.get("/photos", response_model=PhotoListOut)
 def list_photos(
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
@@ -286,10 +287,14 @@ def list_photos(
     location_id: Optional[int] = Query(None),
     growing_unit_id: Optional[int] = Query(None),
     label_id: Optional[int] = Query(None),
+    limit: int = Query(60, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id, label_id)
-    return [_photo_out(p) for p in q.all()]
+    total = q.order_by(None).count()
+    photos = [_photo_out(p) for p in q.offset(offset).limit(limit).all()]
+    return {"photos": photos, "total": total}
 
 
 @app.put("/photos/{photo_id}", response_model=PhotoOut)

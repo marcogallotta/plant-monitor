@@ -116,6 +116,9 @@ class Label(Base):
 
 class PhotoLabel(Base):
     __tablename__ = "photo_labels"
+    __table_args__ = (
+        Index("photo_labels_label_id_idx", "label_id"),
+    )
 
     photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), primary_key=True)
     label_id: Mapped[int] = mapped_column(Integer, ForeignKey("labels.id"), primary_key=True)
