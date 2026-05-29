@@ -1,6 +1,13 @@
 import { state } from './state.js';
 import { formatDate } from './utils.js';
 
+export function toggleTlPanel() {
+  const body  = document.getElementById('tl-body');
+  const label = document.getElementById('tl-toggle-label');
+  const open  = body.classList.toggle('open');
+  label.textContent = open ? '▾ collapse' : '▸ expand';
+}
+
 export function tlInit() {
   tlStop();
   state.tlIndex = 0;

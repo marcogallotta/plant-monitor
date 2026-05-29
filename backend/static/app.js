@@ -13,7 +13,7 @@ import {
 } from './events.js';
 import { initNotes, modalImgClick, noteSave, noteDelete, noteCancel } from './notes.js';
 import { populateSelect } from './utils.js';
-import { tlPrev, tlPlayPause, tlNext } from './timelapse.js';
+import { tlPrev, tlPlayPause, tlNext, toggleTlPanel } from './timelapse.js';
 import { initUpload, toggleUploadPanel, submitManualUpload } from './upload.js';
 import { visualToStored } from './zoom.js';
 import {
@@ -30,6 +30,7 @@ import {
   selectA, selectB,
   flickerToggle, flickerAuto, stopAuto,
   gridRotate,
+  toggleComparePanel,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -81,7 +82,8 @@ Object.assign(window, {
   rotatePhoto, gridRotate,
   handleLabelInput, handleLabelKeydown,
   flickerToggle, flickerAuto,
-  tlPrev, tlPlayPause, tlNext,
+  toggleComparePanel,
+  tlPrev, tlPlayPause, tlNext, toggleTlPanel,
   noteSave, noteDelete, noteCancel,
   toggleUploadPanel, submitManualUpload,
   toggleSdPanel, sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,

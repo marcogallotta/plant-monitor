@@ -11,7 +11,7 @@ test('manual upload via dashboard: photo appears in grid', async ({ page }) => {
   await page.goto('/');
 
   // Expand the upload panel
-  await page.locator('.upload-panel-header').first().click();
+  await page.locator('.upload-panel-header', { hasText: 'Upload single photo' }).click();
   await expect(page.locator('#upload-form')).toHaveClass(/open/);
 
   // Intercept the POST before clicking so we don't race the response

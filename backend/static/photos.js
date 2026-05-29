@@ -14,8 +14,8 @@ export async function loadPhotos() {
   setStatus('Loading…');
   try {
     state.allPhotos = await getPhotos({
-      start:    start    ? new Date(start).toISOString() : null,
-      end:      end      ? new Date(end).toISOString()   : null,
+      start:    start    ? new Date(start + 'T00:00:00').toISOString() : null,
+      end:      end      ? new Date(end   + 'T23:59:59').toISOString() : null,
       source, ptype, location, unit,
     });
     renderGrid(state.allPhotos);
@@ -37,6 +37,10 @@ function renderGrid(photos) {
     card.className = 'photo-card';
     card.dataset.id = p.id;
     const ts = formatDate(p.captured_at);
+    const unitNames = (p.growing_unit_ids || [])
+      .map(id => { const u = state.allUnits.find(u => u.id === id); return u ? u.name : null; })
+      .filter(Boolean).join(', ');
+    const caption = unitNames ? ts + ' · ' + unitNames : ts;
     // Grid thumbnails use the rotation-baked variant (not CSS rotation) so dragging a
     // thumbnail into a browser tab opens it in the correct orientation.
     card.innerHTML =
@@ -49,9 +53,16 @@ function renderGrid(photos) {
         '<button onclick="gridRotate(event,' + p.id + ',-90)">↺</button>' +
         '<button onclick="gridRotate(event,' + p.id + ',90)">↻</button>' +
       '</div>' +
-      '<div class="caption">' + ts + '</div>';
+      '<div class="caption">' + caption + '</div>';
     grid.appendChild(card);
   }
+}
+
+export function toggleComparePanel() {
+  const body  = document.getElementById('compare-body');
+  const label = document.getElementById('compare-toggle-label');
+  const open  = body.classList.toggle('open');
+  label.textContent = open ? '▾ collapse' : '▸ expand';
 }
 
 export function applyFilter() { loadPhotos(); }
@@ -82,6 +93,13 @@ export function selectB(e, idx) {
 }
 
 function updateCompare() {
+  const body  = document.getElementById('compare-body');
+  const label = document.getElementById('compare-toggle-label');
+  if (body && !body.classList.contains('open')) {
+    body.classList.add('open');
+    if (label) label.textContent = '▾ collapse';
+  }
+
   const ready = state.photoA && state.photoB;
 
   if (state.photoA) {

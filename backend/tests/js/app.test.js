@@ -15,6 +15,7 @@ vi.mock('@/photos.js', () => ({
   applyFilter: vi.fn(), clearFilter: vi.fn(),
   selectA: vi.fn(), selectB: vi.fn(),
   flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(),
+  toggleComparePanel: vi.fn(),
 }));
 
 vi.mock('@/modal.js', () => ({
@@ -33,7 +34,7 @@ vi.mock('@/labels.js', () => ({
 }));
 
 vi.mock('@/timelapse.js', () => ({
-  tlPrev: vi.fn(), tlPlayPause: vi.fn(), tlNext: vi.fn(),
+  tlPrev: vi.fn(), tlPlayPause: vi.fn(), tlNext: vi.fn(), toggleTlPanel: vi.fn(),
 }));
 
 vi.mock('@/upload.js', () => ({
@@ -72,8 +73,8 @@ describe('window exports', () => {
     'selectA', 'selectB',
     'rotatePhoto',
     'handleLabelInput', 'handleLabelKeydown',
-    'flickerToggle', 'flickerAuto', 'gridRotate',
-    'tlPrev', 'tlPlayPause', 'tlNext',
+    'flickerToggle', 'flickerAuto', 'gridRotate', 'toggleComparePanel',
+    'tlPrev', 'tlPlayPause', 'tlNext', 'toggleTlPanel',
     'noteSave', 'noteDelete', 'noteCancel',
     'toggleUploadPanel', 'submitManualUpload',
     'toggleSdPanel', 'sdSelectAllVisible', 'sdDeselectAll', 'sdLoadMore', 'sdUploadSelected',

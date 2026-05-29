@@ -11,14 +11,15 @@
 <header><h1>Plant Monitor</h1></header>
 
 <div class="filters">
-  <label>From <input type="datetime-local" id="start"></label>
-  <label>To   <input type="datetime-local" id="end"></label>
+  <label>From <input type="date" id="start"></label>
+  <label>To   <input type="date" id="end"></label>
   <label>Source
     <select id="filter-source">
       <option value="">All sources</option>
       <option value="pi">Pi</option>
       <option value="manual">Manual</option>
       <option value="sd">SD / camera</option>
+      <option value="phone">Phone</option>
       <option value="seed">Seed</option>
     </select>
   </label>
@@ -51,10 +52,54 @@
 <div id="sensor-strip" class="sensor-strip"></div>
 <div id="status"></div>
 
+<!-- SD card / phone import panel -->
+<div class="upload-panel">
+  <div class="upload-panel-header" onclick="toggleSdPanel()">
+    <h2>Import photos</h2>
+    <button id="sd-scan-btn" onclick="event.stopPropagation(); handleSdScan()">Scan camera/card</button>
+    <span id="sd-folder-status" class="status-msg" style="margin-left:0.5rem;"></span>
+    <span id="sd-toggle-label" class="panel-toggle">▸ expand</span>
+  </div>
+  <div class="upload-form" id="sd-form">
+    <div class="upload-row">
+      <input type="file" id="sd-folder-input" webkitdirectory accept=".jpg,.jpeg,.orf,.arw" style="display:none" onchange="handleSdFolderInput(event)">
+      <button onclick="document.getElementById('sd-folder-input').click()">Choose folder</button>
+    </div>
+    <div class="upload-row" id="sd-grid-controls" style="display:none;">
+      <span id="sd-selected-count" class="status-msg" style="flex:1;"></span>
+      <button onclick="sdSelectAllVisible()">Select all visible</button>
+      <button onclick="sdDeselectAll()">Deselect all</button>
+      <button id="sd-add-group-btn" onclick="sdAddGroup()" style="display:none;">Add group ↑</button>
+      <button id="sd-add-more-btn" onclick="sdAddMore()" style="display:none;">Show older</button>
+    </div>
+    <div class="sd-grid" id="sd-grid"></div>
+    <div class="upload-row" id="sd-load-more-row" style="display:none;justify-content:center;">
+      <button onclick="sdLoadMore()">Load more</button>
+      <span id="sd-load-more-label" class="status-msg" style="margin-left:0.5rem;"></span>
+    </div>
+    <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;align-items:center;">
+      <label>Type:</label>
+      <select id="sd-photo-type">
+        <option value="">— none —</option>
+        <option value="overview">overview</option>
+        <option value="closeup">closeup</option>
+        <option value="incident">incident</option>
+        <option value="comparison">comparison</option>
+        <option value="harvest">harvest</option>
+        <option value="propagation">propagation</option>
+        <option value="new_purchase">new purchase</option>
+        <option value="other">other</option>
+      </select>
+      <button id="sd-upload-btn" onclick="sdUploadSelected()">Import selected</button>
+      <span id="sd-upload-status" class="status-msg"></span>
+    </div>
+  </div>
+</div>
+
 <!-- Manual upload panel -->
 <div class="upload-panel">
   <div class="upload-panel-header" onclick="toggleUploadPanel()">
-    <h2>Upload photo</h2>
+    <h2>Upload single photo</h2>
     <span id="upload-toggle-label" class="panel-toggle">▸ expand</span>
   </div>
   <div class="upload-form" id="upload-form">
@@ -97,50 +142,6 @@
       <label></label>
       <button onclick="submitManualUpload()">Upload</button>
       <span id="upload-status" class="status-msg"></span>
-    </div>
-  </div>
-</div>
-
-<!-- SD card import panel -->
-<div class="upload-panel">
-  <div class="upload-panel-header">
-    <h2 onclick="toggleSdPanel()" style="cursor:pointer;">SD card import</h2>
-    <button id="sd-scan-btn" onclick="handleSdScan()">Scan camera/card</button>
-    <span id="sd-folder-status" class="status-msg" style="margin-left:0.5rem;"></span>
-    <span id="sd-toggle-label" class="panel-toggle" onclick="toggleSdPanel()">▸ expand</span>
-  </div>
-  <div class="upload-form" id="sd-form">
-    <div class="upload-row">
-      <input type="file" id="sd-folder-input" webkitdirectory accept=".jpg,.jpeg,.orf,.arw" style="display:none" onchange="handleSdFolderInput(event)">
-      <button onclick="document.getElementById('sd-folder-input').click()">Choose folder</button>
-    </div>
-    <div class="upload-row" id="sd-grid-controls" style="display:none;">
-      <span id="sd-selected-count" class="status-msg" style="flex:1;"></span>
-      <button onclick="sdSelectAllVisible()">Select all visible</button>
-      <button onclick="sdDeselectAll()">Deselect all</button>
-      <button id="sd-add-group-btn" onclick="sdAddGroup()" style="display:none;">Add group ↑</button>
-      <button id="sd-add-more-btn" onclick="sdAddMore()" style="display:none;">Show older</button>
-    </div>
-    <div class="sd-grid" id="sd-grid"></div>
-    <div class="upload-row" id="sd-load-more-row" style="display:none;justify-content:center;">
-      <button onclick="sdLoadMore()">Load more</button>
-      <span id="sd-load-more-label" class="status-msg" style="margin-left:0.5rem;"></span>
-    </div>
-    <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;align-items:center;">
-      <label>Type:</label>
-      <select id="sd-photo-type">
-        <option value="">— none —</option>
-        <option value="overview">overview</option>
-        <option value="closeup">closeup</option>
-        <option value="incident">incident</option>
-        <option value="comparison">comparison</option>
-        <option value="harvest">harvest</option>
-        <option value="propagation">propagation</option>
-        <option value="new_purchase">new purchase</option>
-        <option value="other">other</option>
-      </select>
-      <button id="sd-upload-btn" onclick="sdUploadSelected()">Import selected</button>
-      <span id="sd-upload-status" class="status-msg"></span>
     </div>
   </div>
 </div>
@@ -263,60 +264,66 @@
 
 <!-- Comparison panel -->
 <div class="compare-panel">
-  <div class="compare-header">
+  <div class="compare-header" onclick="toggleComparePanel()" style="cursor:pointer;user-select:none;">
     <h2>Compare</h2>
     <span id="compare-hint" class="panel-toggle">
       Click <strong style="color:#8af">A</strong> / <strong style="color:#c8f">B</strong> on any photo above to select
     </span>
+    <span id="compare-toggle-label" class="panel-toggle">▸ expand</span>
   </div>
 
-  <div class="compare-slots">
-    <div class="compare-slot" id="slot-a">
-      <div class="slot-label" style="color:#8af">Photo A</div>
-      <div class="slot-empty" id="slot-a-empty">not selected</div>
-      <img id="img-a" src="" alt="" style="display:none">
-      <div class="slot-caption" id="cap-a"></div>
+  <div class="upload-form" id="compare-body">
+    <div class="compare-slots">
+      <div class="compare-slot" id="slot-a">
+        <div class="slot-label" style="color:#8af">Photo A</div>
+        <div class="slot-empty" id="slot-a-empty">not selected</div>
+        <img id="img-a" src="" alt="" style="display:none">
+        <div class="slot-caption" id="cap-a"></div>
+      </div>
+      <div class="compare-slot" id="slot-b">
+        <div class="slot-label" style="color:#c8f">Photo B</div>
+        <div class="slot-empty" id="slot-b-empty">not selected</div>
+        <img id="img-b" src="" alt="" style="display:none">
+        <div class="slot-caption" id="cap-b"></div>
+      </div>
     </div>
-    <div class="compare-slot" id="slot-b">
-      <div class="slot-label" style="color:#c8f">Photo B</div>
-      <div class="slot-empty" id="slot-b-empty">not selected</div>
-      <img id="img-b" src="" alt="" style="display:none">
-      <div class="slot-caption" id="cap-b"></div>
+
+    <div class="flicker-controls">
+      <button id="btn-toggle" onclick="flickerToggle()" disabled>Toggle A/B</button>
+      <button id="btn-auto"   onclick="flickerAuto()"   disabled>Auto flicker</button>
+      <label>Speed <input type="range" id="flicker-speed" min="1" max="20" value="4"></label>
+      <span id="flicker-fps" class="panel-toggle"></span>
     </div>
-  </div>
 
-  <div class="flicker-controls">
-    <button id="btn-toggle" onclick="flickerToggle()" disabled>Toggle A/B</button>
-    <button id="btn-auto"   onclick="flickerAuto()"   disabled>Auto flicker</button>
-    <label>Speed <input type="range" id="flicker-speed" min="1" max="20" value="4"></label>
-    <span id="flicker-fps" class="panel-toggle"></span>
-  </div>
-
-  <div class="flicker-view" id="flicker-view">
-    <img id="flicker-img" src="" alt="">
-    <div class="flicker-label" id="flicker-label"></div>
+    <div class="flicker-view" id="flicker-view">
+      <img id="flicker-img" src="" alt="">
+      <div class="flicker-label" id="flicker-label"></div>
+    </div>
   </div>
 </div>
 
 <!-- Timelapse panel -->
 <div class="compare-panel" style="margin-top:0.5rem;">
-  <div class="compare-header">
+  <div class="compare-header" onclick="toggleTlPanel()" style="cursor:pointer;user-select:none;">
     <h2>Timelapse</h2>
     <span id="tl-counter" class="panel-toggle">no photos loaded</span>
+    <span id="tl-toggle-label" class="panel-toggle">▸ expand</span>
   </div>
 
-  <div class="tl-view">
-    <img id="tl-img" src="" alt="" style="display:none">
-    <div id="tl-empty" class="tl-empty">Load photos in the timeline above to play</div>
-    <div id="tl-label" class="tl-label" style="display:none;"></div>
-  </div>
+  <div class="upload-form" id="tl-body">
+    <div class="tl-view">
+      <img id="tl-img" src="" alt="" style="display:none">
+      <div id="tl-empty" class="tl-empty">Load photos in the timeline above to play</div>
+      <div id="tl-label" class="tl-label" style="display:none;"></div>
+    </div>
 
-  <div class="flicker-controls">
-    <button id="tl-prev" onclick="tlPrev()" disabled>&#9664; Prev</button>
-    <button id="tl-play" onclick="tlPlayPause()" disabled>&#9654; Play</button>
-    <button id="tl-next" onclick="tlNext()" disabled>&#9654; Next</button>
-    <label>Speed <input type="range" id="tl-speed" min="1" max="24" value="4"></label>
-    <span id="tl-fps" class="panel-toggle"></span>
+    <div class="flicker-controls">
+      <button id="tl-prev" onclick="tlPrev()" disabled>&#9664; Prev</button>
+      <button id="tl-play" onclick="tlPlayPause()" disabled>&#9654; Play</button>
+      <button id="tl-next" onclick="tlNext()" disabled>&#9654; Next</button>
+      <label>Speed <input type="range" id="tl-speed" min="1" max="24" value="4"></label>
+      <span id="tl-fps" class="panel-toggle"></span>
+    </div>
   </div>
 </div>
 
@@ -397,7 +404,7 @@
     </div>
     <span id="modal-event-status" class="status-msg"></span>
     <div id="modal-sensor-context" class="modal-sensor-context"></div>
-    <div class="note-hint">Scroll to zoom · drag to pan · click to pin · shift+drag to box</div>
+    <div class="note-hint">← → navigate · scroll to zoom · drag to pan · click to pin · shift+drag to box</div>
     <div id="note-panel" class="note-panel hidden">
       <div id="note-panel-title" class="note-panel-title">New note</div>
       <textarea id="note-text" placeholder="Enter note…" rows="2"></textarea>
