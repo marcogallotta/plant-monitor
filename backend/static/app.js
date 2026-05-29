@@ -32,6 +32,7 @@ import {
   gridRotate,
   toggleComparePanel,
   loadMorePhotos,
+  renderQuickChips,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -41,8 +42,7 @@ async function loadDropdownData() {
     getLabels(),
   ]);
   populateSelect('filter-location', state.allLocations, 'All locations');
-  populateSelect('filter-unit',     state.allUnits,     'All units');
-  populateSelect('filter-label',    state.allLabels,    'All labels');
+  renderQuickChips();
   populateSelect('upload-location', state.allLocations, '— none —');
   populateSelect('upload-units',    state.allUnits,     null);
   populateSelect('id-location-select',  state.allLocations, '— none —');

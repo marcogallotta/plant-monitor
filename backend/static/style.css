@@ -37,6 +37,14 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 
 #status { padding: 0.4rem 1.5rem; font-size: 0.75rem; color: #555; min-height: 1.6rem; }
 
+/* Quick-filter chips */
+.quick-chips { padding: 0.4rem 1.5rem; display: flex; flex-wrap: wrap; gap: 0.35rem; background: #161616; border-bottom: 1px solid #1e1e1e; min-height: 0; }
+.quick-chips:empty { display: none; }
+.qchip { background: #1e1e1e; border: 1px solid #2e2e2e; color: #555; border-radius: 1rem; padding: 0.15rem 0.65rem; font-size: 0.75rem; cursor: pointer; }
+.qchip:hover { border-color: #555; color: #aaa; }
+.qchip.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
+.qchip-sep { width: 1px; background: #2a2a2a; align-self: stretch; margin: 0.1rem 0.25rem; }
+
 /* Photo grid */
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px; padding: 4px 1.5rem; }
 .photo-card { position: relative; cursor: pointer; overflow: hidden; background: #1a1a1a; border-radius: 4px; }

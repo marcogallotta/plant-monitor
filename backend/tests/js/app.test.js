@@ -16,6 +16,7 @@ vi.mock('@/photos.js', () => ({
   selectA: vi.fn(), selectB: vi.fn(),
   flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(),
   toggleComparePanel: vi.fn(),
+  renderQuickChips: vi.fn(),
 }));
 
 vi.mock('@/modal.js', () => ({

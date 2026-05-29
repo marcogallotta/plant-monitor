@@ -3,14 +3,16 @@ import { getPhotos, updatePhoto } from './api.js';
 import { setStatus, formatDate, orientedUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
-const FILTER_IDS = ['start', 'end', 'filter-source', 'filter-photo-type', 'filter-location', 'filter-unit', 'filter-label'];
+const FILTER_IDS = ['start', 'end', 'filter-source', 'filter-photo-type', 'filter-location'];
 const _rawPageSize = parseInt(new URLSearchParams(window.location.search).get('page_size') || '60', 10);
 const PAGE_SIZE = Number.isFinite(_rawPageSize) ? Math.min(Math.max(_rawPageSize, 1), 500) : 60;
 let currentOffset = 0;
 let lastFilterParams = {};
+let activeUnitId  = '';
+let activeLabelId = '';
 
 function updateFilterIndicator() {
-  const active = FILTER_IDS.some(id => document.getElementById(id)?.value);
+  const active = FILTER_IDS.some(id => document.getElementById(id)?.value) || !!activeUnitId || !!activeLabelId;
   document.getElementById('clear-filter-btn')?.classList.toggle('active', active);
   document.querySelector('.filters')?.classList.toggle('filtered', active);
 }
@@ -21,8 +23,8 @@ export async function loadPhotos() {
   const source   = document.getElementById('filter-source').value;
   const ptype    = document.getElementById('filter-photo-type').value;
   const location = document.getElementById('filter-location').value;
-  const unit     = document.getElementById('filter-unit').value;
-  const label    = document.getElementById('filter-label')?.value || '';
+  const unit     = activeUnitId;
+  const label    = activeLabelId;
 
   updateFilterIndicator();
   setStatus('Loading…');
@@ -126,10 +128,47 @@ export function clearFilter() {
   document.getElementById('filter-source').value     = '';
   document.getElementById('filter-photo-type').value = '';
   document.getElementById('filter-location').value   = '';
-  document.getElementById('filter-unit').value       = '';
-  const labelEl = document.getElementById('filter-label');
-  if (labelEl) labelEl.value = '';
+  activeUnitId  = '';
+  activeLabelId = '';
+  renderQuickChips();
   loadPhotos();
+}
+
+function quickChipClick(type, id) {
+  if (type === 'unit') {
+    activeUnitId  = activeUnitId  === id ? '' : id;
+  } else {
+    activeLabelId = activeLabelId === id ? '' : id;
+  }
+  renderQuickChips();
+  loadPhotos();
+}
+
+export function renderQuickChips() {
+  const container = document.getElementById('quick-chips');
+  if (!container) return;
+  container.innerHTML = '';
+  const units  = state.allUnits  || [];
+  const labels = state.allLabels || [];
+  for (const u of units) {
+    const btn = document.createElement('button');
+    btn.className = 'qchip' + (activeUnitId === String(u.id) ? ' active' : '');
+    btn.textContent = u.name;
+    btn.addEventListener('click', () => quickChipClick('unit', String(u.id)));
+    container.appendChild(btn);
+  }
+  if (units.length && labels.length) {
+    const sep = document.createElement('span');
+    sep.className = 'qchip-sep';
+    container.appendChild(sep);
+  }
+  for (const l of labels) {
+    const btn = document.createElement('button');
+    btn.className = 'qchip' + (activeLabelId === String(l.id) ? ' active' : '');
+    btn.textContent = l.name;
+    btn.addEventListener('click', () => quickChipClick('label', String(l.id)));
+    container.appendChild(btn);
+  }
 }
 
 // ── A/B selection ────────────────────────────────────────
