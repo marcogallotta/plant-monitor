@@ -7,12 +7,14 @@ _Status: Draft_
 
 ## Context
 
-This doc covers two related systems:
+This doc covers two sequential features:
 
-1. **Stage 3 — Claude-assisted tagging**: unclassified photos → Claude suggestions → human review → DB write
-2. **Stage 4 — Capture queue**: gap detection → "what to photograph next" → Pi (or manual) acts on it
+1. **Claude-assisted tagging**: unclassified photos → Claude suggestions → human review → DB write. Build now.
+2. **Capture queue**: gap detection → "what to photograph next" → Pi acts on it. Build before Pi arrives (Pi Zero 2W arriving Mon/Tue).
 
 Both live in the web UI. Neither writes final data without human confirmation.
+
+Note: `growing_units`, `photo_labels`, and `photo_type` are already in the DB.
 
 ---
 
@@ -36,7 +38,7 @@ Before describing the design, here's what the human-Claude tagging loop looked l
 
 ---
 
-## Stage 3 — Claude-assisted tagging
+## Claude-assisted tagging
 
 ### Flow
 
@@ -168,11 +170,11 @@ Keyboard shortcuts: `A` accept, `R` reject, `E` edit, arrow keys to navigate. Sa
 
 ---
 
-## Stage 4 — Capture queue (Pi integration)
+## Capture queue (Pi integration)
 
 ### Purpose
 
-Once the Pi auto-captures overviews on a schedule, the system needs to tell it (or you, manually) what to photograph next and why. This closes the loop: Claude analyses overviews → flags gaps or concerns → Pi captures follow-up → Claude reviews again.
+Build this before the Pi arrives so it's ready on day one. The Pi auto-captures overviews on a schedule; the system tells it what to photograph next and why. This closes the loop: Claude analyses overviews → flags gaps or concerns → Pi captures follow-up → Claude reviews again.
 
 ### Gap detection rules
 
@@ -256,15 +258,17 @@ The human stays in the loop at the tagging step and the capture step. Claude han
 
 ---
 
-## What to build first
+## Build order
 
-1. **`photo_ai_suggestions` table + migration** — unblocks everything
-2. **Batch suggestion API endpoint** — calls Claude API, stores results
-3. **Review panel in dashboard** — accept/reject/edit loop
-4. **`capture_requests` table + gap detection rules** — can be seeded manually at first
-5. **Capture queue API + UI panel** — exposes queue to Pi and to you
+**Tagging:**
+1. `photo_ai_suggestions` table + migration
+2. Batch suggestion API endpoint (sync, Claude API)
+3. Review panel in dashboard (accept/edit/reject + keyboard shortcuts)
 
-Items 1–3 are useful immediately (for the existing 70-photo backlog). Items 4–5 become useful when the Pi arrives.
+**Capture queue:**
+4. `capture_requests` table + gap detection rules
+5. Capture queue API (`GET /assistant/capture-queue`)
+6. Capture queue panel in dashboard
 
 ---
 
