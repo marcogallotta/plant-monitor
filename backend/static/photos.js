@@ -3,6 +3,14 @@ import { getPhotos, updatePhoto } from './api.js';
 import { setStatus, formatDate, orientedUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
+const FILTER_IDS = ['start', 'end', 'filter-source', 'filter-photo-type', 'filter-location', 'filter-unit', 'filter-label'];
+
+function updateFilterIndicator() {
+  const active = FILTER_IDS.some(id => document.getElementById(id)?.value);
+  document.getElementById('clear-filter-btn')?.classList.toggle('active', active);
+  document.querySelector('.filters')?.classList.toggle('filtered', active);
+}
+
 export async function loadPhotos() {
   const start    = document.getElementById('start').value;
   const end      = document.getElementById('end').value;
@@ -10,20 +18,29 @@ export async function loadPhotos() {
   const ptype    = document.getElementById('filter-photo-type').value;
   const location = document.getElementById('filter-location').value;
   const unit     = document.getElementById('filter-unit').value;
+  const label    = document.getElementById('filter-label')?.value || '';
 
+  updateFilterIndicator();
   setStatus('Loading…');
   try {
     state.allPhotos = await getPhotos({
       start:    start    ? new Date(start + 'T00:00:00').toISOString() : null,
       end:      end      ? new Date(end   + 'T23:59:59').toISOString() : null,
-      source, ptype, location, unit,
+      source, ptype, location, unit, label,
     });
     renderGrid(state.allPhotos);
-    setStatus(state.allPhotos.length === 0 ? 'No photos found.' : state.allPhotos.length + ' photo' + (state.allPhotos.length === 1 ? '' : 's'));
+    const total = state.allPhotos.length;
+    const unclassified = state.allPhotos.filter(p => !p.photo_type || !(p.growing_unit_ids && p.growing_unit_ids.length)).length;
+    const base = total === 0 ? 'No photos found.' : total + ' photo' + (total === 1 ? '' : 's');
+    setStatus(unclassified > 0 ? base + ' · ' + unclassified + ' unclassified' : base);
   } catch (e) {
     setStatus('Error loading photos: ' + e.message);
   }
 }
+
+FILTER_IDS.forEach(id => {
+  document.getElementById(id)?.addEventListener('change', loadPhotos);
+});
 
 function renderGrid(photos) {
   tlInit();
@@ -73,6 +90,8 @@ export function clearFilter() {
   document.getElementById('filter-photo-type').value = '';
   document.getElementById('filter-location').value   = '';
   document.getElementById('filter-unit').value       = '';
+  const labelEl = document.getElementById('filter-label');
+  if (labelEl) labelEl.value = '';
   loadPhotos();
 }
 

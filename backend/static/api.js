@@ -26,6 +26,7 @@ export async function getPhotos(params) {
   if (params.ptype)    p.push('photo_type='      + encodeURIComponent(params.ptype));
   if (params.location) p.push('location_id='     + encodeURIComponent(params.location));
   if (params.unit)     p.push('growing_unit_id=' + encodeURIComponent(params.unit));
+  if (params.label)    p.push('label_id='        + encodeURIComponent(params.label));
   return apiRequest('/photos' + (p.length ? '?' + p.join('&') : ''));
 }
 

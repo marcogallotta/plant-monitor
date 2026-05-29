@@ -45,8 +45,12 @@
       <option value="">All units</option>
     </select>
   </label>
-  <button onclick="applyFilter()">Filter</button>
-  <button onclick="clearFilter()">Clear</button>
+  <label>Label
+    <select id="filter-label">
+      <option value="">All labels</option>
+    </select>
+  </label>
+  <button id="clear-filter-btn" onclick="clearFilter()">Clear</button>
 </div>
 
 <div id="sensor-strip" class="sensor-strip"></div>
