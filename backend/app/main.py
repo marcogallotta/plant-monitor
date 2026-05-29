@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from datetime import datetime, timezone
 from io import BytesIO
@@ -7,7 +8,7 @@ from typing import List, Optional
 
 from PIL import Image, UnidentifiedImageError
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func
@@ -39,10 +40,21 @@ from .schemas import (
     PhotoOut,
 )
 
-app = FastAPI()
+_public_url = os.environ.get("PUBLIC_URL", "").rstrip("/")
+app = FastAPI(servers=[{"url": _public_url}] if _public_url else [])
 app.include_router(camera_import_router)
 app.include_router(assistant_router)
 app.include_router(sensors_router)
+
+
+@app.get("/assistant-openapi.json", include_in_schema=False)
+def assistant_openapi_public(request: Request):
+    from fastapi.openapi.utils import get_openapi
+    from fastapi.responses import JSONResponse
+    full = get_openapi(title="Plant Monitoring Assistant API", version="1.0.0", routes=app.routes)
+    paths = {k: v for k, v in full.get("paths", {}).items() if k.startswith("/assistant/") and k != "/assistant/openapi.json"}
+    public_url = app.servers[0]["url"] if app.servers else str(request.base_url).rstrip("/")
+    return JSONResponse({"openapi": full["openapi"], "info": full["info"], "servers": [{"url": public_url}], "paths": paths, "components": full.get("components", {})})
 
 PHOTOS_DIR = Path("data/photos")
 _STATIC_DIR = Path(__file__).parent.parent / "static"

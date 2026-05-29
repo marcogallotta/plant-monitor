@@ -6,8 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image
 from sqlalchemy.orm import Session
@@ -210,6 +211,16 @@ def assistant_list_locations(db: Session = Depends(get_db)):
 @router.get("/events", response_model=list[EventOut])
 def assistant_list_events(db: Session = Depends(get_db)):
     return [_event_out(ev) for ev in db.query(Event).options(*EVENT_LOAD_OPTIONS).order_by(Event.event_at.desc()).all()]
+
+
+@router.get("/openapi.json", include_in_schema=False)
+def assistant_openapi(request: Request):
+    app = request.app
+    full = get_openapi(title="Plant Monitoring Assistant API", version="1.0.0", routes=app.routes)
+    assistant_paths = {k: v for k, v in full.get("paths", {}).items() if k.startswith("/assistant/")}
+    assistant_paths.pop("/assistant/openapi.json", None)
+    public_url = app.servers[0]["url"] if app.servers else str(request.base_url).rstrip("/")
+    return JSONResponse({"openapi": full["openapi"], "info": full["info"], "servers": [{"url": public_url}], "paths": assistant_paths, "components": full.get("components", {})})
 
 
 @router.get("/unclassified", response_model=list[PhotoOut])
