@@ -131,6 +131,74 @@ describe('handleLabelInput', () => {
   });
 });
 
+// ── removeAssignedLabel (via renderLabelSection chip button) ──
+
+describe('removeAssignedLabel', () => {
+  beforeEach(() => {
+    state.currentPhotoId = 5;
+    state.currentIndex = 0;
+    state.allPhotos = [{...PHOTO, labels: [{id: 1, name: 'aphids'}, {id: 2, name: 'yellowing'}]}];
+    document.getElementById('label-status').textContent = '';
+  });
+
+  it('DELETEs the assignment via the API', async () => {
+    renderLabelSection(state.allPhotos[0]);
+    const btn = document.getElementById('label-assigned').querySelectorAll('.label-chip-remove')[0];
+    btn.click();
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/photos/5/labels/1',
+        expect.objectContaining({method: 'DELETE'}),
+      );
+    });
+  });
+
+  it('removes the label from state.allPhotos[currentIndex]', async () => {
+    renderLabelSection(state.allPhotos[0]);
+    const btn = document.getElementById('label-assigned').querySelectorAll('.label-chip-remove')[0];
+    btn.click();
+    await vi.waitFor(() => {
+      expect(state.allPhotos[0].labels.some(function(l) { return l.id === 1; })).toBe(false);
+    });
+  });
+
+  it('keeps other labels in state after removal', async () => {
+    renderLabelSection(state.allPhotos[0]);
+    const btn = document.getElementById('label-assigned').querySelectorAll('.label-chip-remove')[0];
+    btn.click();
+    await vi.waitFor(() => {
+      expect(state.allPhotos[0].labels.some(function(l) { return l.id === 2; })).toBe(true);
+    });
+  });
+
+  it('re-renders label section with the label removed', async () => {
+    renderLabelSection(state.allPhotos[0]);
+    const btn = document.getElementById('label-assigned').querySelectorAll('.label-chip-remove')[0];
+    btn.click();
+    await vi.waitFor(() => {
+      expect(document.getElementById('label-assigned').querySelectorAll('.label-chip').length).toBe(1);
+    });
+  });
+
+  it('shows error in label-status on API failure', async () => {
+    fetchMock.mockResolvedValueOnce({ok: false, status: 500, json: () => Promise.resolve({detail: 'server error'})});
+    renderLabelSection(state.allPhotos[0]);
+    const btn = document.getElementById('label-assigned').querySelectorAll('.label-chip-remove')[0];
+    btn.click();
+    await vi.waitFor(() => {
+      expect(document.getElementById('label-status').textContent).toBe('Error');
+    });
+  });
+
+  it('does nothing when currentPhotoId is null', () => {
+    state.currentPhotoId = null;
+    renderLabelSection(state.allPhotos[0]);
+    const btn = document.getElementById('label-assigned').querySelectorAll('.label-chip-remove')[0];
+    btn.click();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 // ── handleLabelKeydown ────────────────────────────────────
 
 describe('handleLabelKeydown', () => {

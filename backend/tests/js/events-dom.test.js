@@ -180,6 +180,109 @@ describe('createUnit', () => {
   });
 });
 
+// ── loadEventList (via toggleEventsPanel) ─────────────────
+
+describe('loadEventList via toggleEventsPanel', () => {
+  beforeEach(() => {
+    document.getElementById('events-form').classList.remove('open');
+    document.getElementById('event-list').innerHTML = '';
+  });
+
+  it('shows "No events yet." when list is empty', async () => {
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      expect(document.getElementById('event-list').textContent).toBe('No events yet.');
+    });
+  });
+
+  it('renders event_type with underscores replaced by spaces', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, status: 200, json: () => Promise.resolve([
+      {id: 1, event_type: 'fed_liquid', event_at: '2026-05-01T10:00:00Z',
+       location_name: null, growing_units: [], note_text: null},
+    ])});
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      const type = document.getElementById('event-list').querySelector('.event-type');
+      expect(type).not.toBeNull();
+      expect(type.textContent).toBe('fed liquid');
+    });
+  });
+
+  it('appends location_name to meta when present', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, status: 200, json: () => Promise.resolve([
+      {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
+       location_name: 'Balcony', growing_units: [], note_text: null},
+    ])});
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      const meta = document.getElementById('event-list').querySelector('.event-meta');
+      expect(meta.textContent).toContain('@ Balcony');
+    });
+  });
+
+  it('omits location suffix from meta when location_name is null', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, status: 200, json: () => Promise.resolve([
+      {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
+       location_name: null, growing_units: [], note_text: null},
+    ])});
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      const meta = document.getElementById('event-list').querySelector('.event-meta');
+      expect(meta.textContent).not.toContain('@');
+    });
+  });
+
+  it('renders growing unit names when present', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, status: 200, json: () => Promise.resolve([
+      {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
+       location_name: null,
+       growing_units: [{id: 1, name: 'Basil'}, {id: 2, name: 'Mint'}],
+       note_text: null},
+    ])});
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      const units = document.getElementById('event-list').querySelector('.event-units');
+      expect(units).not.toBeNull();
+      expect(units.textContent).toBe('Basil, Mint');
+    });
+  });
+
+  it('omits units div when growing_units is empty', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, status: 200, json: () => Promise.resolve([
+      {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
+       location_name: null, growing_units: [], note_text: null},
+    ])});
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      expect(document.getElementById('event-list').querySelector('.event-units')).toBeNull();
+    });
+  });
+
+  it('renders note_text when present', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, status: 200, json: () => Promise.resolve([
+      {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
+       location_name: null, growing_units: [], note_text: 'deep soak'},
+    ])});
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      const note = document.getElementById('event-list').querySelector('.event-note');
+      expect(note).not.toBeNull();
+      expect(note.textContent).toBe('deep soak');
+    });
+  });
+
+  it('omits note div when note_text is null', async () => {
+    fetchMock.mockResolvedValueOnce({ok: true, status: 200, json: () => Promise.resolve([
+      {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
+       location_name: null, growing_units: [], note_text: null},
+    ])});
+    await toggleEventsPanel();
+    await vi.waitFor(() => {
+      expect(document.getElementById('event-list').querySelector('.event-note')).toBeNull();
+    });
+  });
+});
+
 // ── logEvent ──────────────────────────────────────────────
 
 describe('logEvent', () => {
