@@ -1,86 +1,53 @@
-import io
 import json
-import os
 import re
-import threading
-import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from PIL import Image
-from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from .camera_import import router as camera_import_router, save_photo, _check_growing_units_exist
 from .database import get_db
+from .helpers import EVENT_LOAD_OPTIONS, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _photo_out
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote
+from .routers.assistant import router as assistant_router
+from .routers.sensors import router as sensors_router
+from .schemas import (
+    VALID_ROTATIONS,
+    EventCreate,
+    EventOut,
+    GrowingUnitCreate,
+    GrowingUnitOut,
+    GrowingUnitUpdate,
+    LabelCreate,
+    LabelOut,
+    LocationCreate,
+    LocationOut,
+    LocationUpdate,
+    NoteCreate,
+    NoteOut,
+    NoteUpdate,
+    PhotoClassify,
+    PhotoOut,
+)
 
 app = FastAPI()
 app.include_router(camera_import_router)
+app.include_router(assistant_router)
+app.include_router(sensors_router)
 
 PHOTOS_DIR = Path("data/photos")
 _STATIC_DIR = Path(__file__).parent.parent / "static"
-VALID_ROTATIONS = {0, 90, 180, 270}
 
 
 def _parse_iso8601(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
-
-PHOTO_LOAD_OPTIONS = (
-    selectinload(Photo.location),
-    selectinload(Photo.growing_units),
-    selectinload(Photo.labels),
-)
-
-EVENT_LOAD_OPTIONS = (
-    selectinload(Event.location),
-    selectinload(Event.growing_units),
-    selectinload(Event.photos),
-)
-
-
-def _filtered_photo_query(
-    db: Session,
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
-    source: Optional[str] = None,
-    photo_type: Optional[str] = None,
-    location_id: Optional[int] = None,
-    growing_unit_id: Optional[int] = None,
-):
-    q = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at)
-    if start is not None:
-        q = q.filter(Photo.captured_at >= start)
-    if end is not None:
-        q = q.filter(Photo.captured_at <= end)
-    if source is not None:
-        q = q.filter(Photo.source == source)
-    if photo_type is not None:
-        q = q.filter(Photo.photo_type == photo_type)
-    if location_id is not None:
-        q = q.filter(Photo.location_id == location_id)
-    if growing_unit_id is not None:
-        q = q.join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id).filter(
-            PhotoGrowingUnit.growing_unit_id == growing_unit_id
-        )
-    return q
-
-
-def _get_photo_loaded(db: Session, photo_id: int) -> Optional[Photo]:
-    return db.query(Photo).options(*PHOTO_LOAD_OPTIONS).filter_by(id=photo_id).first()
-
-
-def _get_event_loaded(db: Session, event_id: int) -> Optional[Event]:
-    return db.query(Event).options(*EVENT_LOAD_OPTIONS).filter_by(id=event_id).first()
 
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
@@ -91,203 +58,6 @@ def dashboard():
 
 _STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}Z$")
 _SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.jpg$")
-
-
-class LocationCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-
-
-class LocationUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-
-
-class LocationOut(BaseModel):
-    id: int
-    name: str
-    description: Optional[str] = None
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class GrowingUnitUpdate(BaseModel):
-    name: Optional[str] = None
-    unit_type: Optional[str] = None
-    species: Optional[str] = None
-    variety: Optional[str] = None
-    source: Optional[str] = None
-    started_at: Optional[datetime] = None
-    notes: Optional[str] = None
-    current_location_id: Optional[int] = None
-
-
-class GrowingUnitCreate(GrowingUnitUpdate):
-    name: str
-
-
-class GrowingUnitOut(BaseModel):
-    id: int
-    name: str
-    unit_type: Optional[str] = None
-    species: Optional[str] = None
-    variety: Optional[str] = None
-    source: Optional[str] = None
-    started_at: Optional[datetime] = None
-    notes: Optional[str] = None
-    current_location_id: Optional[int] = None
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class GrowingUnitBrief(BaseModel):
-    id: int
-    name: str
-    unit_type: Optional[str] = None
-
-    model_config = {"from_attributes": True}
-
-
-class LabelOut(BaseModel):
-    id: int
-    name: str
-
-    model_config = {"from_attributes": True}
-
-
-class PhotoOut(BaseModel):
-    id: int
-    filename: str
-    captured_at: datetime
-    url: str
-    source: Optional[str] = None
-    photo_type: Optional[str] = None
-    original_filename: Optional[str] = None
-    original_size_bytes: Optional[int] = None
-    location_id: Optional[int] = None
-    location_name: Optional[str] = None
-    growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
-    labels: list[LabelOut] = Field(default_factory=list)
-    rotation: int = 0
-
-    model_config = {"from_attributes": True}
-
-
-class NoteCreate(BaseModel):
-    note_text: str
-    x: float
-    y: float
-    x2: Optional[float] = None
-    y2: Optional[float] = None
-
-    @field_validator("x", "y", "x2", "y2")
-    @classmethod
-    def must_be_normalized(cls, v: Optional[float]) -> Optional[float]:
-        if v is not None and not 0.0 <= v <= 1.0:
-            raise ValueError("must be between 0.0 and 1.0")
-        return v
-
-    @model_validator(mode="after")
-    def x2_y2_must_be_paired(self) -> "NoteCreate":
-        if (self.x2 is None) != (self.y2 is None):
-            raise ValueError("x2 and y2 must both be provided or both omitted")
-        return self
-
-
-class NoteUpdate(BaseModel):
-    note_text: Optional[str] = None
-    x: Optional[float] = None
-    y: Optional[float] = None
-    x2: Optional[float] = None
-    y2: Optional[float] = None
-
-    @field_validator("x", "y", "x2", "y2")
-    @classmethod
-    def must_be_normalized(cls, v: Optional[float]) -> Optional[float]:
-        if v is not None and not 0.0 <= v <= 1.0:
-            raise ValueError("must be between 0.0 and 1.0")
-        return v
-
-    @model_validator(mode="after")
-    def x2_y2_must_be_paired(self) -> "NoteUpdate":
-        if (self.x2 is None) != (self.y2 is None):
-            raise ValueError("x2 and y2 must both be provided or both omitted")
-        return self
-
-
-class NoteOut(BaseModel):
-    id: int
-    photo_id: int
-    note_text: str
-    x: float
-    y: float
-    x2: Optional[float] = None
-    y2: Optional[float] = None
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-def _validated_stem(image_filename: str, metadata_filename: str) -> str:
-    image_path = Path(image_filename)
-    meta_path = Path(metadata_filename)
-
-    if image_path.suffix != ".jpg":
-        raise HTTPException(status_code=422, detail="image filename must have .jpg extension")
-    if meta_path.suffix != ".json":
-        raise HTTPException(status_code=422, detail="metadata filename must have .json extension")
-
-    image_stem = image_path.stem
-    meta_stem = meta_path.stem
-
-    if not _STEM_RE.match(image_stem):
-        raise HTTPException(status_code=422, detail="image filename must match YYYY-MM-DDTHHMMSSZ.jpg")
-    if not _STEM_RE.match(meta_stem):
-        raise HTTPException(status_code=422, detail="metadata filename must match YYYY-MM-DDTHHMMSSZ.json")
-    if image_stem != meta_stem:
-        raise HTTPException(status_code=422, detail="image and metadata filenames must share the same stem")
-
-    return image_stem
-
-
-def _validated_metadata(raw: bytes, expected_image_filename: str) -> dict:
-    try:
-        meta = json.loads(raw)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="metadata is not valid JSON")
-
-    if "captured_at" not in meta:
-        raise HTTPException(status_code=422, detail="metadata missing 'captured_at'")
-    if "filename" not in meta:
-        raise HTTPException(status_code=422, detail="metadata missing 'filename'")
-    if meta["filename"] != expected_image_filename:
-        raise HTTPException(status_code=422, detail="metadata 'filename' does not match uploaded image filename")
-
-    try:
-        _parse_iso8601(meta["captured_at"])
-    except (ValueError, AttributeError):
-        raise HTTPException(status_code=422, detail="metadata 'captured_at' is not a valid ISO 8601 timestamp")
-
-    return meta
-
-
-def _upsert_photo_record(db: Session, stem: str, meta: dict) -> None:
-    if db.query(Photo).filter_by(filename=f"{stem}.jpg").first():
-        return
-    captured_at = _parse_iso8601(meta["captured_at"])
-    db.add(Photo(
-        filename=f"{stem}.jpg",
-        captured_at=captured_at,
-        storage_path=str(PHOTOS_DIR / f"{stem}.jpg"),
-        metadata_path=str(PHOTOS_DIR / f"{stem}.json"),
-        source="pi",
-    ))
-    db.flush()
 
 
 @app.post("/locations", response_model=LocationOut, status_code=201)
@@ -371,22 +141,61 @@ def update_growing_unit(unit_id: int, body: GrowingUnitUpdate, db: Session = Dep
     return unit
 
 
-def _photo_out(p: Photo) -> PhotoOut:
-    return PhotoOut(
-        id=p.id,
-        filename=p.filename,
-        captured_at=p.captured_at,
-        url=f"/photos/{p.filename}",
-        source=p.source,
-        photo_type=p.photo_type,
-        original_filename=p.original_filename,
-        original_size_bytes=p.original_size_bytes,
-        location_id=p.location_id,
-        location_name=p.location.name if p.location else None,
-        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in p.growing_units],
-        labels=[LabelOut(id=l.id, name=l.name) for l in p.labels],
-        rotation=p.rotation,
-    )
+def _validated_stem(image_filename: str, metadata_filename: str) -> str:
+    image_path = Path(image_filename)
+    meta_path = Path(metadata_filename)
+
+    if image_path.suffix != ".jpg":
+        raise HTTPException(status_code=422, detail="image filename must have .jpg extension")
+    if meta_path.suffix != ".json":
+        raise HTTPException(status_code=422, detail="metadata filename must have .json extension")
+
+    image_stem = image_path.stem
+    meta_stem = meta_path.stem
+
+    if not _STEM_RE.match(image_stem):
+        raise HTTPException(status_code=422, detail="image filename must match YYYY-MM-DDTHHMMSSZ.jpg")
+    if not _STEM_RE.match(meta_stem):
+        raise HTTPException(status_code=422, detail="metadata filename must match YYYY-MM-DDTHHMMSSZ.json")
+    if image_stem != meta_stem:
+        raise HTTPException(status_code=422, detail="image and metadata filenames must share the same stem")
+
+    return image_stem
+
+
+def _validated_metadata(raw: bytes, expected_image_filename: str) -> dict:
+    try:
+        meta = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="metadata is not valid JSON")
+
+    if "captured_at" not in meta:
+        raise HTTPException(status_code=422, detail="metadata missing 'captured_at'")
+    if "filename" not in meta:
+        raise HTTPException(status_code=422, detail="metadata missing 'filename'")
+    if meta["filename"] != expected_image_filename:
+        raise HTTPException(status_code=422, detail="metadata 'filename' does not match uploaded image filename")
+
+    try:
+        _parse_iso8601(meta["captured_at"])
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=422, detail="metadata 'captured_at' is not a valid ISO 8601 timestamp")
+
+    return meta
+
+
+def _upsert_photo_record(db: Session, stem: str, meta: dict) -> None:
+    if db.query(Photo).filter_by(filename=f"{stem}.jpg").first():
+        return
+    captured_at = _parse_iso8601(meta["captured_at"])
+    db.add(Photo(
+        filename=f"{stem}.jpg",
+        captured_at=captured_at,
+        storage_path=str(PHOTOS_DIR / f"{stem}.jpg"),
+        metadata_path=str(PHOTOS_DIR / f"{stem}.json"),
+        source="pi",
+    ))
+    db.flush()
 
 
 @app.post("/photos")
@@ -445,20 +254,6 @@ def list_photos(
 ):
     q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
     return [_photo_out(p) for p in q.all()]
-
-
-class PhotoClassify(BaseModel):
-    photo_type: Optional[str] = None
-    location_id: Optional[int] = None
-    growing_unit_ids: Optional[list[int]] = None
-    rotation: Optional[int] = None
-
-    @field_validator("rotation")
-    @classmethod
-    def rotation_must_be_valid(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v not in VALID_ROTATIONS:
-            raise ValueError("rotation must be 0, 90, 180, or 270")
-        return v
 
 
 @app.put("/photos/{photo_id}", response_model=PhotoOut)
@@ -587,10 +382,6 @@ def delete_note(note_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-class LabelCreate(BaseModel):
-    name: str
-
-
 @app.get("/labels", response_model=list[LabelOut])
 def list_labels(db: Session = Depends(get_db)):
     usage = (
@@ -658,63 +449,6 @@ def remove_label(photo_id: int, label_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-class PhotoBrief(BaseModel):
-    id: int
-    filename: str
-    url: str
-
-    model_config = {"from_attributes": True}
-
-
-CARE_ACTION_TYPES = {"fed_liquid", "fed_worm_castings", "watered", "harvested", "potted_up", "propagated", "other"}
-
-
-class EventCreate(BaseModel):
-    event_type: str
-    event_at: Optional[datetime] = None
-    note_text: Optional[str] = None
-    location_id: Optional[int] = None
-    growing_unit_ids: Optional[list[int]] = None
-    photo_ids: Optional[list[int]] = None
-
-    @field_validator("event_type")
-    @classmethod
-    def validate_event_type(cls, v: str) -> str:
-        if v not in CARE_ACTION_TYPES:
-            raise ValueError(f"event_type must be one of {sorted(CARE_ACTION_TYPES)}")
-        return v
-
-
-class EventOut(BaseModel):
-    id: int
-    event_type: str
-    event_at: datetime
-    note_text: Optional[str] = None
-    location_id: Optional[int] = None
-    location_name: Optional[str] = None
-    growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
-    photos: list[PhotoBrief] = Field(default_factory=list)
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-def _event_out(ev: Event) -> EventOut:
-    return EventOut(
-        id=ev.id,
-        event_type=ev.event_type,
-        event_at=ev.event_at,
-        note_text=ev.note_text,
-        location_id=ev.location_id,
-        location_name=ev.location.name if ev.location else None,
-        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in ev.growing_units],
-        photos=[PhotoBrief(id=p.id, filename=p.filename, url=f"/photos/{p.filename}") for p in ev.photos],
-        created_at=ev.created_at,
-        updated_at=ev.updated_at,
-    )
-
-
 @app.post("/events", response_model=EventOut, status_code=201)
 def create_event(body: EventCreate, db: Session = Depends(get_db)):
     _check_location_exists(body.location_id, db)
@@ -752,252 +486,6 @@ def create_event(body: EventCreate, db: Session = Depends(get_db)):
 def list_events(db: Session = Depends(get_db)):
     events = db.query(Event).options(*EVENT_LOAD_OPTIONS).order_by(Event.event_at.desc()).all()
     return [_event_out(ev) for ev in events]
-
-
-# --- Sensor proxy ---
-
-from . import sensors as _sensors
-
-
-@app.get("/sensors/latest")
-def sensor_latest():
-    state = _sensors.get_state()
-    if state is None:
-        return {"available": False, "sensors": []}
-    try:
-        return {"available": True, "sensors": state.latest()}
-    except Exception:
-        return {"available": False, "sensors": []}
-
-
-@app.get("/sensors/photos/{photo_id}")
-def sensor_photo_context(photo_id: int, db: Session = Depends(get_db)):
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
-    if photo is None:
-        raise HTTPException(status_code=404, detail="photo not found")
-    state = _sensors.get_state()
-    if state is None:
-        return {"available": False, "sensors": []}
-    ts = photo.captured_at
-    if ts is not None and ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    if ts is None:
-        return {"available": True, "sensors": []}
-    try:
-        id_map = state.resolve_ids()
-    except Exception:
-        return {"available": False, "sensors": []}
-    out = []
-    for sensor_cfg in state.sensors:
-        mac = sensor_cfg["mac"]
-        sensor_id = id_map.get(mac)
-        if sensor_id is None:
-            continue
-        try:
-            readings = state.readings_around(sensor_id, ts)
-        except Exception:
-            readings = []
-        out.append({"name": sensor_cfg["name"], "readings": readings})
-    return {"available": True, "sensors": out}
-
-
-# --- Assistant read-only API ---
-
-_bearer = HTTPBearer(auto_error=False)
-
-_RATE_LIMIT = 60
-_RATE_WINDOW = 60  # seconds
-_rate_limit_store: dict[str, tuple[int, float]] = {}
-_rate_limit_lock = threading.Lock()
-
-
-def _check_rate_limit(token: str) -> None:
-    now = time.monotonic()
-    with _rate_limit_lock:
-        count, window_start = _rate_limit_store.get(token, (0, now))
-        if now - window_start >= _RATE_WINDOW:
-            count, window_start = 0, now
-        count += 1
-        _rate_limit_store[token] = (count, window_start)
-    if count > _RATE_LIMIT:
-        raise HTTPException(
-            status_code=429,
-            detail="rate limit exceeded",
-            headers={"Retry-After": str(_RATE_WINDOW)},
-        )
-
-
-def _require_assistant_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
-):
-    token = os.environ.get("ASSISTANT_API_TOKEN", "")
-    if not token:
-        raise HTTPException(status_code=503, detail="assistant API token not configured")
-    if not credentials or credentials.credentials != token:
-        raise HTTPException(
-            status_code=401,
-            detail="invalid or missing token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    _check_rate_limit(credentials.credentials)
-
-
-_assistant = APIRouter(prefix="/assistant", dependencies=[Depends(_require_assistant_token)])
-
-class AssistantSummary(BaseModel):
-    photo_count: int
-    unclassified_count: int
-    growing_unit_count: int
-    location_count: int
-    event_count: int
-    recent_photos: list[PhotoOut]
-
-
-class PhotoContext(BaseModel):
-    photo: PhotoOut
-    notes: list[NoteOut]
-    events: list[EventOut]
-
-
-class GrowingUnitContext(BaseModel):
-    growing_unit: GrowingUnitOut
-    photos: list[PhotoOut]
-    events: list[EventOut]
-
-
-@_assistant.get("/summary", response_model=AssistantSummary)
-def assistant_summary(db: Session = Depends(get_db)):
-    photo_count = db.query(Photo).count()
-    unclassified_count = db.query(Photo).filter(Photo.photo_type.is_(None)).count()
-    growing_unit_count = db.query(GrowingUnit).count()
-    location_count = db.query(Location).count()
-    event_count = db.query(Event).count()
-    recent = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at.desc()).limit(5).all()
-    return AssistantSummary(
-        photo_count=photo_count,
-        unclassified_count=unclassified_count,
-        growing_unit_count=growing_unit_count,
-        location_count=location_count,
-        event_count=event_count,
-        recent_photos=[_photo_out(p) for p in recent],
-    )
-
-
-@_assistant.get("/photos", response_model=list[PhotoOut])
-def assistant_list_photos(
-    start: Optional[datetime] = Query(None),
-    end: Optional[datetime] = Query(None),
-    source: Optional[str] = Query(None),
-    photo_type: Optional[str] = Query(None),
-    location_id: Optional[int] = Query(None),
-    growing_unit_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db),
-):
-    q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
-    return [_photo_out(p) for p in q.all()]
-
-
-@_assistant.get("/photos/{photo_id}/context", response_model=PhotoContext)
-def assistant_photo_context(photo_id: int, db: Session = Depends(get_db)):
-    photo = _get_photo_loaded(db, photo_id)
-    if not photo:
-        raise HTTPException(status_code=404, detail="photo not found")
-    notes = db.query(PhotoNote).filter_by(photo_id=photo_id).all()
-    events = (
-        db.query(Event)
-        .options(*EVENT_LOAD_OPTIONS)
-        .join(EventPhoto, EventPhoto.event_id == Event.id)
-        .filter(EventPhoto.photo_id == photo_id)
-        .all()
-    )
-    return PhotoContext(
-        photo=_photo_out(photo),
-        notes=notes,
-        events=[_event_out(ev) for ev in events],
-    )
-
-
-@_assistant.get("/photos/{photo_id}/thumbnail")
-def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
-    photo = db.query(Photo).filter_by(id=photo_id).first()
-    if not photo:
-        raise HTTPException(status_code=404, detail="photo not found")
-    file_path = Path(photo.storage_path).resolve()
-    try:
-        file_path.relative_to(PHOTOS_DIR.resolve())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="photo not found")
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="photo file not found on disk")
-    try:
-        img = Image.open(file_path)
-        img.load()
-    except Exception:
-        raise HTTPException(status_code=422, detail="photo file could not be decoded")
-    img.thumbnail((256, 256))
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG")
-    return Response(content=buf.getvalue(), media_type="image/jpeg")
-
-
-@_assistant.get("/photos/{photo_id}", response_model=PhotoOut)
-def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
-    photo = _get_photo_loaded(db, photo_id)
-    if not photo:
-        raise HTTPException(status_code=404, detail="photo not found")
-    return _photo_out(photo)
-
-
-@_assistant.get("/growing-units", response_model=list[GrowingUnitOut])
-def assistant_list_growing_units(db: Session = Depends(get_db)):
-    return db.query(GrowingUnit).order_by(GrowingUnit.name).all()
-
-
-@_assistant.get("/growing-units/{unit_id}/context", response_model=GrowingUnitContext)
-def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
-    unit = db.query(GrowingUnit).filter_by(id=unit_id).first()
-    if not unit:
-        raise HTTPException(status_code=404, detail="growing unit not found")
-    photos = (
-        db.query(Photo)
-        .options(*PHOTO_LOAD_OPTIONS)
-        .join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id)
-        .filter(PhotoGrowingUnit.growing_unit_id == unit_id)
-        .order_by(Photo.captured_at)
-        .all()
-    )
-    events = (
-        db.query(Event)
-        .options(*EVENT_LOAD_OPTIONS)
-        .join(EventGrowingUnit, EventGrowingUnit.event_id == Event.id)
-        .filter(EventGrowingUnit.growing_unit_id == unit_id)
-        .order_by(Event.event_at.desc())
-        .all()
-    )
-    return GrowingUnitContext(
-        growing_unit=unit,
-        photos=[_photo_out(p) for p in photos],
-        events=[_event_out(ev) for ev in events],
-    )
-
-
-@_assistant.get("/locations", response_model=list[LocationOut])
-def assistant_list_locations(db: Session = Depends(get_db)):
-    return db.query(Location).order_by(Location.name).all()
-
-
-@_assistant.get("/events", response_model=list[EventOut])
-def assistant_list_events(db: Session = Depends(get_db)):
-    return [_event_out(ev) for ev in db.query(Event).options(*EVENT_LOAD_OPTIONS).order_by(Event.event_at.desc()).all()]
-
-
-@_assistant.get("/unclassified", response_model=list[PhotoOut])
-def assistant_unclassified(db: Session = Depends(get_db)):
-    photos = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
-    return [_photo_out(p) for p in photos]
-
-
-app.include_router(_assistant)
 
 
 @app.get("/photos/{filename}")

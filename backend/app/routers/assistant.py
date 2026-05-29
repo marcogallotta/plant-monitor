@@ -1,0 +1,218 @@
+import io
+import os
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from PIL import Image
+from sqlalchemy.orm import Session
+
+from ..database import get_db
+from ..helpers import (
+    EVENT_LOAD_OPTIONS,
+    PHOTO_LOAD_OPTIONS,
+    _event_out,
+    _filtered_photo_query,
+    _get_photo_loaded,
+    _photo_out,
+)
+from ..models import (
+    Event,
+    EventGrowingUnit,
+    EventPhoto,
+    GrowingUnit,
+    Location,
+    Photo,
+    PhotoGrowingUnit,
+    PhotoNote,
+)
+from ..schemas import (
+    AssistantSummary,
+    EventOut,
+    GrowingUnitContext,
+    GrowingUnitOut,
+    LocationOut,
+    NoteOut,
+    PhotoContext,
+    PhotoOut,
+)
+
+PHOTOS_DIR = Path("data/photos")
+
+_bearer = HTTPBearer(auto_error=False)
+
+_RATE_LIMIT = 60
+_RATE_WINDOW = 60  # seconds
+_rate_limit_store: dict[str, tuple[int, float]] = {}
+_rate_limit_lock = threading.Lock()
+
+
+def _check_rate_limit(token: str) -> None:
+    now = time.monotonic()
+    with _rate_limit_lock:
+        count, window_start = _rate_limit_store.get(token, (0, now))
+        if now - window_start >= _RATE_WINDOW:
+            count, window_start = 0, now
+        count += 1
+        _rate_limit_store[token] = (count, window_start)
+    if count > _RATE_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="rate limit exceeded",
+            headers={"Retry-After": str(_RATE_WINDOW)},
+        )
+
+
+def _require_assistant_token(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+):
+    token = os.environ.get("ASSISTANT_API_TOKEN", "")
+    if not token:
+        raise HTTPException(status_code=503, detail="assistant API token not configured")
+    if not credentials or credentials.credentials != token:
+        raise HTTPException(
+            status_code=401,
+            detail="invalid or missing token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    _check_rate_limit(credentials.credentials)
+
+
+router = APIRouter(prefix="/assistant", dependencies=[Depends(_require_assistant_token)])
+
+
+@router.get("/summary", response_model=AssistantSummary)
+def assistant_summary(db: Session = Depends(get_db)):
+    photo_count = db.query(Photo).count()
+    unclassified_count = db.query(Photo).filter(Photo.photo_type.is_(None)).count()
+    growing_unit_count = db.query(GrowingUnit).count()
+    location_count = db.query(Location).count()
+    event_count = db.query(Event).count()
+    recent = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at.desc()).limit(5).all()
+    return AssistantSummary(
+        photo_count=photo_count,
+        unclassified_count=unclassified_count,
+        growing_unit_count=growing_unit_count,
+        location_count=location_count,
+        event_count=event_count,
+        recent_photos=[_photo_out(p) for p in recent],
+    )
+
+
+@router.get("/photos", response_model=list[PhotoOut])
+def assistant_list_photos(
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    source: Optional[str] = Query(None),
+    photo_type: Optional[str] = Query(None),
+    location_id: Optional[int] = Query(None),
+    growing_unit_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
+    return [_photo_out(p) for p in q.all()]
+
+
+@router.get("/photos/{photo_id}/context", response_model=PhotoContext)
+def assistant_photo_context(photo_id: int, db: Session = Depends(get_db)):
+    photo = _get_photo_loaded(db, photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    notes = db.query(PhotoNote).filter_by(photo_id=photo_id).all()
+    events = (
+        db.query(Event)
+        .options(*EVENT_LOAD_OPTIONS)
+        .join(EventPhoto, EventPhoto.event_id == Event.id)
+        .filter(EventPhoto.photo_id == photo_id)
+        .all()
+    )
+    return PhotoContext(
+        photo=_photo_out(photo),
+        notes=notes,
+        events=[_event_out(ev) for ev in events],
+    )
+
+
+@router.get("/photos/{photo_id}/thumbnail")
+def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    file_path = Path(photo.storage_path).resolve()
+    try:
+        file_path.relative_to(PHOTOS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="photo not found")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="photo file not found on disk")
+    try:
+        img = Image.open(file_path)
+        img.load()
+    except Exception:
+        raise HTTPException(status_code=422, detail="photo file could not be decoded")
+    img.thumbnail((256, 256))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return Response(content=buf.getvalue(), media_type="image/jpeg")
+
+
+@router.get("/photos/{photo_id}", response_model=PhotoOut)
+def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
+    photo = _get_photo_loaded(db, photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    return _photo_out(photo)
+
+
+@router.get("/growing-units", response_model=list[GrowingUnitOut])
+def assistant_list_growing_units(db: Session = Depends(get_db)):
+    return db.query(GrowingUnit).order_by(GrowingUnit.name).all()
+
+
+@router.get("/growing-units/{unit_id}/context", response_model=GrowingUnitContext)
+def assistant_growing_unit_context(unit_id: int, db: Session = Depends(get_db)):
+    unit = db.query(GrowingUnit).filter_by(id=unit_id).first()
+    if not unit:
+        raise HTTPException(status_code=404, detail="growing unit not found")
+    photos = (
+        db.query(Photo)
+        .options(*PHOTO_LOAD_OPTIONS)
+        .join(PhotoGrowingUnit, PhotoGrowingUnit.photo_id == Photo.id)
+        .filter(PhotoGrowingUnit.growing_unit_id == unit_id)
+        .order_by(Photo.captured_at)
+        .all()
+    )
+    events = (
+        db.query(Event)
+        .options(*EVENT_LOAD_OPTIONS)
+        .join(EventGrowingUnit, EventGrowingUnit.event_id == Event.id)
+        .filter(EventGrowingUnit.growing_unit_id == unit_id)
+        .order_by(Event.event_at.desc())
+        .all()
+    )
+    return GrowingUnitContext(
+        growing_unit=unit,
+        photos=[_photo_out(p) for p in photos],
+        events=[_event_out(ev) for ev in events],
+    )
+
+
+@router.get("/locations", response_model=list[LocationOut])
+def assistant_list_locations(db: Session = Depends(get_db)):
+    return db.query(Location).order_by(Location.name).all()
+
+
+@router.get("/events", response_model=list[EventOut])
+def assistant_list_events(db: Session = Depends(get_db)):
+    return [_event_out(ev) for ev in db.query(Event).options(*EVENT_LOAD_OPTIONS).order_by(Event.event_at.desc()).all()]
+
+
+@router.get("/unclassified", response_model=list[PhotoOut])
+def assistant_unclassified(db: Session = Depends(get_db)):
+    photos = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
+    return [_photo_out(p) for p in photos]

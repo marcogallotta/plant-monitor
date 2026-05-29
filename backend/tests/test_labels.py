@@ -217,7 +217,8 @@ def test_label_names_are_unique(client):
 # --- concurrent insert race condition ---
 
 def test_create_label_integrity_error_returns_existing_label():
-    from app.main import create_label, LabelCreate
+    from app.main import create_label
+    from app.schemas import LabelCreate
     from app.models import Label
 
     existing = Label(id=42, name="rust")

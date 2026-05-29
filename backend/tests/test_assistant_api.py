@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import app.main
+import app.routers.assistant
 from app.database import get_db
 from app.main import app as fastapi_app
 from app.models import (
@@ -434,39 +435,39 @@ def test_auth_does_not_affect_non_assistant_routes(unauth_client):
 
 @pytest.fixture(autouse=True)
 def reset_rate_limit():
-    app.main._rate_limit_store.clear()
+    app.routers.assistant._rate_limit_store.clear()
     yield
-    app.main._rate_limit_store.clear()
+    app.routers.assistant._rate_limit_store.clear()
 
 
 def test_rate_limit_allows_requests_under_limit(client, monkeypatch):
-    monkeypatch.setattr(app.main, "_RATE_LIMIT", 3)
+    monkeypatch.setattr(app.routers.assistant, "_RATE_LIMIT", 3)
     for _ in range(3):
         assert client.get("/assistant/summary").status_code == 200
 
 
 def test_rate_limit_blocks_when_exceeded(client, monkeypatch):
-    monkeypatch.setattr(app.main, "_RATE_LIMIT", 3)
+    monkeypatch.setattr(app.routers.assistant, "_RATE_LIMIT", 3)
     for _ in range(3):
         client.get("/assistant/summary")
     resp = client.get("/assistant/summary")
     assert resp.status_code == 429
-    assert resp.headers["retry-after"] == str(app.main._RATE_WINDOW)
+    assert resp.headers["retry-after"] == str(app.routers.assistant._RATE_WINDOW)
 
 
 def test_rate_limit_resets_after_window(client, monkeypatch):
-    monkeypatch.setattr(app.main, "_RATE_LIMIT", 2)
+    monkeypatch.setattr(app.routers.assistant, "_RATE_LIMIT", 2)
     for _ in range(2):
         client.get("/assistant/summary")
     assert client.get("/assistant/summary").status_code == 429
     # Backdate the window start to simulate expiry
-    count, window_start = app.main._rate_limit_store[_TOKEN]
-    app.main._rate_limit_store[_TOKEN] = (count, window_start - app.main._RATE_WINDOW - 1)
+    count, window_start = app.routers.assistant._rate_limit_store[_TOKEN]
+    app.routers.assistant._rate_limit_store[_TOKEN] = (count, window_start - app.routers.assistant._RATE_WINDOW - 1)
     assert client.get("/assistant/summary").status_code == 200
 
 
 def test_rate_limit_does_not_apply_to_other_routes(client, monkeypatch):
-    monkeypatch.setattr(app.main, "_RATE_LIMIT", 1)
+    monkeypatch.setattr(app.routers.assistant, "_RATE_LIMIT", 1)
     client.get("/assistant/summary")
     assert client.get("/assistant/summary").status_code == 429
 
