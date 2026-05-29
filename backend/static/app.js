@@ -31,6 +31,7 @@ import {
   flickerToggle, flickerAuto, stopAuto,
   gridRotate,
   toggleComparePanel,
+  loadMorePhotos,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -76,7 +77,7 @@ loadDropdownData().then(loadPhotos);
 loadSensorStrip();
 
 Object.assign(window, {
-  applyFilter, clearFilter,
+  applyFilter, clearFilter, loadMorePhotos,
   openModal, closeModal, modalImgClick,
   modalPrev, modalNext,
   selectA, selectB,

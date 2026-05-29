@@ -4,6 +4,8 @@ import { setStatus, formatDate, orientedUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
 const FILTER_IDS = ['start', 'end', 'filter-source', 'filter-photo-type', 'filter-location', 'filter-unit', 'filter-label'];
+const PAGE_SIZE = 60;
+let visibleCount = PAGE_SIZE;
 
 function updateFilterIndicator() {
   const active = FILTER_IDS.some(id => document.getElementById(id)?.value);
@@ -28,6 +30,7 @@ export async function loadPhotos() {
       end:      end      ? new Date(end   + 'T23:59:59').toISOString() : null,
       source, ptype, location, unit, label,
     });
+    visibleCount = PAGE_SIZE;
     renderGrid(state.allPhotos);
     const total = state.allPhotos.length;
     const unclassified = state.allPhotos.filter(p => !p.photo_type || !(p.growing_unit_ids && p.growing_unit_ids.length)).length;
@@ -46,7 +49,8 @@ function renderGrid(photos) {
   tlInit();
   const grid = document.getElementById('photo-grid');
   grid.innerHTML = '';
-  for (let i = 0; i < photos.length; i++) {
+  const shown = Math.min(visibleCount, photos.length);
+  for (let i = 0; i < shown; i++) {
     const p = photos[i];
     const isA = state.photoA && state.photoA.id === p.id;
     const isB = state.photoB && state.photoB.id === p.id;
@@ -73,6 +77,18 @@ function renderGrid(photos) {
       '<div class="caption">' + caption + '</div>';
     grid.appendChild(card);
   }
+  if (shown < photos.length) {
+    const row = document.createElement('div');
+    row.className = 'load-more-row';
+    row.innerHTML = '<button onclick="loadMorePhotos()" class="load-more-btn">' +
+      'Load more (' + (photos.length - shown) + ' remaining)</button>';
+    grid.appendChild(row);
+  }
+}
+
+export function loadMorePhotos() {
+  visibleCount += PAGE_SIZE;
+  renderGrid(state.allPhotos);
 }
 
 export function toggleComparePanel() {

@@ -12,7 +12,7 @@ vi.mock('@/utils.js', () => ({ populateSelect: vi.fn() }));
 
 vi.mock('@/photos.js', () => ({
   loadPhotos: mockFn(),
-  applyFilter: vi.fn(), clearFilter: vi.fn(),
+  applyFilter: vi.fn(), clearFilter: vi.fn(), loadMorePhotos: vi.fn(),
   selectA: vi.fn(), selectB: vi.fn(),
   flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(),
   toggleComparePanel: vi.fn(),
@@ -67,7 +67,7 @@ beforeAll(async () => {
 
 describe('window exports', () => {
   const expected = [
-    'applyFilter', 'clearFilter',
+    'applyFilter', 'clearFilter', 'loadMorePhotos',
     'openModal', 'closeModal', 'modalImgClick',
     'modalPrev', 'modalNext',
     'selectA', 'selectB',

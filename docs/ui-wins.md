@@ -23,7 +23,6 @@ A catalogue of UI improvements, rough-ordered by impact. Kept separate from feat
 
 **Remaining:**
 
-- **Pagination or infinite scroll.** Simplest: render 60 at a time, "Load more" button (same pattern as SD import). Hold until the grid visibly lags with Pi photos.
 - **Quick-filter chips above the grid.** Row of unit-name and common label chips below the filter bar — one-click filtering without opening a dropdown. Good for the units you use 80% of the time.
 
 ---
