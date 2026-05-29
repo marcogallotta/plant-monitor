@@ -20,7 +20,7 @@ services:
       SENSOR_API_URL: ${SENSOR_API_URL:-}
       SENSOR_API_KEY: ${SENSOR_API_KEY:-}
       SENSOR_SENSORS: ${SENSOR_SENSORS:-[]}
-      IMPORT_SCAN_PATH: ${IMPORT_SCAN_PATH:-/host-media}
+      IMPORT_SCAN_PATH: ${IMPORT_SCAN_PATH:-}
       IMPORT_SCAN_MAX_FILES: ${IMPORT_SCAN_MAX_FILES:-1000}
       IMPORT_SCAN_CACHE_TTL_SECONDS: ${IMPORT_SCAN_CACHE_TTL_SECONDS:-600}
     ports:
@@ -28,7 +28,7 @@ services:
     volumes:
       - ./backend:/app
       - ./data/photos:/app/data/photos
-      - ${HOST_MEDIA_ROOT:-/media/marco}:/host-media:ro
+      - /media:/media:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       db:

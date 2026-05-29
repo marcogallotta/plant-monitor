@@ -239,7 +239,7 @@ The SD import panel supports two modes: a backend scanner (primary) and a browse
 
 **Backend scanner** (`GET /camera-import/scan`, `POST /camera-import/import`):
 
-- Configured via `IMPORT_SCAN_PATH` env var (e.g. `/host-media/4621-0000/DCIM/101MSDCF`). The host media root is mounted read-only into the container via `HOST_MEDIA_ROOT` (default `/media/marco`) → `/host-media:ro`.
+- Configured via `IMPORT_SCAN_PATH` env var (e.g. `/media/marco/4621-0000/DCIM/101MSDCF`). The host's `/media` directory is mounted read-only into the container at `/media`, so paths are identical inside and outside the container.
 - `app/camera_import.py` owns scanning, HMAC-based opaque file IDs, in-process scan cache (TTL: `IMPORT_SCAN_CACHE_TTL_SECONDS`), embedded JPEG extraction from RAW files, and import logic.
 - Duplicate detection uses `original_filename + original_size_bytes` (source file size) — tolerates camera counter rollover where `DSC00001.ARW` repeats on a new card.
 - `save_photo()` in `camera_import.py` is the shared helper used by both `/camera-import/import` (source `"sd"`) and `/manual-photos` (source `"manual"`). It writes files atomically (tmp → rename) and commits the DB row.
