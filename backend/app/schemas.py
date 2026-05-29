@@ -223,3 +223,24 @@ class GrowingUnitContext(BaseModel):
     growing_unit: GrowingUnitOut
     photos: list[PhotoOut]
     events: list[EventOut]
+
+
+class NearbyPhoto(BaseModel):
+    id: int
+    captured_at: datetime
+    relation: str
+
+
+class PhotoVisionContext(BaseModel):
+    photo_id: int
+    image_url: str
+    rotation: int
+    captured_at: datetime
+    source: Optional[str]
+    original_filename: Optional[str]
+    photo_type: Optional[str]
+    location: Optional[str]
+    growing_units: list[GrowingUnitBrief]
+    labels: list[str]
+    known_growing_units: list[GrowingUnitBrief]
+    nearby_photos: list[NearbyPhoto]

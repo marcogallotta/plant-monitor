@@ -36,12 +36,15 @@ from ..models import (
 from ..schemas import (
     AssistantSummary,
     EventOut,
+    GrowingUnitBrief,
     GrowingUnitContext,
     GrowingUnitOut,
     LocationOut,
+    NearbyPhoto,
     NoteOut,
     PhotoContext,
     PhotoOut,
+    PhotoVisionContext,
 )
 
 PHOTOS_DIR = Path("data/photos")
@@ -197,6 +200,45 @@ def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
     if not photo:
         raise HTTPException(status_code=404, detail="photo not found")
     return _assistant_photo_out(photo)
+
+
+@router.get("/photos/{photo_id}/vision-context", response_model=PhotoVisionContext)
+def assistant_photo_vision_context(photo_id: int, db: Session = Depends(get_db)):
+    photo = _get_photo_loaded(db, photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    prev_photo = (
+        db.query(Photo)
+        .filter(Photo.captured_at < photo.captured_at)
+        .order_by(Photo.captured_at.desc())
+        .first()
+    )
+    next_photo = (
+        db.query(Photo)
+        .filter(Photo.captured_at > photo.captured_at)
+        .order_by(Photo.captured_at.asc())
+        .first()
+    )
+    nearby = []
+    if prev_photo:
+        nearby.append(NearbyPhoto(id=prev_photo.id, captured_at=prev_photo.captured_at, relation="previous"))
+    if next_photo:
+        nearby.append(NearbyPhoto(id=next_photo.id, captured_at=next_photo.captured_at, relation="next"))
+    all_units = db.query(GrowingUnit).order_by(GrowingUnit.name).all()
+    return PhotoVisionContext(
+        photo_id=photo.id,
+        image_url=_photo_url(photo.filename),
+        rotation=photo.rotation,
+        captured_at=photo.captured_at,
+        source=photo.source,
+        original_filename=photo.original_filename,
+        photo_type=photo.photo_type,
+        location=photo.location.name if photo.location else None,
+        growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in photo.growing_units],
+        labels=[l.name for l in photo.labels],
+        known_growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in all_units],
+        nearby_photos=nearby,
+    )
 
 
 @router.get("/growing-units", response_model=list[GrowingUnitOut])
