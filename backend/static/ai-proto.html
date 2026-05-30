@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI tagging — cold-start research sample</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem;
+         background: #14110d; color: #ece7df; }
+  h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
+  p.sub { margin: 0 0 1.5rem; opacity: .7; max-width: 60ch; }
+  .grid { display: grid; gap: 1.25rem;
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .card { background: #1f1a13; border: 1px solid #3a3024; border-radius: 10px;
+          overflow: hidden; display: flex; flex-direction: column; }
+  .card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: #000;
+              display: block; }
+  .body { padding: .85rem 1rem 1rem; }
+  .name { font-size: 1.05rem; font-weight: 600; margin: 0 0 .15rem; }
+  .fn { font: 11px/1.4 ui-monospace, monospace; opacity: .5; word-break: break-all;
+        margin: 0 0 .6rem; }
+  .row { margin: .25rem 0; }
+  .k { opacity: .6; }
+  .chip { display: inline-block; background: #2e2719; border: 1px solid #4a3f2c;
+          border-radius: 999px; padding: .05rem .55rem; margin: 0 .25rem .25rem 0;
+          font-size: .82rem; }
+  .conf { font-weight: 600; }
+  .high { color: #7fd18a; } .medium { color: #e0c66b; } .low { color: #d98f7a; }
+  .q { background: #2a2110; border-left: 3px solid #c79a3a; padding: .5rem .7rem;
+       border-radius: 4px; margin: .6rem 0 0; font-size: .9rem; }
+  .obs { font-style: italic; opacity: .85; margin: .6rem 0 0; font-size: .9rem; }
+</style>
+</head>
+<body>
+<h1>AI tagging — cold-start research sample</h1>
+<p class="sub">6 photos spread across the 957-photo set. Interpretations below are
+Claude's reads <em>with</em> the known-plant list as anchor, but with no batch hint
+and no temporal context — i.e. what batch 1 of feature 1 would produce. Check each
+read against the image.</p>
+<div class="grid" id="grid"></div>
+<script>
+const items = [
+  { fn: "000cf7f3d4f64299b2d3dd454fd06eab.jpg",
+    name: "Mixed herb seedlings", conf: "low", type: "overview",
+    labels: ["seedlings","new_growth"],
+    q: "Three troughs + one pot of young seedlings — separate sowings to register as distinct units, or one batch? (cilantro/parsley/rocket/fenugreek/basil all plausible)",
+    obs: "Wall-mounted terracotta troughs and a round pot of early seedlings in fresh soil; too young to ID species." },
+  { fn: "291ff4b9585540eab4f55c00347d02ca.jpg",
+    name: "Thai basil (seedlings)", conf: "medium", type: "closeup",
+    labels: ["seedlings","new_growth"],
+    q: "Opposite oval leaves on reddish stems — Thai basil vs sweet basil?",
+    obs: "Young seedlings, first true leaves, opposite leaf pairs on reddish stems; healthy, no stress." },
+  { fn: "554b3a646dc64b3399b6382c3c81ce68.jpg",
+    name: "Dill", conf: "high", type: "health_check",
+    labels: ["floppy","leggy"], q: null,
+    obs: "Mature dill, very fine feathery foliage, flopping sideways out of the pot — leggy/unsupported, likely reaching for light." },
+  { fn: "7faf996c30144613a03c21aad20830ee.jpg",
+    name: "Stem cuttings — lemongrass vs rau ram?", conf: "low", type: "closeup",
+    labels: ["propagation","cuttings"],
+    q: "Angled cane-like stem segments with reddish nodes — lemongrass or rau ram cuttings? Both on the list, both propagate this way.",
+    obs: "Several cut stem segments pushed in at an angle in fresh mix; deliberate propagation, species not determinable from the cuts alone." },
+  { fn: "ac85543fb0e442549ef03b2f6e56d3ff.jpg",
+    name: "Coriander seedlings + sage", conf: "low", type: "overview",
+    labels: ["seedlings","new_growth"],
+    q: "Troughs of mixed young seedlings (some read as coriander) plus a separate sage pot below — register as multiple units?",
+    obs: "Two troughs of dense mixed seedlings with a drip line; a small broad-leaf plant (sage) in a pot at bottom of frame." },
+  { fn: "d630dda5ddf643f2bc4ff61df40cefa7.jpg",
+    name: "Mixed seed-tray seedlings", conf: "low", type: "overview",
+    labels: ["seedlings","seed_tray","new_growth"],
+    q: "Module tray with several cells germinating unevenly — one species or several? (fenugreek plausible for the denser cells)",
+    obs: "Plastic module tray, ~12 cells, uneven germination; cotyledons and first true leaves, species not yet distinguishable." },
+
+  { divider: "Round 2 — batch-1 priors applied (confirmed plant set + multi-species expectation)" },
+  { fn: "09923168f26e487992fa7c65a9a1237c.jpg",
+    name: "Peppermint trough + genovese basil", conf: "high", type: "overview",
+    labels: ["established","healthy","multi_plant"],
+    q: null,
+    obs: "Dense peppermint filling a trough (rounded toothed leaves, vigorous); genovese basil in the foreground pot. Two zones; both species confirmed in the garden." },
+  { fn: "34af94c1ded745ee95828eb2a2d41062.jpg",
+    name: "Potting / transplant in progress", conf: "low", type: "event/process",
+    labels: ["repotting","disturbed_soil"],
+    q: "Which container/unit is being potted up? Not determinable from the photo — needs hint or event link.",
+    obs: "Close-up of a dug hole and loosened root fibres in coir mix; a single leaf edge top-left. Documents a potting/transplant action, not a plant ID." },
+  { fn: "5e43054b5eb545658514a1681c88a1d9.jpg",
+    name: "Multi-pot overview: lemongrass + rosemary + allium + parsley + basil", conf: "medium", type: "overview",
+    labels: ["established","multi_plant"],
+    q: "≥5 distinct pots in one frame — strong case for registering this cluster's per-container layout once.",
+    obs: "Centre: lemongrass (strappy arching blue-green leaves). Top-left: rosemary. Bottom-left: grassy allium (chives/Welsh onion). Bottom: parsley. Right: genovese basil." },
+  { fn: "892b874e1bac4f25821c8f744ee3dd9e.jpg",
+    name: "Allium clump — chives vs Welsh onion vs garlic chives?", conf: "medium", type: "overview",
+    labels: ["established"],
+    q: "Fine cylindrical grassy leaves — chives, Welsh onion, or garlic chives? All three alliums on the list look near-identical as a clump.",
+    obs: "Dense clump of fine grassy allium leaves spilling over a trough edge; flat-leaf parsley at the right edge." },
+  { fn: "b2d470329a6f43c9b3f78bd3a5e47837.jpg",
+    name: "Seedling — genovese basil vs chilli?", conf: "low", type: "closeup",
+    labels: ["seedling","new_growth"],
+    q: "One pair of smooth oval true leaves — basil or a chilli (bird's eye / Hangjiao) seedling? Age-from-sowing would resolve this.",
+    obs: "A single seedling in coarse bark mix, slightly blurry; leaf shape alone doesn't separate basil from chilli at this stage." },
+  { fn: "db60aae6b3e6418f99c107c3bf2bc039.jpg",
+    name: "Severely wilted plant (rau ram or sorrel?)", conf: "low", type: "health_check",
+    labels: ["wilting","severe_stress","dying"],
+    q: "Species uncertain (leaves with dark markings — possibly rau ram or sorrel); condition is not: plant is collapsed.",
+    obs: "Pot moved indoors onto a bedside table; foliage collapsed over the rim and browning. Crisis or already dead — being moved indoors suggests a rescue attempt." },
+
+  { divider: "Round 3 — priors applied (final calibration sample)" },
+  { fn: "19af7b97567d47f8bf32f2a57db45334.jpg",
+    name: "Mint seedlings (peppermint vs Moroccan mint?)", conf: "medium", type: "closeup",
+    labels: ["seedlings","new_growth"],
+    q: "Toothed veined leaves, purple-tinged stems — peppermint or Moroccan mint? Not separable at seedling stage; needs sowing record.",
+    obs: "Several young mint-family seedlings in a pot; reddish stems, lightly hairy serrated leaves." },
+  { fn: "457790d2c20d4d2090dbf1a87242dcf0.jpg",
+    name: "Genovese basil seedling", conf: "high", type: "closeup",
+    labels: ["seedling","new_growth"],
+    q: null,
+    obs: "Classic genovese basil seedling — cupped glossy leaves — in a trough; a second basil seedling at the left edge." },
+  { fn: "7236f3ff21474d17be7ab0e287f728a5.jpg",
+    name: "Sprawling stressed plant (rau ram or bolted mint?)", conf: "low", type: "health_check",
+    labels: ["leggy","sprawling","stress"],
+    q: "Species uncertain — rau ram or a bolted mint? Condition is clear: leggy and sprawling.",
+    obs: "Overhead shot of a pot on terrazzo; thin reddish stems radiating outward with sparse leaves — poor, leggy condition." },
+  { fn: "9b523deb3f3b46db9ecbb8b25916e713.jpg",
+    name: "Tray: parsley vs cilantro seedlings", conf: "medium", type: "overview",
+    labels: ["seedlings","seed_tray","new_growth"],
+    q: "Lobed apiaceae seedlings across a 6-cell tray — parsley or cilantro? Near-identical this young.",
+    obs: "Six-cell propagation tray, several seedlings each cell, divided/lobed leaves typical of parsley or coriander." },
+  { fn: "c9860a82b9594b83a0f0c1658becc874.jpg",
+    name: "Genovese basil (young plant)", conf: "high", type: "closeup",
+    labels: ["new_growth","healthy"],
+    q: null,
+    obs: "A slightly older genovese basil — broad glossy leaves — established in a pot." },
+  { fn: "f6304791e4a64bf18f19172622ec836f.jpg",
+    name: "Trough: Thai basil + genovese basil", conf: "high", type: "overview",
+    labels: ["established","multi_plant"],
+    q: null,
+    obs: "Two basils sharing one trough: Thai basil (narrow leaves, purple stems, left/centre) and genovese basil (broad leaves, right)." },
+];
+const grid = document.getElementById("grid");
+for (const it of items) {
+  if (it.divider) {
+    grid.insertAdjacentHTML("beforeend",
+      `<h2 style="grid-column:1/-1;margin:1.5rem 0 0;font-size:1.05rem;border-top:1px solid #3a3024;padding-top:1rem;">${it.divider}</h2>`);
+    continue;
+  }
+  const labels = it.labels.map(l => `<span class="chip">${l}</span>`).join("");
+  const q = it.q ? `<div class="q">⚠ ${it.q}</div>` : "";
+  grid.insertAdjacentHTML("beforeend", `
+    <div class="card">
+      <img src="/photos/${it.fn}" alt="${it.name}" loading="lazy">
+      <div class="body">
+        <p class="name">${it.name}</p>
+        <p class="fn">${it.fn}</p>
+        <div class="row"><span class="k">confidence:</span>
+          <span class="conf ${it.conf}">${it.conf}</span></div>
+        <div class="row"><span class="k">type:</span> ${it.type}</div>
+        <div class="row"><span class="k">labels:</span> ${labels}</div>
+        ${q}
+        <p class="obs">${it.obs}</p>
+      </div>
+    </div>`);
+}
+</script>
+</body>
+</html>
