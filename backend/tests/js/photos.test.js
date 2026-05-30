@@ -6,7 +6,7 @@ vi.mock('@/api.js', () => ({
   deletePhoto: vi.fn().mockResolvedValue(undefined),
 }));
 
-let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete;
+let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash;
 let state;
 
 const PHOTOS = [
@@ -52,7 +52,7 @@ beforeAll(async () => {
     <span id="tl-fps"></span>
   `;
 
-  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete} =
+  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash} =
     await import('@/photos.js'));
   ({state} = await import('@/state.js'));
 });
@@ -144,6 +144,32 @@ describe('clearFilter', () => {
     expect(document.getElementById('start').value).toBe('');
     expect(document.getElementById('end').value).toBe('');
     expect(document.getElementById('filter-source').value).toBe('');
+  });
+});
+
+// ── readFiltersFromHash ───────────────────────────────────
+
+describe('readFiltersFromHash', () => {
+  afterEach(() => {
+    history.replaceState(null, '', window.location.pathname);
+  });
+
+  it('restores date range and source from hash', () => {
+    history.replaceState(null, '', '#start=2099-01-01&end=2099-12-31&source=pi');
+    readFiltersFromHash();
+    expect(document.getElementById('start').value).toBe('2099-01-01');
+    expect(document.getElementById('end').value).toBe('2099-12-31');
+    expect(document.getElementById('filter-source').value).toBe('pi');
+  });
+
+  it('restores unit and label chip state from hash, reflected in next loadPhotos call', async () => {
+    history.replaceState(null, '', '#unit=3&label=5');
+    readFiltersFromHash();
+    const api = await import('@/api.js');
+    await loadPhotos();
+    const call = vi.mocked(api.getPhotos).mock.calls.at(-1)[0];
+    expect(call.unit).toBe('3');
+    expect(call.label).toBe('5');
   });
 });
 

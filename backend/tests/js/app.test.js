@@ -16,6 +16,7 @@ vi.mock('@/photos.js', () => ({
   selectA: vi.fn(), selectB: vi.fn(),
   flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(), gridDelete: vi.fn(),
   renderQuickChips: vi.fn(),
+  readFiltersFromHash: vi.fn(),
 }));
 
 vi.mock('@/modal.js', () => ({
@@ -130,9 +131,9 @@ describe('switchTab', () => {
     expect(document.getElementById('tab-gallery').classList.contains('active')).toBe(true);
   });
 
-  it('persists active tab to localStorage', () => {
+  it('persists active tab to the URL hash', () => {
     window.switchTab('manage');
-    expect(localStorage.getItem('activeTab')).toBe('manage');
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('tab')).toBe('manage');
     window.switchTab('gallery');
   });
 });

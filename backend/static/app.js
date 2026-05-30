@@ -32,6 +32,7 @@ import {
   gridRotate, gridDelete,
   loadMorePhotos,
   renderQuickChips,
+  readFiltersFromHash,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -41,6 +42,7 @@ async function loadDropdownData() {
     getLabels(),
   ]);
   populateSelect('filter-location', state.allLocations, 'All locations');
+  readFiltersFromHash();
   renderQuickChips();
   populateSelect('upload-location', state.allLocations, '— none —');
   populateSelect('upload-units',    state.allUnits,     null);
@@ -74,7 +76,9 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
-  localStorage.setItem('activeTab', name);
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  params.set('tab', name);
+  history.replaceState(null, '', '#' + params.toString());
 }
 
 initNotes(visualToStored);
@@ -83,7 +87,7 @@ initSdImport(loadPhotos);
 initEvents(loadDropdownData);
 loadDropdownData().then(loadPhotos);
 loadSensorStrip();
-switchTab(localStorage.getItem('activeTab') || 'gallery');
+switchTab(new URLSearchParams(window.location.hash.slice(1)).get('tab') || localStorage.getItem('activeTab') || 'gallery');
 
 Object.assign(window, {
   applyFilter, clearFilter, loadMorePhotos,

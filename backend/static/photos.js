@@ -11,6 +11,43 @@ let lastFilterParams = {};
 let activeUnitId  = '';
 let activeLabelId = '';
 
+// Restore chip state from hash immediately so renderQuickChips() picks it up correctly.
+{
+  const _p = new URLSearchParams(window.location.hash.slice(1));
+  activeUnitId  = _p.get('unit')  || '';
+  activeLabelId = _p.get('label') || '';
+}
+
+function writeFiltersToHash() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const start    = document.getElementById('start').value;
+  const end      = document.getElementById('end').value;
+  const source   = document.getElementById('filter-source').value;
+  const ptype    = document.getElementById('filter-photo-type').value;
+  const loc      = document.getElementById('filter-location').value;
+  start    ? params.set('start', start)    : params.delete('start');
+  end      ? params.set('end', end)        : params.delete('end');
+  source   ? params.set('source', source)  : params.delete('source');
+  ptype    ? params.set('ptype', ptype)    : params.delete('ptype');
+  loc      ? params.set('location', loc)   : params.delete('location');
+  activeUnitId  ? params.set('unit', activeUnitId)   : params.delete('unit');
+  activeLabelId ? params.set('label', activeLabelId) : params.delete('label');
+  const str = params.toString();
+  history.replaceState(null, '', str ? '#' + str : window.location.pathname + window.location.search);
+}
+
+export function readFiltersFromHash() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const el = id => document.getElementById(id);
+  if (params.has('start'))    el('start').value             = params.get('start');
+  if (params.has('end'))      el('end').value               = params.get('end');
+  if (params.has('source'))   el('filter-source').value     = params.get('source');
+  if (params.has('ptype'))    el('filter-photo-type').value = params.get('ptype');
+  if (params.has('location')) el('filter-location').value   = params.get('location');
+  activeUnitId  = params.get('unit')  || '';
+  activeLabelId = params.get('label') || '';
+}
+
 function updateFilterIndicator() {
   const active = FILTER_IDS.some(id => document.getElementById(id)?.value) || !!activeUnitId || !!activeLabelId;
   document.getElementById('clear-filter-btn')?.classList.toggle('active', active);
@@ -45,6 +82,7 @@ export async function loadPhotos() {
     const unclassified = paginated ? 0 : state.allPhotos.filter(p => !p.photo_type || !(p.growing_unit_ids && p.growing_unit_ids.length)).length;
     const base = total === 0 ? 'No photos found.' : (paginated ? 'Showing ' + loaded + ' of ' + total : total + ' photo' + (total === 1 ? '' : 's'));
     setStatus(unclassified > 0 ? base + ' · ' + unclassified + ' unclassified' : base);
+    writeFiltersToHash();
   } catch (e) {
     setStatus('Error loading photos: ' + e.message);
   }
