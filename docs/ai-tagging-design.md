@@ -38,6 +38,43 @@ Before describing the design, here's what the human-Claude tagging loop looked l
 
 ---
 
+## What the bulk backfill taught us (≈2,600-photo triage, May 2026)
+
+A one-off backfill of the phone camera roll (2,626 JPEGs) was triaged into the DB. Method: downscale to 160px thumbnails, pack 25 per 5×5 **contact sheet**, and have Claude judge whole sheets at once for a binary **keep / discard** ("is this a monitoring photo of one of my plants?"). This is the cheap **pre-filter gate** that should run _before_ the per-photo species/condition tagging described below. Result: 2,626 → 891 phone keepers (956 total with manual/sd).
+
+**This is a separate, earlier stage than the tagging loop above.** Tagging assumes the photo is already a legitimate plant photo. The backfill showed that assumption doesn't hold for a raw camera roll — roughly **half** of it is not monitoring material at all, and that junk must be filtered first or it pollutes the suggestion queue.
+
+### The keep/discard rule (learned by correction)
+
+The bar is **narrower than "gardening-related."** Keep only if an **actual living plant of the user's own** is in frame — in a pot/planter/tray, including seedlings, wilted, dying, ugly. Discard, even when green or garden-adjacent:
+
+- Bare soil / potting mix / sand / substrate close-ups with no visible plant
+- Empty pots, saucers, drainage trays, stacked planters
+- Garden-product packaging (fertiliser/pesticide bottles, soil bags, seed boxes)
+- Store / nursery displays: seed-packet racks, plants-for-sale shelves
+- Store-bought / bagged herbs with price tags; harvested herbs being washed, weighed, bundled, or on a cutting board
+- Cooking / food; kitchen scraps (onion/ginger) sprouting in a pan
+- Screens, thermostats, documents
+
+### Calibration numbers (useful for setting auto-filter thresholds)
+
+- **False-keep rate ≈30%** in the first two human-reviewed batches before the rule tightened. The single biggest miscalibration: treating "contains a plant or gardening context" as keep. Requiring an actual living plant would have caught ~1/3 of the over-keeps.
+- An aggressive automated discard pass then had a **false-reject rate ≈8%** — genuine potted seedlings wrongly discarded. So an automated gate should **bias toward keep on ambiguous soil/tray shots** and surface them for a cheap human glance rather than hard-deleting.
+
+### Confusable categories a classifier must handle
+
+These are the boundaries that produced nearly all the errors at thumbnail scale:
+
+- **Grains / oats / flour / sawdust vs. soil** — visually identical at 160px; the food versions are the trap.
+- **Sparse seedling tray vs. bare-soil tray** — a freshly-sown cell tray reads as "empty soil." Bias keep.
+- **Lemongrass / leek / spring-onion stalks** — harvested-on-a-board (discard) vs. growing-in-a-pot (keep) vs. rooting-in-water for propagation (keep).
+- **Sprouting kitchen scraps vs. propagation** — onion bottoms in a glass (discard) look like a deliberate cutting (keep).
+- **Jars of yellowish liquid** — recurring false-keep (assumed propagation/rooting in water); at least one was not horticultural at all. Default discard unless a plant/cutting is clearly visible in the jar.
+
+**Implication for the pipeline:** add a cheap binary keep/discard gate (thumbnail-grid batching keeps the token cost near-free) ahead of the expensive per-photo tagging. Photos that fail the gate never reach `photo_ai_suggestions`. Ambiguous gate results get a lightweight "confirm import" review, distinct from the richer tagging review.
+
+---
+
 ## Claude-assisted tagging
 
 ### Flow
