@@ -114,13 +114,6 @@ export async function loadMorePhotos() {
   }
 }
 
-export function toggleComparePanel() {
-  const body  = document.getElementById('compare-body');
-  const label = document.getElementById('compare-toggle-label');
-  const open  = body.classList.toggle('open');
-  label.textContent = open ? '▾ collapse' : '▸ expand';
-}
-
 export function applyFilter() { loadPhotos(); }
 export function clearFilter() {
   document.getElementById('start').value = '';
@@ -188,13 +181,6 @@ export function selectB(e, idx) {
 }
 
 function updateCompare() {
-  const body  = document.getElementById('compare-body');
-  const label = document.getElementById('compare-toggle-label');
-  if (body && !body.classList.contains('open')) {
-    body.classList.add('open');
-    if (label) label.textContent = '▾ collapse';
-  }
-
   const ready = state.photoA && state.photoB;
 
   if (state.photoA) {

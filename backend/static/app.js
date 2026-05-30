@@ -2,19 +2,19 @@ import { state } from './state.js';
 import { getLocations, getGrowingUnits, getLabels } from './api.js';
 import {
   initSdImport,
-  toggleSdPanel, handleSdFolderInput, handleSdScan,
+  handleSdFolderInput, handleSdScan,
   sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
   sdAddGroup, sdAddMore,
 } from './sdImport.js';
 import {
   initEvents,
-  toggleManagePanel, createLocation, createUnit,
-  toggleEventsPanel, logEvent,
+  createLocation, createUnit,
+  logEvent,
 } from './events.js';
 import { initNotes, modalImgClick, noteSave, noteDelete, noteCancel } from './notes.js';
 import { populateSelect } from './utils.js';
-import { tlPrev, tlPlayPause, tlNext, toggleTlPanel } from './timelapse.js';
-import { initUpload, toggleUploadPanel, submitManualUpload } from './upload.js';
+import { tlPrev, tlPlayPause, tlNext } from './timelapse.js';
+import { initUpload, submitManualUpload } from './upload.js';
 import { visualToStored } from './zoom.js';
 import {
   openModal, closeModal, showModalPhoto,
@@ -30,7 +30,6 @@ import {
   selectA, selectB,
   flickerToggle, flickerAuto, stopAuto,
   gridRotate,
-  toggleComparePanel,
   loadMorePhotos,
   renderQuickChips,
 } from './photos.js';
@@ -66,8 +65,17 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'ArrowRight') modalNext();
     if (e.key === 'ArrowLeft')  modalPrev();
   }
-  if (e.key === 'f' || e.key === 'F') flickerToggle();
+  if ((e.key === 'f' || e.key === 'F') && document.getElementById('tab-gallery')?.classList.contains('active')) flickerToggle();
 });
+
+function switchTab(name) {
+  if (!document.getElementById('tab-' + name)) name = 'gallery';
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelector(`.tab-btn[data-tab="${name}"]`)?.classList.add('active');
+  localStorage.setItem('activeTab', name);
+}
 
 initNotes(visualToStored);
 initUpload(loadPhotos);
@@ -75,6 +83,7 @@ initSdImport(loadPhotos);
 initEvents(loadDropdownData);
 loadDropdownData().then(loadPhotos);
 loadSensorStrip();
+switchTab(localStorage.getItem('activeTab') || 'gallery');
 
 Object.assign(window, {
   applyFilter, clearFilter, loadMorePhotos,
@@ -84,14 +93,14 @@ Object.assign(window, {
   rotatePhoto, gridRotate,
   handleLabelInput, handleLabelKeydown,
   flickerToggle, flickerAuto,
-  toggleComparePanel,
-  tlPrev, tlPlayPause, tlNext, toggleTlPanel,
+  tlPrev, tlPlayPause, tlNext,
   noteSave, noteDelete, noteCancel,
-  toggleUploadPanel, submitManualUpload,
-  toggleSdPanel, sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
-  toggleManagePanel, createLocation, createUnit,
-  toggleEventsPanel, logEvent,
+  submitManualUpload,
+  sdSelectAllVisible, sdDeselectAll, sdLoadMore, sdUploadSelected,
+  createLocation, createUnit,
+  logEvent,
   handleSdFolderInput, handleSdScan, sdAddGroup, sdAddMore,
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
+  switchTab,
 });

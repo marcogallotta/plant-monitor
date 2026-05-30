@@ -65,13 +65,6 @@ export function initSdImport(loadPhotos) {
   _loadPhotos = loadPhotos;
 }
 
-export function toggleSdPanel() {
-  var form  = document.getElementById('sd-form');
-  var label = document.getElementById('sd-toggle-label');
-  var open  = form.classList.toggle('open');
-  label.textContent = open ? '▾ collapse' : '▸ expand';
-}
-
 export async function handleSdScan() {
   var status = document.getElementById('sd-folder-status');
   var btn    = document.getElementById('sd-scan-btn');
@@ -130,14 +123,6 @@ export async function handleSdScan() {
   var batchLabel = sdBatches.length > 1 ? ' — ' + b0count + ' in latest batch' : '';
   var label = data.sources && data.sources[0] ? data.sources[0].label : 'card';
   status.textContent = label + ': ' + candidates.length + ' photo' + (candidates.length === 1 ? '' : 's') + batchLabel;
-
-  // Auto-expand so the grid is visible without a manual click
-  var form = document.getElementById('sd-form');
-  var toggleLabel = document.getElementById('sd-toggle-label');
-  if (!form.classList.contains('open')) {
-    form.classList.add('open');
-    if (toggleLabel) toggleLabel.textContent = '▾ collapse';
-  }
 
   document.getElementById('sd-grid-controls').style.display = 'flex';
   sdAppendThumbs(sdBatches.length > 1 ? b0count : SD_PAGE);

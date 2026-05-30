@@ -10,9 +10,8 @@ const FIXTURE_JPG = readFileSync(
 test('manual upload via dashboard: photo appears in grid', async ({ page }) => {
   await page.goto('/');
 
-  // Expand the upload panel
-  await page.locator('.upload-panel-header', { hasText: 'Upload single photo' }).click();
-  await expect(page.locator('#upload-form')).toHaveClass(/open/);
+  // Switch to the Import tab (form is always open)
+  await page.locator('.tab-btn[data-tab="import"]').click();
 
   // Intercept the POST before clicking so we don't race the response
   const uploadPromise = page.waitForResponse(
@@ -31,5 +30,6 @@ test('manual upload via dashboard: photo appears in grid', async ({ page }) => {
   const { id } = await resp.json();
 
   await expect(page.locator('#upload-status')).toHaveText('Uploaded.');
+  await page.locator('.tab-btn[data-tab="gallery"]').click();
   await expect(page.locator(`.photo-card[data-id="${id}"]`)).toBeVisible();
 });

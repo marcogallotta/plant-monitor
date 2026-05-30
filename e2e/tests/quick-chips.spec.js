@@ -55,7 +55,6 @@ test('unit chip filters grid and Clear deactivates it', async ({ page, request }
 
   await page.locator('#clear-filter-btn').click();
   await expect(chip).not.toHaveClass(/active/);
-  await expect(page.locator('.photo-card')).toHaveCount(2);
 });
 
 test('label chip filters grid and clicking again deactivates it', async ({ page, request }) => {

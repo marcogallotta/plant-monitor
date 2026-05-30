@@ -28,7 +28,7 @@ function makeEvent(files) {
   return { target: { files } };
 }
 
-let toggleSdPanel, handleSdFolderInput, handleSdScan, sdLoadMore, sdSelectAllVisible, sdDeselectAll, sdUploadSelected, sdAddGroup, sdAddMore;
+let handleSdFolderInput, handleSdScan, sdLoadMore, sdSelectAllVisible, sdDeselectAll, sdUploadSelected, sdAddGroup, sdAddMore;
 let core, api;
 
 beforeAll(async () => {
@@ -37,9 +37,7 @@ beforeAll(async () => {
   window.exifr = { parse: vi.fn().mockResolvedValue({}) };
 
   document.body.innerHTML = `
-    <div id="sd-form">
-      <label id="sd-toggle-label">▸ expand</label>
-    </div>
+    <div id="sd-form"></div>
     <button id="sd-scan-btn">Scan camera/card</button>
     <span id="sd-folder-status"></span>
     <div id="sd-grid-controls" style="display:none">
@@ -61,7 +59,7 @@ beforeAll(async () => {
   core = await import('@/sdImportCore.js');
   api  = await import('@/api.js');
 
-  ({ toggleSdPanel, handleSdFolderInput, handleSdScan, sdLoadMore,
+  ({ handleSdFolderInput, handleSdScan, sdLoadMore,
      sdSelectAllVisible, sdDeselectAll, sdUploadSelected,
      sdAddGroup, sdAddMore } = await import('@/sdImport.js'));
 
@@ -90,30 +88,6 @@ beforeEach(() => {
   document.getElementById('sd-upload-btn').disabled = false;
   document.getElementById('sd-photo-type').value = '';
   document.getElementById('sd-scan-btn').disabled = false;
-});
-
-// ── toggleSdPanel ─────────────────────────────────────────
-
-describe('toggleSdPanel', () => {
-  it('toggles open class on sd-form', () => {
-    document.getElementById('sd-form').classList.remove('open');
-    toggleSdPanel();
-    expect(document.getElementById('sd-form').classList.contains('open')).toBe(true);
-    toggleSdPanel();
-    expect(document.getElementById('sd-form').classList.contains('open')).toBe(false);
-  });
-
-  it('updates label text when opening', () => {
-    document.getElementById('sd-form').classList.remove('open');
-    toggleSdPanel();
-    expect(document.getElementById('sd-toggle-label').textContent).toBe('▾ collapse');
-  });
-
-  it('updates label text when closing', () => {
-    document.getElementById('sd-form').classList.add('open');
-    toggleSdPanel();
-    expect(document.getElementById('sd-toggle-label').textContent).toBe('▸ expand');
-  });
 });
 
 // ── handleSdFolderInput ───────────────────────────────────

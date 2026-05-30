@@ -15,7 +15,6 @@ vi.mock('@/photos.js', () => ({
   applyFilter: vi.fn(), clearFilter: vi.fn(), loadMorePhotos: vi.fn(),
   selectA: vi.fn(), selectB: vi.fn(),
   flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(),
-  toggleComparePanel: vi.fn(),
   renderQuickChips: vi.fn(),
 }));
 
@@ -35,32 +34,43 @@ vi.mock('@/labels.js', () => ({
 }));
 
 vi.mock('@/timelapse.js', () => ({
-  tlPrev: vi.fn(), tlPlayPause: vi.fn(), tlNext: vi.fn(), toggleTlPanel: vi.fn(),
+  tlPrev: vi.fn(), tlPlayPause: vi.fn(), tlNext: vi.fn(),
 }));
 
 vi.mock('@/upload.js', () => ({
   initUpload: vi.fn(),
-  toggleUploadPanel: vi.fn(), submitManualUpload: mockFn(),
+  submitManualUpload: mockFn(),
 }));
 
 vi.mock('@/zoom.js', () => ({ visualToStored: vi.fn() }));
 
 vi.mock('@/events.js', () => ({
   initEvents: vi.fn(),
-  toggleManagePanel: vi.fn(), createLocation: mockFn(), createUnit: mockFn(),
-  toggleEventsPanel: vi.fn(), logEvent: mockFn(),
+  createLocation: mockFn(), createUnit: mockFn(),
+  logEvent: mockFn(),
 }));
 
 vi.mock('@/sdImport.js', () => ({
   initSdImport: vi.fn(),
-  toggleSdPanel: vi.fn(), handleSdFolderInput: vi.fn(), handleSdScan: vi.fn(),
+  handleSdFolderInput: vi.fn(), handleSdScan: vi.fn(),
   sdAddGroup: vi.fn(), sdAddMore: vi.fn(),
   sdSelectAllVisible: vi.fn(), sdDeselectAll: vi.fn(),
   sdLoadMore: vi.fn(), sdUploadSelected: mockFn(),
 }));
 
 beforeAll(async () => {
-  document.body.innerHTML = `<div id="modal" class="hidden"></div>`;
+  localStorage.clear();
+  document.body.innerHTML = `
+    <div id="modal" class="hidden"></div>
+    <div class="tab-content" id="tab-gallery"></div>
+    <div class="tab-content" id="tab-import"></div>
+    <div class="tab-content" id="tab-events"></div>
+    <div class="tab-content" id="tab-manage"></div>
+    <button class="tab-btn" data-tab="gallery"></button>
+    <button class="tab-btn" data-tab="import"></button>
+    <button class="tab-btn" data-tab="events"></button>
+    <button class="tab-btn" data-tab="manage"></button>
+  `;
   await import('@/app.js');
 });
 
@@ -74,16 +84,17 @@ describe('window exports', () => {
     'selectA', 'selectB',
     'rotatePhoto',
     'handleLabelInput', 'handleLabelKeydown',
-    'flickerToggle', 'flickerAuto', 'gridRotate', 'toggleComparePanel',
-    'tlPrev', 'tlPlayPause', 'tlNext', 'toggleTlPanel',
+    'flickerToggle', 'flickerAuto', 'gridRotate',
+    'tlPrev', 'tlPlayPause', 'tlNext',
     'noteSave', 'noteDelete', 'noteCancel',
-    'toggleUploadPanel', 'submitManualUpload',
-    'toggleSdPanel', 'sdSelectAllVisible', 'sdDeselectAll', 'sdLoadMore', 'sdUploadSelected',
-    'toggleManagePanel', 'createLocation', 'createUnit',
-    'toggleEventsPanel', 'logEvent',
+    'submitManualUpload',
+    'sdSelectAllVisible', 'sdDeselectAll', 'sdLoadMore', 'sdUploadSelected',
+    'createLocation', 'createUnit',
+    'logEvent',
     'handleSdFolderInput', 'handleSdScan', 'sdAddGroup', 'sdAddMore',
     'identityUpdate',
     'toggleModalLogEvent', 'logModalEvent',
+    'switchTab',
   ];
 
   for (const name of expected) {
@@ -91,6 +102,39 @@ describe('window exports', () => {
       expect(typeof window[name]).toBe('function');
     });
   }
+});
+
+// ── switchTab ─────────────────────────────────────────────
+
+describe('switchTab', () => {
+  it('defaults to gallery on boot', () => {
+    expect(document.getElementById('tab-gallery').classList.contains('active')).toBe(true);
+  });
+
+  it('shows the target tab and hides others', () => {
+    window.switchTab('import');
+    expect(document.getElementById('tab-import').classList.contains('active')).toBe(true);
+    expect(document.getElementById('tab-gallery').classList.contains('active')).toBe(false);
+    window.switchTab('gallery');
+  });
+
+  it('marks the matching tab button active', () => {
+    window.switchTab('events');
+    const btn = document.querySelector('.tab-btn[data-tab="events"]');
+    expect(btn.classList.contains('active')).toBe(true);
+    window.switchTab('gallery');
+  });
+
+  it('falls back to gallery for an unknown tab name', () => {
+    window.switchTab('nonexistent');
+    expect(document.getElementById('tab-gallery').classList.contains('active')).toBe(true);
+  });
+
+  it('persists active tab to localStorage', () => {
+    window.switchTab('manage');
+    expect(localStorage.getItem('activeTab')).toBe('manage');
+    window.switchTab('gallery');
+  });
 });
 
 // ── keydown handler ───────────────────────────────────────

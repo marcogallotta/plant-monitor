@@ -10,107 +10,33 @@
 
 <header><h1>Plant Monitor</h1></header>
 
-<div class="filters">
-  <label>From <input type="date" id="start"></label>
-  <label>To   <input type="date" id="end"></label>
-  <label>Source
-    <select id="filter-source">
-      <option value="">All sources</option>
-      <option value="pi">Pi</option>
-      <option value="manual">Manual</option>
-      <option value="sd">SD / camera</option>
-      <option value="phone">Phone</option>
-      <option value="seed">Seed</option>
-    </select>
-  </label>
-  <label>Type
-    <select id="filter-photo-type">
-      <option value="">All types</option>
-      <option value="overview">Overview</option>
-      <option value="closeup">Closeup</option>
-      <option value="incident">Incident</option>
-      <option value="comparison">Comparison</option>
-      <option value="harvest">Harvest</option>
-      <option value="propagation">Propagation</option>
-      <option value="other">Other</option>
-    </select>
-  </label>
-  <label>Location
-    <select id="filter-location">
-      <option value="">All locations</option>
-    </select>
-  </label>
-  <button id="clear-filter-btn" onclick="clearFilter()">Clear</button>
-</div>
+<nav class="tab-bar">
+  <button class="tab-btn" data-tab="gallery"   onclick="switchTab('gallery')">Gallery</button>
+  <button class="tab-btn" data-tab="timelapse" onclick="switchTab('timelapse')">Timelapse</button>
+  <button class="tab-btn" data-tab="import"    onclick="switchTab('import')">Import</button>
+  <button class="tab-btn" data-tab="events"    onclick="switchTab('events')">Events</button>
+  <button class="tab-btn" data-tab="manage"    onclick="switchTab('manage')">Manage</button>
+</nav>
 
-<div id="quick-chips" class="quick-chips"></div>
+<!-- Gallery tab -->
+<div class="tab-content" id="tab-gallery">
 
-<div id="sensor-strip" class="sensor-strip"></div>
-<div id="status"></div>
-
-<!-- SD card / phone import panel -->
-<div class="upload-panel">
-  <div class="upload-panel-header" onclick="toggleSdPanel()">
-    <h2>Import photos</h2>
-    <button id="sd-scan-btn" onclick="event.stopPropagation(); handleSdScan()">Scan camera/card</button>
-    <span id="sd-folder-status" class="status-msg" style="margin-left:0.5rem;"></span>
-    <span id="sd-toggle-label" class="panel-toggle">▸ expand</span>
-  </div>
-  <div class="upload-form" id="sd-form">
-    <div class="upload-row">
-      <input type="file" id="sd-folder-input" webkitdirectory accept=".jpg,.jpeg,.orf,.arw" style="display:none" onchange="handleSdFolderInput(event)">
-      <button onclick="document.getElementById('sd-folder-input').click()">Choose folder</button>
-    </div>
-    <div class="upload-row" id="sd-grid-controls" style="display:none;">
-      <span id="sd-selected-count" class="status-msg" style="flex:1;"></span>
-      <button onclick="sdSelectAllVisible()">Select all visible</button>
-      <button onclick="sdDeselectAll()">Deselect all</button>
-      <button id="sd-add-group-btn" onclick="sdAddGroup()" style="display:none;">Add group ↑</button>
-      <button id="sd-add-more-btn" onclick="sdAddMore()" style="display:none;">Show older</button>
-    </div>
-    <div class="sd-grid" id="sd-grid"></div>
-    <div class="upload-row" id="sd-load-more-row" style="display:none;justify-content:center;">
-      <button onclick="sdLoadMore()">Load more</button>
-      <span id="sd-load-more-label" class="status-msg" style="margin-left:0.5rem;"></span>
-    </div>
-    <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;align-items:center;">
-      <label>Type:</label>
-      <select id="sd-photo-type">
-        <option value="">— none —</option>
-        <option value="overview">overview</option>
-        <option value="closeup">closeup</option>
-        <option value="incident">incident</option>
-        <option value="comparison">comparison</option>
-        <option value="harvest">harvest</option>
-        <option value="propagation">propagation</option>
-        <option value="new_purchase">new purchase</option>
-        <option value="other">other</option>
+  <div class="filters">
+    <label>From <input type="date" id="start"></label>
+    <label>To   <input type="date" id="end"></label>
+    <label>Source
+      <select id="filter-source">
+        <option value="">All sources</option>
+        <option value="pi">Pi</option>
+        <option value="manual">Manual</option>
+        <option value="sd">SD / camera</option>
+        <option value="phone">Phone</option>
+        <option value="seed">Seed</option>
       </select>
-      <button id="sd-upload-btn" onclick="sdUploadSelected()">Import selected</button>
-      <span id="sd-upload-status" class="status-msg"></span>
-    </div>
-  </div>
-</div>
-
-<!-- Manual upload panel -->
-<div class="upload-panel">
-  <div class="upload-panel-header" onclick="toggleUploadPanel()">
-    <h2>Upload single photo</h2>
-    <span id="upload-toggle-label" class="panel-toggle">▸ expand</span>
-  </div>
-  <div class="upload-form" id="upload-form">
-    <div class="upload-row">
-      <label>Image (JPEG)</label>
-      <input type="file" id="upload-image" accept="image/jpeg,image/jpg">
-    </div>
-    <div class="upload-row">
-      <label>Captured at</label>
-      <input type="datetime-local" id="upload-captured-at">
-    </div>
-    <div class="upload-row">
-      <label>Type</label>
-      <select id="upload-photo-type">
-        <option value="">— none —</option>
+    </label>
+    <label>Type
+      <select id="filter-photo-type">
+        <option value="">All types</option>
         <option value="overview">Overview</option>
         <option value="closeup">Closeup</option>
         <option value="incident">Incident</option>
@@ -119,213 +45,314 @@
         <option value="propagation">Propagation</option>
         <option value="other">Other</option>
       </select>
-    </div>
-    <div class="upload-row">
-      <label>Location</label>
-      <select id="upload-location">
-        <option value="">— none —</option>
+    </label>
+    <label>Location
+      <select id="filter-location">
+        <option value="">All locations</option>
       </select>
+    </label>
+    <button id="clear-filter-btn" onclick="clearFilter()">Clear</button>
+  </div>
+
+  <div id="quick-chips" class="quick-chips"></div>
+
+  <div id="sensor-strip" class="sensor-strip"></div>
+  <div id="status"></div>
+
+  <div id="photo-grid" class="photo-grid"></div>
+
+  <!-- Comparison panel -->
+  <div class="compare-panel">
+    <div class="compare-header">
+      <h2>Compare</h2>
+      <span id="compare-hint" class="panel-toggle">
+        Click <strong style="color:#8af">A</strong> / <strong style="color:#c8f">B</strong> on any photo above to select
+      </span>
     </div>
-    <div class="upload-row">
-      <label>Growing units</label>
-      <select id="upload-units" multiple></select>
-    </div>
-    <div class="upload-row">
-      <label>Initial note</label>
-      <textarea id="upload-note" placeholder="Optional note…" rows="2"></textarea>
-    </div>
-    <div class="upload-row">
-      <label></label>
-      <button onclick="submitManualUpload()">Upload</button>
-      <span id="upload-status" class="status-msg"></span>
+
+    <div class="upload-form" id="compare-body">
+      <div class="compare-slots">
+        <div class="compare-slot" id="slot-a">
+          <div class="slot-label" style="color:#8af">Photo A</div>
+          <div class="slot-empty" id="slot-a-empty">not selected</div>
+          <img id="img-a" src="" alt="" style="display:none">
+          <div class="slot-caption" id="cap-a"></div>
+        </div>
+        <div class="compare-slot" id="slot-b">
+          <div class="slot-label" style="color:#c8f">Photo B</div>
+          <div class="slot-empty" id="slot-b-empty">not selected</div>
+          <img id="img-b" src="" alt="" style="display:none">
+          <div class="slot-caption" id="cap-b"></div>
+        </div>
+      </div>
+
+      <div class="flicker-controls">
+        <button id="btn-toggle" onclick="flickerToggle()" disabled>Toggle A/B</button>
+        <button id="btn-auto"   onclick="flickerAuto()"   disabled>Auto flicker</button>
+        <label>Speed <input type="range" id="flicker-speed" min="1" max="20" value="4"></label>
+        <span id="flicker-fps" class="panel-toggle"></span>
+      </div>
+
+      <div class="flicker-view" id="flicker-view">
+        <img id="flicker-img" src="" alt="">
+        <div class="flicker-label" id="flicker-label"></div>
+      </div>
     </div>
   </div>
+
+  <div class="pb"></div>
 </div>
 
-<!-- Manage locations + units panel -->
-<div class="upload-panel">
-  <div class="upload-panel-header" onclick="toggleManagePanel()">
-    <h2>Manage locations &amp; units</h2>
-    <span id="manage-toggle-label" class="panel-toggle">▸ expand</span>
-  </div>
-  <div class="upload-form" id="manage-form">
-    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+<!-- Timelapse tab -->
+<div class="tab-content" id="tab-timelapse">
 
-      <div style="flex:1;min-width:220px;">
-        <div class="section-label">New location</div>
-        <div class="upload-row">
-          <label>Name</label>
-          <input type="text" id="new-loc-name" placeholder="e.g. Balcony">
-        </div>
-        <div class="upload-row">
-          <label>Description</label>
-          <input type="text" id="new-loc-desc" placeholder="optional">
-        </div>
-        <div class="upload-row">
-          <label></label>
-          <button onclick="createLocation()">Add location</button>
-          <span id="loc-status" class="status-msg"></span>
-        </div>
+  <div class="compare-panel">
+    <div class="compare-header">
+      <h2>Timelapse</h2>
+      <span id="tl-counter" class="panel-toggle">no photos loaded</span>
+    </div>
+
+    <div class="upload-form" id="tl-body">
+      <div class="tl-view">
+        <img id="tl-img" src="" alt="" style="display:none">
+        <div id="tl-empty" class="tl-empty">Load photos in the gallery to play</div>
+        <div id="tl-label" class="tl-label" style="display:none;"></div>
       </div>
 
-      <div style="flex:1;min-width:220px;">
-        <div class="section-label">New growing unit</div>
-        <div class="upload-row">
-          <label>Name</label>
-          <input type="text" id="new-unit-name" placeholder="e.g. Thai basil plant 1">
-        </div>
-        <div class="upload-row">
-          <label>Type</label>
-          <select id="new-unit-type">
-            <option value="">— none —</option>
-            <option value="individual">Individual</option>
-            <option value="mother_plant">Mother plant</option>
-            <option value="clump">Clump</option>
-            <option value="batch">Batch</option>
-            <option value="container">Container</option>
-            <option value="tray">Tray</option>
-            <option value="mixed">Mixed</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="upload-row">
-          <label></label>
-          <button onclick="createUnit()">Add unit</button>
-          <span id="unit-status" class="status-msg"></span>
-        </div>
+      <div class="flicker-controls">
+        <button id="tl-prev" onclick="tlPrev()" disabled>&#9664; Prev</button>
+        <button id="tl-play" onclick="tlPlayPause()" disabled>&#9654; Play</button>
+        <button id="tl-next" onclick="tlNext()" disabled>&#9654; Next</button>
+        <label>Speed <input type="range" id="tl-speed" min="1" max="24" value="4"></label>
+        <span id="tl-fps" class="panel-toggle"></span>
       </div>
-
     </div>
   </div>
+
+  <div class="pb"></div>
 </div>
 
-<!-- Events panel -->
-<div class="upload-panel">
-  <div class="upload-panel-header" onclick="toggleEventsPanel()">
-    <h2>Events</h2>
-    <span id="events-toggle-label" class="panel-toggle">▸ expand</span>
-  </div>
-  <div class="upload-form" id="events-form">
-    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+<!-- Import tab -->
+<div class="tab-content" id="tab-import">
 
-      <div style="flex:1;min-width:260px;">
-        <div class="section-label">Log event</div>
-        <div class="upload-row">
-          <label>Type</label>
-          <select id="new-event-type">
-            <option value="fed_liquid">Fed liquid</option>
-            <option value="fed_worm_castings">Fed worm castings</option>
-            <option value="watered">Watered</option>
-            <option value="harvested">Harvested</option>
-            <option value="potted_up">Potted up</option>
-            <option value="propagated">Propagated</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="upload-row">
-          <label>When</label>
-          <input type="datetime-local" id="new-event-at">
-        </div>
-        <div class="upload-row">
-          <label>Location</label>
-          <select id="new-event-location">
-            <option value="">— none —</option>
-          </select>
-        </div>
-        <div class="upload-row">
-          <label>Growing units</label>
-          <select id="new-event-units" multiple></select>
-        </div>
-        <div class="upload-row">
-          <label>Note</label>
-          <textarea id="new-event-note" placeholder="Optional…" rows="2"></textarea>
-        </div>
-        <div class="upload-row">
-          <label></label>
-          <button onclick="logEvent()">Log event</button>
-          <span id="event-status" class="status-msg"></span>
-        </div>
+  <!-- SD card / phone import panel -->
+  <div class="upload-panel">
+    <div class="upload-panel-header">
+      <h2>Import photos</h2>
+    </div>
+    <div class="upload-form" id="sd-form">
+      <div class="upload-row">
+        <input type="file" id="sd-folder-input" webkitdirectory accept=".jpg,.jpeg,.orf,.arw" style="display:none" onchange="handleSdFolderInput(event)">
+        <button onclick="document.getElementById('sd-folder-input').click()">Choose folder</button>
+        <button id="sd-scan-btn" onclick="handleSdScan()">Scan camera/card</button>
+        <span id="sd-folder-status" class="status-msg"></span>
       </div>
-
-      <div style="flex:2;min-width:260px;">
-        <div class="section-label">Recent events</div>
-        <div id="event-list" class="event-list"></div>
+      <div class="upload-row" id="sd-grid-controls" style="display:none;">
+        <span id="sd-selected-count" class="status-msg" style="flex:1;"></span>
+        <button onclick="sdSelectAllVisible()">Select all visible</button>
+        <button onclick="sdDeselectAll()">Deselect all</button>
+        <button id="sd-add-group-btn" onclick="sdAddGroup()" style="display:none;">Add group ↑</button>
+        <button id="sd-add-more-btn" onclick="sdAddMore()" style="display:none;">Show older</button>
       </div>
-
+      <div class="sd-grid" id="sd-grid"></div>
+      <div class="upload-row" id="sd-load-more-row" style="display:none;justify-content:center;">
+        <button onclick="sdLoadMore()">Load more</button>
+        <span id="sd-load-more-label" class="status-msg" style="margin-left:0.5rem;"></span>
+      </div>
+      <div class="upload-row" id="sd-upload-row" style="display:none;justify-content:center;gap:0.75rem;align-items:center;">
+        <label>Type:</label>
+        <select id="sd-photo-type">
+          <option value="">— none —</option>
+          <option value="overview">overview</option>
+          <option value="closeup">closeup</option>
+          <option value="incident">incident</option>
+          <option value="comparison">comparison</option>
+          <option value="harvest">harvest</option>
+          <option value="propagation">propagation</option>
+          <option value="new_purchase">new purchase</option>
+          <option value="other">other</option>
+        </select>
+        <button id="sd-upload-btn" onclick="sdUploadSelected()">Import selected</button>
+        <span id="sd-upload-status" class="status-msg"></span>
+      </div>
     </div>
   </div>
+
+  <!-- Manual upload panel -->
+  <div class="upload-panel">
+    <div class="upload-panel-header">
+      <h2>Upload single photo</h2>
+    </div>
+    <div class="upload-form" id="upload-form">
+      <div class="upload-row">
+        <label>Image (JPEG)</label>
+        <input type="file" id="upload-image" accept="image/jpeg,image/jpg">
+      </div>
+      <div class="upload-row">
+        <label>Captured at</label>
+        <input type="datetime-local" id="upload-captured-at">
+      </div>
+      <div class="upload-row">
+        <label>Type</label>
+        <select id="upload-photo-type">
+          <option value="">— none —</option>
+          <option value="overview">Overview</option>
+          <option value="closeup">Closeup</option>
+          <option value="incident">Incident</option>
+          <option value="comparison">Comparison</option>
+          <option value="harvest">Harvest</option>
+          <option value="propagation">Propagation</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="upload-row">
+        <label>Location</label>
+        <select id="upload-location">
+          <option value="">— none —</option>
+        </select>
+      </div>
+      <div class="upload-row">
+        <label>Growing units</label>
+        <select id="upload-units" multiple></select>
+      </div>
+      <div class="upload-row">
+        <label>Initial note</label>
+        <textarea id="upload-note" placeholder="Optional note…" rows="2"></textarea>
+      </div>
+      <div class="upload-row">
+        <label></label>
+        <button onclick="submitManualUpload()">Upload</button>
+        <span id="upload-status" class="status-msg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pb"></div>
 </div>
 
-<div id="photo-grid" class="photo-grid"></div>
+<!-- Events tab -->
+<div class="tab-content" id="tab-events">
 
-<!-- Comparison panel -->
-<div class="compare-panel">
-  <div class="compare-header" onclick="toggleComparePanel()" style="cursor:pointer;user-select:none;">
-    <h2>Compare</h2>
-    <span id="compare-hint" class="panel-toggle">
-      Click <strong style="color:#8af">A</strong> / <strong style="color:#c8f">B</strong> on any photo above to select
-    </span>
-    <span id="compare-toggle-label" class="panel-toggle">▸ expand</span>
+  <div class="upload-panel">
+    <div class="upload-panel-header">
+      <h2>Events</h2>
+    </div>
+    <div class="upload-form" id="events-form">
+      <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+
+        <div style="flex:1;min-width:260px;">
+          <div class="section-label">Log event</div>
+          <div class="upload-row">
+            <label>Type</label>
+            <select id="new-event-type">
+              <option value="fed_liquid">Fed liquid</option>
+              <option value="fed_worm_castings">Fed worm castings</option>
+              <option value="watered">Watered</option>
+              <option value="harvested">Harvested</option>
+              <option value="potted_up">Potted up</option>
+              <option value="propagated">Propagated</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="upload-row">
+            <label>When</label>
+            <input type="datetime-local" id="new-event-at">
+          </div>
+          <div class="upload-row">
+            <label>Location</label>
+            <select id="new-event-location">
+              <option value="">— none —</option>
+            </select>
+          </div>
+          <div class="upload-row">
+            <label>Growing units</label>
+            <select id="new-event-units" multiple></select>
+          </div>
+          <div class="upload-row">
+            <label>Note</label>
+            <textarea id="new-event-note" placeholder="Optional…" rows="2"></textarea>
+          </div>
+          <div class="upload-row">
+            <label></label>
+            <button onclick="logEvent()">Log event</button>
+            <span id="event-status" class="status-msg"></span>
+          </div>
+        </div>
+
+        <div style="flex:2;min-width:260px;">
+          <div class="section-label">Recent events</div>
+          <div id="event-list" class="event-list"></div>
+        </div>
+
+      </div>
+    </div>
   </div>
 
-  <div class="upload-form" id="compare-body">
-    <div class="compare-slots">
-      <div class="compare-slot" id="slot-a">
-        <div class="slot-label" style="color:#8af">Photo A</div>
-        <div class="slot-empty" id="slot-a-empty">not selected</div>
-        <img id="img-a" src="" alt="" style="display:none">
-        <div class="slot-caption" id="cap-a"></div>
-      </div>
-      <div class="compare-slot" id="slot-b">
-        <div class="slot-label" style="color:#c8f">Photo B</div>
-        <div class="slot-empty" id="slot-b-empty">not selected</div>
-        <img id="img-b" src="" alt="" style="display:none">
-        <div class="slot-caption" id="cap-b"></div>
-      </div>
-    </div>
-
-    <div class="flicker-controls">
-      <button id="btn-toggle" onclick="flickerToggle()" disabled>Toggle A/B</button>
-      <button id="btn-auto"   onclick="flickerAuto()"   disabled>Auto flicker</button>
-      <label>Speed <input type="range" id="flicker-speed" min="1" max="20" value="4"></label>
-      <span id="flicker-fps" class="panel-toggle"></span>
-    </div>
-
-    <div class="flicker-view" id="flicker-view">
-      <img id="flicker-img" src="" alt="">
-      <div class="flicker-label" id="flicker-label"></div>
-    </div>
-  </div>
+  <div class="pb"></div>
 </div>
 
-<!-- Timelapse panel -->
-<div class="compare-panel" style="margin-top:0.5rem;">
-  <div class="compare-header" onclick="toggleTlPanel()" style="cursor:pointer;user-select:none;">
-    <h2>Timelapse</h2>
-    <span id="tl-counter" class="panel-toggle">no photos loaded</span>
-    <span id="tl-toggle-label" class="panel-toggle">▸ expand</span>
+<!-- Manage tab -->
+<div class="tab-content" id="tab-manage">
+
+  <div class="upload-panel">
+    <div class="upload-panel-header">
+      <h2>Manage locations &amp; units</h2>
+    </div>
+    <div class="upload-form" id="manage-form">
+      <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+
+        <div style="flex:1;min-width:220px;">
+          <div class="section-label">New location</div>
+          <div class="upload-row">
+            <label>Name</label>
+            <input type="text" id="new-loc-name" placeholder="e.g. Balcony">
+          </div>
+          <div class="upload-row">
+            <label>Description</label>
+            <input type="text" id="new-loc-desc" placeholder="optional">
+          </div>
+          <div class="upload-row">
+            <label></label>
+            <button onclick="createLocation()">Add location</button>
+            <span id="loc-status" class="status-msg"></span>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:220px;">
+          <div class="section-label">New growing unit</div>
+          <div class="upload-row">
+            <label>Name</label>
+            <input type="text" id="new-unit-name" placeholder="e.g. Thai basil plant 1">
+          </div>
+          <div class="upload-row">
+            <label>Type</label>
+            <select id="new-unit-type">
+              <option value="">— none —</option>
+              <option value="individual">Individual</option>
+              <option value="mother_plant">Mother plant</option>
+              <option value="clump">Clump</option>
+              <option value="batch">Batch</option>
+              <option value="container">Container</option>
+              <option value="tray">Tray</option>
+              <option value="mixed">Mixed</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="upload-row">
+            <label></label>
+            <button onclick="createUnit()">Add unit</button>
+            <span id="unit-status" class="status-msg"></span>
+          </div>
+        </div>
+
+      </div>
+    </div>
   </div>
 
-  <div class="upload-form" id="tl-body">
-    <div class="tl-view">
-      <img id="tl-img" src="" alt="" style="display:none">
-      <div id="tl-empty" class="tl-empty">Load photos in the timeline above to play</div>
-      <div id="tl-label" class="tl-label" style="display:none;"></div>
-    </div>
-
-    <div class="flicker-controls">
-      <button id="tl-prev" onclick="tlPrev()" disabled>&#9664; Prev</button>
-      <button id="tl-play" onclick="tlPlayPause()" disabled>&#9654; Play</button>
-      <button id="tl-next" onclick="tlNext()" disabled>&#9654; Next</button>
-      <label>Speed <input type="range" id="tl-speed" min="1" max="24" value="4"></label>
-      <span id="tl-fps" class="panel-toggle"></span>
-    </div>
-  </div>
+  <div class="pb"></div>
 </div>
 
-<div class="pb"></div>
-
-<!-- Modal -->
+<!-- Modal (outside tabs — always in DOM) -->
 <div id="modal" class="modal hidden">
   <div class="modal-bg" onclick="closeModal()"></div>
   <div class="modal-box">

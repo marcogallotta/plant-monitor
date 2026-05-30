@@ -6,13 +6,6 @@ export function initUpload(loadPhotos) {
   _loadPhotos = loadPhotos;
 }
 
-export function toggleUploadPanel() {
-  const form = document.getElementById('upload-form');
-  const label = document.getElementById('upload-toggle-label');
-  const open = form.classList.toggle('open');
-  label.textContent = open ? '▾ collapse' : '▸ expand';
-}
-
 export async function submitManualUpload() {
   const fileInput = document.getElementById('upload-image');
   if (!fileInput.files.length) {

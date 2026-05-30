@@ -16,16 +16,10 @@ let _reloadDropdowns = null;
 
 export function initEvents(reloadDropdowns) {
   _reloadDropdowns = reloadDropdowns;
+  loadEvents();
 }
 
 // ── Manage locations + units ──────────────────────────────
-
-export function toggleManagePanel() {
-  const form = document.getElementById('manage-form');
-  const label = document.getElementById('manage-toggle-label');
-  const open = form.classList.toggle('open');
-  label.textContent = open ? '▾ collapse' : '▸ expand';
-}
 
 export async function createLocation() {
   const name = document.getElementById('new-loc-name').value.trim();
@@ -55,14 +49,6 @@ export async function createUnit() {
 
 // ── Events ────────────────────────────────────────────────
 
-export function toggleEventsPanel() {
-  const form = document.getElementById('events-form');
-  const label = document.getElementById('events-toggle-label');
-  const open = form.classList.toggle('open');
-  label.textContent = open ? '▾ collapse' : '▸ expand';
-  if (open) loadEvents();
-}
-
 export async function logEvent() {
   const type    = document.getElementById('new-event-type').value;
   const at      = document.getElementById('new-event-at').value;
@@ -86,7 +72,7 @@ export async function logEvent() {
   } catch (e) { document.getElementById('event-status').textContent = 'Error: ' + e.message; }
 }
 
-async function loadEvents() {
+export async function loadEvents() {
   try {
     const events = await getEvents();
     const list = document.getElementById('event-list');

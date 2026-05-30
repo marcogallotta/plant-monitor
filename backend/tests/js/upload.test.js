@@ -1,13 +1,12 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { makeFetchMock } from './fetchHelper.js';
 
-let toggleUploadPanel, submitManualUpload, initUpload;
+let submitManualUpload, initUpload;
 let fetchMock;
 
 beforeAll(async () => {
   document.body.innerHTML = `
     <div id="upload-form">
-      <label id="upload-toggle-label">▸ expand</label>
       <input id="upload-image" type="file">
       <input id="upload-captured-at" value="">
       <select id="upload-photo-type"><option value="">—</option><option value="overview">Overview</option></select>
@@ -18,7 +17,7 @@ beforeAll(async () => {
     </div>
   `;
 
-  ({toggleUploadPanel, submitManualUpload, initUpload} = await import('@/upload.js'));
+  ({submitManualUpload, initUpload} = await import('@/upload.js'));
 });
 
 beforeEach(() => {
@@ -36,30 +35,6 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.unstubAllGlobals());
-
-// ── toggleUploadPanel ─────────────────────────────────────
-
-describe('toggleUploadPanel', () => {
-  it('toggles the open class on the form', () => {
-    document.getElementById('upload-form').classList.remove('open');
-    toggleUploadPanel();
-    expect(document.getElementById('upload-form').classList.contains('open')).toBe(true);
-    toggleUploadPanel();
-    expect(document.getElementById('upload-form').classList.contains('open')).toBe(false);
-  });
-
-  it('sets label to "▾ collapse" when opening', () => {
-    document.getElementById('upload-form').classList.remove('open');
-    toggleUploadPanel();
-    expect(document.getElementById('upload-toggle-label').textContent).toBe('▾ collapse');
-  });
-
-  it('sets label to "▸ expand" when closing', () => {
-    document.getElementById('upload-form').classList.add('open');
-    toggleUploadPanel();
-    expect(document.getElementById('upload-toggle-label').textContent).toBe('▸ expand');
-  });
-});
 
 // ── submitManualUpload — no file selected ─────────────────
 

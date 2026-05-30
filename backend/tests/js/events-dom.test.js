@@ -1,13 +1,12 @@
 import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { makeFetchMock } from './fetchHelper.js';
 
-let toggleManagePanel, toggleEventsPanel, createLocation, createUnit, logEvent;
+let createLocation, createUnit, logEvent, loadEvents;
 let fetchMock;
 
 beforeAll(async () => {
   document.body.innerHTML = `
     <div id="manage-form">
-      <label id="manage-toggle-label">▸ expand</label>
       <input id="new-loc-name" value="">
       <input id="new-loc-desc" value="">
       <span id="loc-status"></span>
@@ -16,7 +15,6 @@ beforeAll(async () => {
       <span id="unit-status"></span>
     </div>
     <div id="events-form">
-      <label id="events-toggle-label">▸ expand</label>
       <select id="new-event-type">
         <option value="fed_liquid">Fed liquid</option>
         <option value="watered">Watered</option>
@@ -31,7 +29,7 @@ beforeAll(async () => {
     </div>
   `;
 
-  ({toggleManagePanel, toggleEventsPanel, createLocation, createUnit, logEvent} =
+  ({createLocation, createUnit, logEvent, loadEvents} =
     await import('@/events.js'));
 });
 
@@ -56,54 +54,6 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.unstubAllGlobals());
-
-// ── toggleManagePanel ─────────────────────────────────────
-
-describe('toggleManagePanel', () => {
-  it('toggles open class on manage-form', () => {
-    document.getElementById('manage-form').classList.remove('open');
-    toggleManagePanel();
-    expect(document.getElementById('manage-form').classList.contains('open')).toBe(true);
-    toggleManagePanel();
-    expect(document.getElementById('manage-form').classList.contains('open')).toBe(false);
-  });
-
-  it('updates label text', () => {
-    document.getElementById('manage-form').classList.remove('open');
-    toggleManagePanel();
-    expect(document.getElementById('manage-toggle-label').textContent).toBe('▾ collapse');
-    toggleManagePanel();
-    expect(document.getElementById('manage-toggle-label').textContent).toBe('▸ expand');
-  });
-});
-
-// ── toggleEventsPanel ─────────────────────────────────────
-
-describe('toggleEventsPanel', () => {
-  it('toggles open class on events-form', () => {
-    document.getElementById('events-form').classList.remove('open');
-    toggleEventsPanel();
-    expect(document.getElementById('events-form').classList.contains('open')).toBe(true);
-  });
-
-  it('calls GET /events when opening', async () => {
-    document.getElementById('events-form').classList.remove('open');
-    toggleEventsPanel();
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/events', undefined));
-  });
-
-  it('does not call GET /events when closing', () => {
-    document.getElementById('events-form').classList.add('open');
-    toggleEventsPanel();
-    expect(fetchMock).not.toHaveBeenCalledWith('/events', undefined);
-  });
-
-  it('updates label text', () => {
-    document.getElementById('events-form').classList.remove('open');
-    toggleEventsPanel();
-    expect(document.getElementById('events-toggle-label').textContent).toBe('▾ collapse');
-  });
-});
 
 // ── createLocation ────────────────────────────────────────
 
@@ -180,16 +130,15 @@ describe('createUnit', () => {
   });
 });
 
-// ── loadEventList (via toggleEventsPanel) ─────────────────
+// ── loadEvents ────────────────────────────────────────────
 
-describe('loadEventList via toggleEventsPanel', () => {
+describe('loadEvents', () => {
   beforeEach(() => {
-    document.getElementById('events-form').classList.remove('open');
     document.getElementById('event-list').innerHTML = '';
   });
 
   it('shows "No events yet." when list is empty', async () => {
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       expect(document.getElementById('event-list').textContent).toBe('No events yet.');
     });
@@ -200,7 +149,7 @@ describe('loadEventList via toggleEventsPanel', () => {
       {id: 1, event_type: 'fed_liquid', event_at: '2026-05-01T10:00:00Z',
        location_name: null, growing_units: [], note_text: null},
     ])});
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       const type = document.getElementById('event-list').querySelector('.event-type');
       expect(type).not.toBeNull();
@@ -213,7 +162,7 @@ describe('loadEventList via toggleEventsPanel', () => {
       {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
        location_name: 'Balcony', growing_units: [], note_text: null},
     ])});
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       const meta = document.getElementById('event-list').querySelector('.event-meta');
       expect(meta.textContent).toContain('@ Balcony');
@@ -225,7 +174,7 @@ describe('loadEventList via toggleEventsPanel', () => {
       {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
        location_name: null, growing_units: [], note_text: null},
     ])});
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       const meta = document.getElementById('event-list').querySelector('.event-meta');
       expect(meta.textContent).not.toContain('@');
@@ -239,7 +188,7 @@ describe('loadEventList via toggleEventsPanel', () => {
        growing_units: [{id: 1, name: 'Basil'}, {id: 2, name: 'Mint'}],
        note_text: null},
     ])});
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       const units = document.getElementById('event-list').querySelector('.event-units');
       expect(units).not.toBeNull();
@@ -252,7 +201,7 @@ describe('loadEventList via toggleEventsPanel', () => {
       {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
        location_name: null, growing_units: [], note_text: null},
     ])});
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       expect(document.getElementById('event-list').querySelector('.event-units')).toBeNull();
     });
@@ -263,7 +212,7 @@ describe('loadEventList via toggleEventsPanel', () => {
       {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
        location_name: null, growing_units: [], note_text: 'deep soak'},
     ])});
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       const note = document.getElementById('event-list').querySelector('.event-note');
       expect(note).not.toBeNull();
@@ -276,7 +225,7 @@ describe('loadEventList via toggleEventsPanel', () => {
       {id: 1, event_type: 'watered', event_at: '2026-05-01T10:00:00Z',
        location_name: null, growing_units: [], note_text: null},
     ])});
-    await toggleEventsPanel();
+    await loadEvents();
     await vi.waitFor(() => {
       expect(document.getElementById('event-list').querySelector('.event-note')).toBeNull();
     });
