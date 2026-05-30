@@ -34,6 +34,7 @@ let core, api;
 beforeAll(async () => {
   global.URL.createObjectURL = vi.fn(() => 'blob:mock');
   global.URL.revokeObjectURL = vi.fn();
+  window.matchMedia = vi.fn(() => ({ matches: false }));
   window.exifr = { parse: vi.fn().mockResolvedValue({}) };
 
   document.body.innerHTML = `
@@ -54,6 +55,8 @@ beforeAll(async () => {
     </div>
     <span id="sd-upload-status"></span>
     <select id="sd-photo-type"><option value="">—</option><option value="overview">overview</option></select>
+    <div id="sd-desktop-row"></div>
+    <div id="sd-phone-row"></div>
   `;
 
   core = await import('@/sdImportCore.js');
@@ -325,7 +328,7 @@ describe('sdUploadSelected', () => {
     sdSelectAllVisible();
     await sdUploadSelected();
     expect(core.buildUploadFormData).toHaveBeenCalledWith(
-      expect.anything(), expect.any(String), expect.any(String), 'overview', expect.any(Number), expect.any(Number),
+      expect.anything(), expect.any(String), expect.any(String), 'overview', expect.any(Number), expect.any(Number), null,
     );
   });
 

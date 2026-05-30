@@ -84,12 +84,13 @@ export function deriveTimestamp(exif, file) {
   return {iso: new Date(file.lastModified).toISOString(), badge: 'fallback'};
 }
 
-export function buildUploadFormData(uploadFile, originalName, capturedAt, photoType, rotation, originalSizeBytes) {
+export function buildUploadFormData(uploadFile, originalName, capturedAt, photoType, rotation, originalSizeBytes, source) {
   const fd = new FormData();
   fd.append('image', uploadFile, originalName);
   fd.append('captured_at', capturedAt);
   if (photoType) fd.append('photo_type', photoType);
   if (rotation != null) fd.append('rotation', rotation);
   if (originalSizeBytes != null) fd.append('original_size_bytes', originalSizeBytes);
+  if (source) fd.append('source', source);
   return fd;
 }

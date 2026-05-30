@@ -4,6 +4,7 @@ CLAUDE.md
 *.py[cod]
 .pytest_cache/
 .venv/
+.venv-bt/
 data/
 pi/config.json
 pi/capture/

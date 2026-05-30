@@ -323,6 +323,7 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
     return _photo_out(loaded)
 
 
+
 @app.post("/manual-photos", response_model=PhotoOut, status_code=201)
 async def upload_manual_photo(
     image: UploadFile = File(...),
@@ -333,6 +334,7 @@ async def upload_manual_photo(
     note_text: Optional[str] = Form(None),
     rotation: int = Form(0),
     original_size_bytes: Optional[int] = Form(None),
+    source: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     if image.content_type not in {"image/jpeg", "image/jpg"}:
@@ -359,7 +361,7 @@ async def upload_manual_photo(
         image.filename,
         original_size_bytes if original_size_bytes is not None else len(image_bytes),
         parsed_at,
-        "manual",
+        source or "manual",
         photo_type=photo_type,
         location_id=location_id,
         growing_unit_ids=list(growing_unit_ids) if growing_unit_ids else None,

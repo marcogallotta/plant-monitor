@@ -63,6 +63,9 @@ function _updateBatchControls() {
 
 export function initSdImport(loadPhotos) {
   _loadPhotos = loadPhotos;
+  var isMobile = window.matchMedia('(pointer: coarse)').matches;
+  document.getElementById('sd-desktop-row').style.display = isMobile ? 'none' : '';
+  document.getElementById('sd-phone-row').style.display   = isMobile ? ''     : 'none';
 }
 
 export async function handleSdScan() {
@@ -144,7 +147,7 @@ export async function handleSdFolderInput(event) {
   sdFiles.forEach(function(e) { if (e.thumbUrl && e.mode === 'browser') URL.revokeObjectURL(e.thumbUrl); });
   sdFiles = [];
   sdShown = 0;
-  sdMode  = 'browser';
+  sdMode  = event.target.id === 'sd-phone-input' ? 'phone' : 'browser';
   document.getElementById('sd-grid-controls').style.display = 'none';
   document.getElementById('sd-load-more-row').style.display = 'none';
   document.getElementById('sd-grid').innerHTML = '';
@@ -579,7 +582,8 @@ async function sdUploadBrowser(queue, btn, status) {
 
     var ts    = entry.capturedAt || new Date(entry.file.lastModified).toISOString();
     var ptype = document.getElementById('sd-photo-type').value;
-    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype, entry.rotation || 0, entry.file.size);
+    var src   = sdMode === 'phone' ? 'phone' : null;
+    var fd    = buildUploadFormData(entry.uploadFile, entry.file.name, ts, ptype, entry.rotation || 0, entry.file.size, src);
 
     try {
       await uploadPhoto(fd);
