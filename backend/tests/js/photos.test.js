@@ -171,6 +171,20 @@ describe('readFiltersFromHash', () => {
     expect(call.unit).toBe('3');
     expect(call.label).toBe('5');
   });
+
+  it('restores combined hash: tab param is ignored by readFiltersFromHash, filters and chips all active', async () => {
+    history.replaceState(null, '', '#tab=gallery&start=2099-01-01&unit=3&label=5');
+    readFiltersFromHash();
+    // date filter is applied directly to the DOM element
+    expect(document.getElementById('start').value).toBe('2099-01-01');
+    // unit and label chip state flows into the next loadPhotos call
+    const api = await import('@/api.js');
+    await loadPhotos();
+    const call = vi.mocked(api.getPhotos).mock.calls.at(-1)[0];
+    expect(call.unit).toBe('3');
+    expect(call.label).toBe('5');
+    // tab= is not readFiltersFromHash's concern — switchTab in app.js handles it
+  });
 });
 
 // ── selectA / selectB ─────────────────────────────────────

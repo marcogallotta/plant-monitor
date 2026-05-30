@@ -7,6 +7,8 @@ import {
 import { formatDate } from './utils.js';
 
 const SD_PAGE = 20;
+const PHONE_CONCURRENCY = 4;
+const PHONE_CHUNK = 30;
 
 let sdFiles = [];
 let sdShown = 0;
@@ -17,6 +19,11 @@ let _loadPhotos = null;
 let sdBatches = [];
 let sdSelectedBatchCount = 0; // leading batches that are selected
 let sdRevealedBatchCount = 0; // leading batches that are rendered
+
+// Phone import state
+let phoneAllFiles = [];     // sorted File objects for current phone session
+let phoneProcessedUpTo = 0; // how many entries have bytes captured so far
+let phoneSkipLabel = '';    // persistent skip label for status messages
 
 function _buildBatches(n, boundaries) {
   var starts = [0].concat(boundaries).concat([n]);
@@ -74,7 +81,7 @@ export async function handleSdScan() {
   status.textContent = 'Scanning…';
   if (btn) btn.disabled = true;
 
-  sdFiles.forEach(function(e) { if (e.thumbUrl && e.mode === 'browser') URL.revokeObjectURL(e.thumbUrl); });
+  sdFiles.forEach(function(e) { if (e.thumbUrl && (e.mode === 'browser' || e.mode === 'phone')) URL.revokeObjectURL(e.thumbUrl); });
   sdFiles = [];
   sdShown = 0;
   sdMode  = 'backend';
@@ -144,13 +151,17 @@ export async function handleSdFolderInput(event) {
   // Ensure state.allPhotos is current before computing already-uploaded set
   if (_loadPhotos) await _loadPhotos();
 
-  sdFiles.forEach(function(e) { if (e.thumbUrl && e.mode === 'browser') URL.revokeObjectURL(e.thumbUrl); });
+  sdFiles.forEach(function(e) { if (e.thumbUrl && (e.mode === 'browser' || e.mode === 'phone')) URL.revokeObjectURL(e.thumbUrl); });
   sdFiles = [];
   sdShown = 0;
   sdMode  = event.target.id === 'sd-phone-input' ? 'phone' : 'browser';
   document.getElementById('sd-grid-controls').style.display = 'none';
   document.getElementById('sd-load-more-row').style.display = 'none';
   document.getElementById('sd-grid').innerHTML = '';
+
+  if (sdMode === 'phone') {
+    return handlePhoneFilesSelected(Array.from(event.target.files), status);
+  }
 
   var uploadedByNameSize = new Set();
   var uploadedByNameOnly = new Set();
@@ -210,6 +221,238 @@ export async function handleSdFolderInput(event) {
     sdRevealedBatchCount = 1;
     _updateBatchControls();
   }
+}
+
+async function handlePhoneFilesSelected(rawFiles, status) {
+  sdBatches = [];
+  sdSelectedBatchCount = 0;
+  sdRevealedBatchCount = 0;
+  phoneAllFiles = [];
+  phoneProcessedUpTo = 0;
+  phoneSkipLabel = '';
+
+  var uploadedByNameSize = new Set();
+  var uploadedByNameOnly = new Set();
+  state.allPhotos.forEach(function(p) {
+    if (!p.original_filename) return;
+    if (p.original_size_bytes != null) {
+      uploadedByNameSize.add(p.original_filename + ':' + p.original_size_bytes);
+    } else {
+      uploadedByNameOnly.add(p.original_filename);
+    }
+  });
+  function isDuplicate(f) {
+    return uploadedByNameOnly.has(f.name) || uploadedByNameSize.has(f.name + ':' + f.size);
+  }
+  // Phone uses accept="image/*" — filter to JPEG only. Trust MIME when present; fall back to
+  // extension only when the browser provides no type (some Android content providers omit it).
+  function isPhoneJpeg(f) {
+    return /^image\/jpe?g$/i.test(f.type) || (!f.type && /\.(jpe?g)$/i.test(f.name));
+  }
+
+  var all = rawFiles.filter(function(f) { return isPhoneJpeg(f) && !isDuplicate(f); });
+  var skipped = rawFiles.filter(function(f) { return isPhoneJpeg(f) && isDuplicate(f); }).length;
+
+  if (all.length === 0) {
+    status.textContent = skipped > 0 ? 'All ' + skipped + ' already imported.' : 'No photos found.';
+    return;
+  }
+
+  all = sortCameraFiles(all);
+
+  // Read all selected files' bytes immediately — fixes stale Android File handles.
+  // phoneAllFiles is cleared after _processPhoneBatch so no File handles are retained.
+  phoneAllFiles = all;
+  phoneSkipLabel = skipped > 0 ? ' (' + skipped + ' already imported)' : '';
+
+  sdFiles = all.map(function(f) {
+    return {
+      uploadBlob:        null,
+      thumbUrl:          null,
+      filename:          f.name,
+      originalSizeBytes: f.size,
+      selected:          true,
+      capturedAt:        null,
+      tsBadge:           null,
+      sessionBreak:      false,
+      mode:              'phone',
+      rotation:          0,
+      readStatus:        'queued',
+    };
+  });
+
+  var grid = document.getElementById('sd-grid');
+  for (var i = 0; i < sdFiles.length; i++) {
+    grid.appendChild(_makePhoneThumb(i));
+  }
+  sdShown = sdFiles.length;
+  document.getElementById('sd-grid-controls').style.display = 'flex';
+
+  status.textContent = all.length + ' photo' + (all.length === 1 ? '' : 's') + phoneSkipLabel + ' — reading…';
+  sdUpdateCount();
+
+  await _processPhoneBatch(0, all.length, status);
+  phoneAllFiles = []; // drop File handles — bytes are now in entry.uploadBlob
+}
+
+function _makePhoneThumb(i) {
+  var entry = sdFiles[i];
+  var wrap  = document.createElement('div');
+  wrap.className   = 'sd-thumb-wrap selected';
+  wrap.dataset.idx = i;
+  wrap.addEventListener('click', function() { sdToggle(i); });
+
+  var img = document.createElement('img');
+  img.alt          = entry.filename;
+  img.style.display = 'none';
+
+  var caption = document.createElement('div');
+  caption.className = 'sd-thumb-caption';
+  var nameSpan = document.createElement('div');
+  nameSpan.textContent = entry.filename;
+  var tsSpan = document.createElement('div');
+  tsSpan.className = 'sd-ts-line';
+  tsSpan.id        = 'sd-ts-line-' + i;
+  caption.appendChild(nameSpan);
+  caption.appendChild(tsSpan);
+
+  var check = document.createElement('div');
+  check.className = 'sd-thumb-check';
+
+  var rotBtns = document.createElement('div');
+  rotBtns.className = 'sd-rot-btns';
+  var rotL = document.createElement('button');
+  rotL.textContent = '↺'; rotL.title = 'Rotate left';
+  rotL.addEventListener('click', function(e) { e.stopPropagation(); sdRotate(i, -90); });
+  var rotR = document.createElement('button');
+  rotR.textContent = '↻'; rotR.title = 'Rotate right';
+  rotR.addEventListener('click', function(e) { e.stopPropagation(); sdRotate(i, 90); });
+  rotBtns.appendChild(rotL);
+  rotBtns.appendChild(rotR);
+
+  var readOv = document.createElement('div');
+  readOv.className     = 'sd-read-status';
+  readOv.dataset.state = 'queued';
+  readOv.textContent   = '…';
+
+  wrap.appendChild(img);
+  wrap.appendChild(rotBtns);
+  wrap.appendChild(caption);
+  wrap.appendChild(check);
+  wrap.appendChild(readOv);
+  return wrap;
+}
+
+async function _processPhoneBatch(from, to, statusEl) {
+  if (!statusEl) statusEl = document.getElementById('sd-folder-status');
+  var batchSize = to - from;
+  var ready = 0, failed = 0;
+
+  function _updateStatus() {
+    var done    = ready + failed;
+    var queued  = sdFiles.length - to; // entries not yet in any batch
+    if (done < batchSize) {
+      statusEl.textContent = 'Reading… ' + done + ' / ' + batchSize +
+        (queued > 0 ? ' (' + queued + ' queued)' : '') + phoneSkipLabel;
+    } else {
+      statusEl.textContent = sdFiles.length + ' photo' + (sdFiles.length === 1 ? '' : 's') + phoneSkipLabel +
+        (failed > 0 ? ', ' + failed + ' failed to read' : '');
+    }
+  }
+
+  async function _processOne(idx) {
+    var entry = sdFiles[idx];
+    var file  = phoneAllFiles[idx];
+    try {
+      // (a) read original bytes → upload Blob (never goes stale)
+      var bytes      = await file.arrayBuffer();
+      var uploadBlob = new Blob([bytes], {type: 'image/jpeg'});
+
+      // (b) decode once to 128px → thumbnail; try with EXIF orientation, fall back without
+      var bmp;
+      try {
+        bmp = await createImageBitmap(uploadBlob, {resizeWidth: 128, resizeQuality: 'medium', imageOrientation: 'from-image'});
+      } catch(e) {
+        bmp = await createImageBitmap(uploadBlob, {resizeWidth: 128, resizeQuality: 'medium'});
+      }
+      var thumbBlob = await _bitmapToJpegBlob(bmp); // closes bmp
+
+      // Parse EXIF from the same blob — no second file access needed
+      var exif = null;
+      try { exif = await window.exifr.parse(uploadBlob, ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal']); } catch(e) {}
+      var tsResult = deriveTimestamp(exif, {lastModified: file.lastModified});
+
+      entry.uploadBlob = uploadBlob;
+      entry.thumbUrl   = URL.createObjectURL(thumbBlob);
+      entry.capturedAt = tsResult.iso;
+      entry.tsBadge    = tsResult.badge;
+      entry.readStatus = 'ready';
+
+      var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + idx + '"]');
+      if (wrap) {
+        var img = wrap.querySelector('img');
+        if (img) { img.src = entry.thumbUrl; img.style.display = ''; }
+        var ov = wrap.querySelector('.sd-read-status');
+        if (ov) ov.remove();
+        var tsEl = document.getElementById('sd-ts-line-' + idx);
+        if (tsEl) { tsEl.textContent = formatDate(entry.capturedAt); tsEl.dataset.badge = entry.tsBadge; }
+      }
+      ready++;
+    } catch(e) {
+      console.warn('Phone read failed', entry.filename, e);
+      entry.readStatus = 'failed';
+      entry.selected   = false;
+      var wrap = document.querySelector('.sd-thumb-wrap[data-idx="' + idx + '"]');
+      if (wrap) {
+        wrap.className = 'sd-thumb-wrap';
+        var ov = wrap.querySelector('.sd-read-status');
+        if (ov) { ov.dataset.state = 'failed'; ov.textContent = '✗'; ov.title = 'Failed to read: ' + String(e); }
+      }
+      failed++;
+    }
+    _updateStatus();
+    sdUpdateCount();
+  }
+
+  await new Promise(function(resolve) {
+    var inFlight = 0, pos = from, completed = 0;
+    function tryStart() {
+      while (inFlight < PHONE_CONCURRENCY && pos < to) {
+        inFlight++;
+        var idx = pos++;
+        _processOne(idx).finally(function() {
+          inFlight--;
+          completed++;
+          if (completed === batchSize) resolve();
+          else tryStart();
+        });
+      }
+    }
+    if (batchSize === 0) { resolve(); return; }
+    tryStart();
+  });
+
+  phoneProcessedUpTo = to;
+  sdUpdateCount();
+}
+
+// Draw an ImageBitmap to a JPEG Blob and close the bitmap. Falls back to a regular
+// <canvas> on browsers that lack OffscreenCanvas (Firefox <105, older Safari).
+async function _bitmapToJpegBlob(bmp) {
+  var w = bmp.width, h = bmp.height;
+  if (typeof OffscreenCanvas !== 'undefined') {
+    var oc = new OffscreenCanvas(w, h);
+    oc.getContext('2d').drawImage(bmp, 0, 0);
+    bmp.close();
+    return oc.convertToBlob({type: 'image/jpeg', quality: 0.75});
+  }
+  return new Promise(function(resolve, reject) {
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(bmp, 0, 0);
+    bmp.close();
+    c.toBlob(function(blob) { blob ? resolve(blob) : reject(new Error('canvas toBlob failed')); }, 'image/jpeg', 0.75);
+  });
 }
 
 function sdAppendThumbs(count) {
@@ -383,15 +626,36 @@ function sdRotate(i, delta) {
 }
 
 function sdUpdateCount() {
-  var n = sdFiles.filter(function(f) { return f.selected; }).length;
-  document.getElementById('sd-selected-count').textContent = n + ' selected';
   var row = document.getElementById('sd-upload-row');
   var btn = document.getElementById('sd-upload-btn');
-  if (n > 0) {
-    row.style.display = 'flex';
-    btn.textContent = 'Import ' + n + ' selected';
+
+  if (sdMode === 'phone') {
+    var nReady  = sdFiles.filter(function(f) { return f.selected && f.readStatus === 'ready'; }).length;
+    var nQueued = sdFiles.filter(function(f) { return f.readStatus === 'queued'; }).length;
+    document.getElementById('sd-selected-count').textContent =
+      nReady + ' ready' + (nQueued > 0 ? ', ' + nQueued + ' queued' : '');
+    if (nReady > 0) {
+      row.style.display = 'flex';
+      btn.textContent = 'Import ' + nReady + ' ready';
+      btn.disabled = false;
+    } else if (nQueued > 0) {
+      row.style.display = 'flex';
+      btn.textContent = 'Processing…';
+      btn.disabled = true;
+    } else {
+      row.style.display = 'none';
+      btn.disabled = false;
+    }
   } else {
-    row.style.display = 'none';
+    var n = sdFiles.filter(function(f) { return f.selected; }).length;
+    document.getElementById('sd-selected-count').textContent = n + ' selected';
+    if (n > 0) {
+      row.style.display = 'flex';
+      btn.textContent = 'Import ' + n + ' selected';
+      btn.disabled = false;
+    } else {
+      row.style.display = 'none';
+    }
   }
 }
 
@@ -488,8 +752,16 @@ function sdSetThumbStatus(i, thumbStatus, detail) {
 export async function sdUploadSelected() {
   var btn    = document.getElementById('sd-upload-btn');
   var status = document.getElementById('sd-upload-status');
-  var queue  = sdFiles.map(function(e, i) { return {entry: e, idx: i}; })
-                      .filter(function(x) { return x.entry.selected; });
+
+  var queue;
+  if (sdMode === 'phone') {
+    // Only upload entries whose bytes are captured; queued entries have no blob yet
+    queue = sdFiles.map(function(e, i) { return {entry: e, idx: i}; })
+                   .filter(function(x) { return x.entry.selected && x.entry.readStatus === 'ready'; });
+  } else {
+    queue = sdFiles.map(function(e, i) { return {entry: e, idx: i}; })
+                   .filter(function(x) { return x.entry.selected; });
+  }
   if (queue.length === 0) return;
 
   btn.disabled = true;
@@ -558,6 +830,27 @@ async function sdUploadBrowser(queue, btn, status) {
     status.textContent = (q + 1) + ' / ' + queue.length + '…';
     sdSetThumbStatus(idx, 'uploading');
 
+    if (entry.mode === 'phone') {
+      if (!entry.uploadBlob) { sdSetThumbStatus(idx, 'error', 'not ready'); failed++; continue; }
+      var ts    = entry.capturedAt || new Date().toISOString();
+      var ptype = document.getElementById('sd-photo-type').value;
+      var fd    = buildUploadFormData(entry.uploadBlob, entry.filename, ts, ptype, entry.rotation || 0, entry.originalSizeBytes, 'phone');
+      try {
+        await uploadPhoto(fd);
+        entry.uploadBlob  = null;       // free full-res bytes
+        entry.readStatus  = 'uploaded'; // exclude from future import queues
+        entry.selected    = false;
+        sdSetThumbStatus(idx, 'done'); done++;
+      } catch(e) {
+        var msg = String(e);
+        sdSetThumbStatus(idx, 'error', msg);
+        failed++;
+        if (failed === 1) status.textContent = 'Error: ' + msg;
+        console.warn('Upload error', entry.filename, e);
+      }
+      continue;
+    }
+
     if (entry.isRaw && !entry.uploadFile) {
       try {
         var jpegBytes = await extractEmbeddedJpeg(entry.file);
@@ -599,5 +892,6 @@ async function sdUploadBrowser(queue, btn, status) {
 
   btn.disabled = false;
   status.textContent = done + ' uploaded' + (failed > 0 ? ', ' + failed + ' failed' : '');
+  if (sdMode === 'phone') sdUpdateCount();
   if (done > 0 && _loadPhotos) _loadPhotos();
 }
