@@ -21,7 +21,9 @@ export async function rotatePhoto(delta) {
   } catch (e) { setStatus('Rotation save failed: ' + e.message); }
 }
 
-export function openModal(index) {
+export function openModal(photoId) {
+  const index = state.allPhotos.findIndex(p => p.id === photoId);
+  if (index === -1) return;
   showModalPhoto(index);
   document.getElementById('modal').classList.remove('hidden');
 }

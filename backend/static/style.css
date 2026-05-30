@@ -55,7 +55,7 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 
 /* Photo grid */
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px; padding: 4px 1.5rem; }
-.photo-card { position: relative; cursor: pointer; overflow: hidden; background: #1a1a1a; border-radius: 4px; }
+.photo-card { position: relative; cursor: pointer; overflow: hidden; background: #1a1a1a; border-radius: 4px; contain: layout style; content-visibility: auto; contain-intrinsic-size: auto 180px; }
 .photo-card img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; transition: opacity 0.15s; }
 .photo-card:hover img { opacity: 0.8; }
 .photo-card .caption {
