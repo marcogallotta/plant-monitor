@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed up down build verify-up verify-down verify-reset tunnel bt-install bt-receive
+.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed up down build verify-up verify-down verify-reset tunnel
 
 TEST_COMPOSE   := docker compose -p plant-monitoring-test   -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
@@ -51,15 +51,6 @@ verify-down:
 
 verify-reset:
 	$(VERIFY_COMPOSE) down -v && $(VERIFY_COMPOSE) up -d --build
-
-bt-install:
-	sudo apt-get install -y bluez bluez-obexd python3-gi python3-dbus python3-requests
-	systemctl --user enable --now obex.service
-
-bt-receive:
-	-pkill -f blueman
-	systemctl --user restart obex.service
-	python3 scripts/bt_receive.py
 
 tunnel:
 	@docker rm -f plant-monitoring-quicktunnel 2>/dev/null || true
