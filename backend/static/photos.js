@@ -94,40 +94,48 @@ FILTER_IDS.forEach(id => {
   document.getElementById(id)?.addEventListener('change', loadPhotos);
 });
 
+function buildCard(p, i) {
+  const isA = state.photoA && state.photoA.id === p.id;
+  const isB = state.photoB && state.photoB.id === p.id;
+  const card = document.createElement('div');
+  card.className = 'photo-card' + (selectedIds.has(p.id) ? ' selected' : '');
+  card.dataset.id = p.id;
+  const ts = formatDate(p.captured_at);
+  const unitNames = (p.growing_unit_ids || [])
+    .map(id => { const u = state.allUnits.find(u => u.id === id); return u ? u.name : null; })
+    .filter(Boolean).join(', ');
+  const caption = unitNames ? ts + ' · ' + unitNames : ts;
+  // Grid thumbnails use the rotation-baked variant (not CSS rotation) so dragging a
+  // thumbnail into a browser tab opens it in the correct orientation.
+  card.innerHTML =
+    '<img src="' + orientedUrl(p) + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
+    '<div class="card-ab">' +
+      '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
+      '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
+    '</div>' +
+    '<div class="card-rot">' +
+      '<button onclick="gridRotate(event,' + p.id + ',-90)">↺</button>' +
+      '<button onclick="gridRotate(event,' + p.id + ',90)">↻</button>' +
+    '</div>' +
+    '<button class="card-del" onclick="gridDelete(event,' + p.id + ')" title="Delete photo">🗑</button>' +
+    '<div class="caption">' + caption + '</div>';
+  return card;
+}
+
 function renderGrid() {
   tlInit();
-  if (selectMode) { selectedIds.clear(); _updateSelectBar(); }
+  selectedIds.clear();
+  if (selectMode) _updateSelectBar();
   const grid = document.getElementById('photo-grid');
   grid.innerHTML = '';
   const photos = state.allPhotos;
   for (let i = 0; i < photos.length; i++) {
-    const p = photos[i];
-    const isA = state.photoA && state.photoA.id === p.id;
-    const isB = state.photoB && state.photoB.id === p.id;
-    const card = document.createElement('div');
-    card.className = 'photo-card';
-    card.dataset.id = p.id;
-    const ts = formatDate(p.captured_at);
-    const unitNames = (p.growing_unit_ids || [])
-      .map(id => { const u = state.allUnits.find(u => u.id === id); return u ? u.name : null; })
-      .filter(Boolean).join(', ');
-    const caption = unitNames ? ts + ' · ' + unitNames : ts;
-    // Grid thumbnails use the rotation-baked variant (not CSS rotation) so dragging a
-    // thumbnail into a browser tab opens it in the correct orientation.
-    card.innerHTML =
-      '<img src="' + orientedUrl(p) + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
-      '<div class="card-ab">' +
-        '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
-        '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
-      '</div>' +
-      '<div class="card-rot">' +
-        '<button onclick="gridRotate(event,' + p.id + ',-90)">↺</button>' +
-        '<button onclick="gridRotate(event,' + p.id + ',90)">↻</button>' +
-      '</div>' +
-      '<button class="card-del" onclick="gridDelete(event,' + p.id + ')" title="Delete photo">🗑</button>' +
-      '<div class="caption">' + caption + '</div>';
-    grid.appendChild(card);
+    grid.appendChild(buildCard(photos[i], i));
   }
+  _appendLoadMoreRow(grid);
+}
+
+function _appendLoadMoreRow(grid) {
   if (state.allPhotos.length < state.totalPhotos) {
     const remaining = state.totalPhotos - state.allPhotos.length;
     const row = document.createElement('div');
@@ -139,12 +147,18 @@ function renderGrid() {
 }
 
 export async function loadMorePhotos() {
-  currentOffset = state.allPhotos.length;
+  const startIdx = state.allPhotos.length;
+  currentOffset = startIdx;
   try {
     const result = await getPhotos({...lastFilterParams, limit: PAGE_SIZE, offset: currentOffset});
     state.totalPhotos = result.total;
     state.allPhotos = [...state.allPhotos, ...result.photos];
-    renderGrid();
+    const grid = document.getElementById('photo-grid');
+    grid.querySelector('.load-more-row')?.remove();
+    for (let i = startIdx; i < state.allPhotos.length; i++) {
+      grid.appendChild(buildCard(state.allPhotos[i], i));
+    }
+    _appendLoadMoreRow(grid);
     const loaded = state.allPhotos.length;
     const total = state.totalPhotos;
     const paginated = loaded < total;
