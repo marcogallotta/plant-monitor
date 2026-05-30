@@ -80,8 +80,11 @@ docs/                   # design documents and roadmap
 
 ## Dashboard features
 
-- Photo timeline with optional time-range filter
+- Photo timeline with time-range, source, type, location, growing unit, and label filters
+- Quick-filter chips for growing units and labels above the gallery grid
+- Filter and tab state persisted in the URL hash (shareable links)
 - Click a photo to open it in a modal; arrow keys to navigate
+- Delete a photo from the gallery (removes DB record and files on disk)
 - A/B comparison: select two photos and view side by side
 - Flicker comparison: toggle or auto-flicker between A and B to spot changes
 - Timelapse: play/pause, prev/next, speed control
@@ -90,6 +93,7 @@ docs/                   # design documents and roadmap
 - Classify: set photo type, location, rotation, and growing unit assignments
 - Manual upload: drag-and-drop or file-picker for photos taken outside the Pi
 - SD card import: backend scanner (primary) or browser folder-picker (fallback); auto-detects current shooting session by timestamp gap
+- Phone upload: mobile browser file picker (shown automatically on touch devices); uploaded photos tagged with `source=phone`
 - Sensor strip: live temp/humidity at the top of the page; per-photo sensor context in the modal
 
 ## Roadmap

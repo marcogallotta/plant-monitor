@@ -75,7 +75,20 @@ After files are on disk, `_upsert_photo_record()` creates the DB row if one does
 
 ### Manual upload
 
-`POST /manual-photos` accepts a multipart upload from the dashboard. Only `image` (JPEG) is required; `captured_at`, `photo_type`, `location_id`, `growing_unit_ids`, and `note_text` are optional form fields. The filename is a random UUID hex — no timestamp stem requirement. `source` is always set to `"manual"` and `original_filename` records the browser filename. If `note_text` is supplied a `PhotoNote` with `x=0, y=0` is created in the same transaction.
+`POST /manual-photos` accepts a multipart upload from the dashboard. Only `image` (JPEG) is required; `captured_at`, `photo_type`, `location_id`, `growing_unit_ids`, `note_text`, `rotation`, `original_size_bytes`, and `source` are optional form fields. The filename is a random UUID hex — no timestamp stem requirement. `source` defaults to `"manual"` when not supplied; pass `"phone"` for phone uploads. `original_filename` records the browser filename. If `note_text` is supplied a `PhotoNote` with `x=0, y=0` is created in the same transaction.
+
+### Photo source field
+
+`Photo.source` tracks where a photo originated. Known values:
+
+| Value | Set by |
+|-------|--------|
+| `pi` | Pi camera upload (`POST /photos`) |
+| `manual` | Dashboard manual upload (`POST /manual-photos` default) |
+| `phone` | Phone browser upload (same endpoint, `source=phone`) |
+| `sd` | SD/camera card backend import (`POST /camera-import/import`) |
+
+`GET /photos` accepts a `source` query parameter to filter by source. The gallery filter bar exposes this as a dropdown.
 
 ### Rotation validation
 
@@ -84,6 +97,10 @@ After files are on disk, `_upsert_photo_record()` creates the DB row if one does
 ### Photo classification
 
 `PUT /photos/{photo_id}` updates `photo_type`, `location_id`, `rotation`, and/or `growing_unit_ids`. Growing unit assignments are replaced wholesale: the endpoint deletes all existing `PhotoGrowingUnit` rows for the photo then inserts the new set. Only fields present in the request body are touched (Pydantic `model_fields_set`).
+
+### Photo deletion
+
+`DELETE /photos/{photo_id}` removes a photo and all dependent rows (notes, labels, growing unit assignments, event associations) in a single transaction, then attempts to delete the image and metadata files from disk. File deletion is best-effort — an `OSError` is logged but does not fail the request (the DB row is already gone). Returns 204 on success.
 
 ### Locations and growing units
 
@@ -215,6 +232,14 @@ The `Makefile` passes `-p plant-monitoring-test` when invoking the test compose 
 
 `static/index.html` — no build step, no npm, no bundler. FastAPI serves the static directory from `_STATIC_DIR`. `app.js` is the ES module entry point; it imports from focused sibling modules and assigns the functions that HTML `onclick=` attributes need onto `window`. Any new function called from an `onclick=` attribute in `index.html` must be added to both the import and the `Object.assign(window, …)` call at the bottom of `app.js`, or it will throw `ReferenceError: X is not defined` at runtime.
 
+### Tab navigation
+
+`switchTab(name)` in `app.js` activates a tab panel (`#tab-{name}`) and its button, then writes `tab={name}` into the URL hash. On page load, the active tab is read from the hash (falling back to `localStorage.activeTab`, then `gallery`). This means the URL is always shareable with the correct tab open.
+
+### URL hash filter state
+
+All gallery filter state is serialised into the URL hash by `writeFiltersToHash()` in `photos.js`. Keys stored: `tab`, `start`, `end`, `source`, `ptype`, `location`, `unit`, `label`. `readFiltersFromHash()` is called on boot to restore all filters before the first `loadPhotos()` call. Tab changes call `history.replaceState` to merge `tab` into the existing hash without disturbing other keys.
+
 Key JS state (all fields live on the single `state` object in `state.js`):
 
 | Variable | Purpose |
@@ -232,6 +257,14 @@ Key JS state (all fields live on the single `state` object in `state.js`):
 | `flickerShowing`, `flickerTimer` | Which slot (a/b) is visible and the auto-flicker interval id |
 | `tlIndex`, `tlTimer` | Current frame index and play interval id for the timelapse panel |
 
+### Quick-filter chips
+
+`renderQuickChips()` in `photos.js` renders a row of `<button class="qchip">` elements above the gallery grid — one per growing unit, then a separator, then one per label. Clicking a chip toggles `activeUnitId` / `activeLabelId` in module scope, writes both to the URL hash, and calls `loadPhotos()`. Only one unit and one label can be active at a time; clicking the active chip clears it. Chip state is restored from the URL hash at module load before `renderQuickChips()` is first called.
+
+### Gallery delete
+
+`gridDelete(e, photoId)` in `photos.js` shows a `confirm()` dialog then calls `DELETE /photos/{photo_id}`. On success it removes the photo from `state.allPhotos` and re-renders the grid without a full reload.
+
 Note pin positions use `left: x*100%; top: y*100%` inside `.note-pins`, which is absolutely positioned over the image wrapper. The image wrapper is `display: inline-block` so it shrinks to fit the rendered image size, not the surrounding flex container. Normalised x/y are calculated from `img.getBoundingClientRect()` at click time. For region notes (shift+drag), x2/y2 are stored the same way; rendering uses the min/max of the two corners so drag direction doesn't matter.
 
 `zoom.js` owns all pointer events on `#zoom-viewport`. `visualToStored(rx, ry)` maps a click position in the rotated visual space back to the canonical stored coordinate system — any code that records a note position must go through this function.
@@ -248,6 +281,10 @@ The SD import panel supports two modes: a backend scanner (primary) and a browse
 - `save_photo()` in `camera_import.py` is the shared helper used by both `/camera-import/import` (source `"sd"`) and `/manual-photos` (source `"manual"`). It writes files atomically (tmp → rename) and commits the DB row.
 - Clicking **Scan camera/card** calls `scanCameraImport()` in `api.js`, builds the thumbnail grid, and auto-selects the latest shooting session via `detectSessionBoundary()` on `mtime_ms`.
 - Clicking **Import selected** calls `importCameraPhotos()` with the selected opaque file IDs; per-thumb overlays show created / skipped / failed.
+
+**Phone upload** (`Choose photos` button, mobile only):
+
+Same code path as the browser folder-picker but `sdMode` is set to `'phone'`. The only behavioural difference is that `buildUploadFormData` receives `src = 'phone'` so uploaded photos get `source = "phone"` on the backend.
 
 **Browser folder-picker** (fallback, `Choose folder` button):
 
