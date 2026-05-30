@@ -33,6 +33,7 @@ import {
   loadMorePhotos,
   renderQuickChips,
   readFiltersFromHash,
+  toggleSelectMode, selectAll, deleteSelected,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -107,4 +108,5 @@ Object.assign(window, {
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
   switchTab,
+  toggleSelectMode, selectAll, deleteSelected,
 });

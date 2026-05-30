@@ -10,6 +10,8 @@ let currentOffset = 0;
 let lastFilterParams = {};
 let activeUnitId  = '';
 let activeLabelId = '';
+let selectMode = false;
+const selectedIds = new Set();
 
 // Restore chip state from hash immediately so renderQuickChips() picks it up correctly.
 {
@@ -94,6 +96,7 @@ FILTER_IDS.forEach(id => {
 
 function renderGrid() {
   tlInit();
+  if (selectMode) { selectedIds.clear(); _updateSelectBar(); }
   const grid = document.getElementById('photo-grid');
   grid.innerHTML = '';
   const photos = state.allPhotos;
@@ -346,3 +349,79 @@ document.getElementById('flicker-speed').addEventListener('input', function() {
 });
 
 updateFlickerFps();
+
+// ── Mass select / delete ─────────────────────────────────
+
+// Capture-phase listener intercepts card clicks before the img's inline
+// onclick fires, so select mode doesn't accidentally open the modal.
+document.getElementById('photo-grid').addEventListener('click', function(e) {
+  if (!selectMode) return;
+  const card = e.target.closest('.photo-card');
+  if (!card) return;
+  e.stopPropagation();
+  e.preventDefault();
+  const id = parseInt(card.dataset.id, 10);
+  if (selectedIds.has(id)) {
+    selectedIds.delete(id);
+    card.classList.remove('selected');
+  } else {
+    selectedIds.add(id);
+    card.classList.add('selected');
+  }
+  _updateSelectBar();
+}, true);
+
+function _updateSelectBar() {
+  const n = selectedIds.size;
+  const count = document.getElementById('select-count');
+  if (count) count.textContent = n + ' selected';
+  const btn = document.getElementById('delete-selected-btn');
+  if (btn) btn.disabled = n === 0;
+}
+
+export function toggleSelectMode() {
+  selectMode = !selectMode;
+  selectedIds.clear();
+  document.querySelectorAll('.photo-card.selected').forEach(c => c.classList.remove('selected'));
+  document.getElementById('photo-grid').classList.toggle('select-mode', selectMode);
+  document.getElementById('select-mode-btn').classList.toggle('active', selectMode);
+  document.getElementById('select-bar').classList.toggle('hidden', !selectMode);
+  _updateSelectBar();
+}
+
+export function selectAll() {
+  if (!selectMode) return;
+  state.allPhotos.forEach(p => {
+    selectedIds.add(p.id);
+    document.querySelector('.photo-card[data-id="' + p.id + '"]')?.classList.add('selected');
+  });
+  _updateSelectBar();
+}
+
+export async function deleteSelected() {
+  const ids = [...selectedIds];
+  if (!ids.length) return;
+  if (!confirm('Delete ' + ids.length + ' photo' + (ids.length === 1 ? '' : 's') + '? This cannot be undone.')) return;
+  const results = await Promise.allSettled(ids.map(id => deletePhoto(id)));
+  let failed = 0;
+  results.forEach((r, i) => {
+    const id = ids[i];
+    if (r.status === 'fulfilled') {
+      state.allPhotos = state.allPhotos.filter(p => p.id !== id);
+      state.totalPhotos = Math.max(0, (state.totalPhotos || 0) - 1);
+      if (state.photoA?.id === id) { state.photoA = null; updateCompare(); stopAuto(); }
+      if (state.photoB?.id === id) { state.photoB = null; updateCompare(); stopAuto(); }
+      document.querySelector('.photo-card[data-id="' + id + '"]')?.remove();
+    } else {
+      failed++;
+    }
+  });
+  selectMode = false;
+  selectedIds.clear();
+  document.getElementById('photo-grid').classList.remove('select-mode');
+  document.getElementById('select-mode-btn').classList.remove('active');
+  document.getElementById('select-bar').classList.add('hidden');
+  const total = state.totalPhotos;
+  const base = total === 0 ? 'No photos found.' : total + ' photo' + (total === 1 ? '' : 's');
+  setStatus(failed ? base + ' · ' + failed + ' deletion' + (failed === 1 ? '' : 's') + ' failed' : base);
+}

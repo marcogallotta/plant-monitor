@@ -52,9 +52,17 @@
       </select>
     </label>
     <button id="clear-filter-btn" onclick="clearFilter()">Clear</button>
+    <button id="select-mode-btn" onclick="toggleSelectMode()">Select</button>
   </div>
 
   <div id="quick-chips" class="quick-chips"></div>
+
+  <div id="select-bar" class="select-bar hidden">
+    <span id="select-count">0 selected</span>
+    <button onclick="selectAll()">Select all</button>
+    <button id="delete-selected-btn" class="select-bar-del" onclick="deleteSelected()" disabled>Delete selected</button>
+    <button onclick="toggleSelectMode()">Cancel</button>
+  </div>
 
   <div id="sensor-strip" class="sensor-strip"></div>
   <div id="status"></div>

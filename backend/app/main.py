@@ -68,7 +68,8 @@ async def basic_auth_middleware(request: Request, call_next):
                 return await call_next(request)
         except Exception:
             pass
-    return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Plant Monitoring"'})
+    port = request.url.port or 80
+    return Response(status_code=401, headers={"WWW-Authenticate": f'Basic realm="Plant Monitoring :{port}"'})
 
 
 @app.get("/assistant-openapi.json", include_in_schema=False)
