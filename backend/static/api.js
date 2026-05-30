@@ -33,6 +33,10 @@ export async function getPhotos(params = {}) {
 }
 
 export function updatePhoto(id, body)          { return apiJson('/photos/' + id, 'PUT', body); }
+export async function deletePhoto(id) {
+  const resp = await fetch('/photos/' + id, {method: 'DELETE'});
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+}
 
 export function getNotes(photoId)              { return apiRequest('/photos/' + photoId + '/notes'); }
 export function createNote(photoId, body)      { return apiJson('/photos/' + photoId + '/notes', 'POST', body); }

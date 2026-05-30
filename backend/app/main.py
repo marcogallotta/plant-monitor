@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from sqlalchemy.orm import Session
 
 from .camera_import import router as camera_import_router, save_photo, _check_growing_units_exist
 from .database import get_db
+logger = logging.getLogger(__name__)
+
 from .helpers import EVENT_LOAD_OPTIONS, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _photo_out
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
@@ -323,6 +326,24 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
     return _photo_out(loaded)
 
 
+@app.delete("/photos/{photo_id}", status_code=204)
+def delete_photo(photo_id: int, db: Session = Depends(get_db)):
+    photo = db.query(Photo).filter_by(id=photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    db.query(PhotoNote).filter_by(photo_id=photo_id).delete()
+    db.query(PhotoLabel).filter_by(photo_id=photo_id).delete()
+    db.query(PhotoGrowingUnit).filter_by(photo_id=photo_id).delete()
+    db.query(EventPhoto).filter_by(photo_id=photo_id).delete()
+    storage_path = Path(photo.storage_path) if photo.storage_path else None
+    metadata_path = Path(photo.metadata_path) if photo.metadata_path else None
+    db.delete(photo)
+    db.commit()
+    for path in filter(None, [storage_path, metadata_path]):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("could not delete file %s: %s", path, exc)
 
 @app.post("/manual-photos", response_model=PhotoOut, status_code=201)
 async def upload_manual_photo(

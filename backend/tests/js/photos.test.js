@@ -3,9 +3,10 @@ import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vite
 vi.mock('@/api.js', () => ({
   getPhotos: vi.fn().mockResolvedValue({photos: [], total: 0}),
   updatePhoto: vi.fn().mockResolvedValue({}),
+  deletePhoto: vi.fn().mockResolvedValue(undefined),
 }));
 
-let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate;
+let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete;
 let state;
 
 const PHOTOS = [
@@ -51,7 +52,7 @@ beforeAll(async () => {
     <span id="tl-fps"></span>
   `;
 
-  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate} =
+  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete} =
     await import('@/photos.js'));
   ({state} = await import('@/state.js'));
 });
@@ -339,5 +340,83 @@ describe('gridRotate', () => {
     await gridRotate(e, 10, 90);
     const img = document.querySelector('.photo-card[data-id="10"] img');
     expect(img.getAttribute('src')).toBe('/photos/x.jpg?oriented=1&v=0');
+  });
+});
+
+// ── gridDelete ────────────────────────────────────────────
+
+describe('gridDelete', () => {
+  let photo;
+
+  beforeEach(async () => {
+    photo = {id: 20, url: '/photos/del.jpg', filename: 'del.jpg', captured_at: '2026-01-01T10:00:00Z', rotation: 0, growing_units: []};
+    state.allPhotos = [photo];
+    state.totalPhotos = 1;
+    state.photoA = null;
+    state.photoB = null;
+    document.getElementById('photo-grid').innerHTML =
+      '<div class="photo-card" data-id="20"><img src=""></div>';
+    const api = await import('@/api.js');
+    vi.mocked(api.deletePhoto).mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('calls stopPropagation', async () => {
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(e.stopPropagation).toHaveBeenCalled();
+  });
+
+  it('calls deletePhoto with the photo id', async () => {
+    const api = await import('@/api.js');
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(vi.mocked(api.deletePhoto)).toHaveBeenCalledWith(20);
+  });
+
+  it('removes photo from state.allPhotos', async () => {
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(state.allPhotos.find(p => p.id === 20)).toBeUndefined();
+  });
+
+  it('decrements state.totalPhotos', async () => {
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(state.totalPhotos).toBe(0);
+  });
+
+  it('does not call deletePhoto when confirm is cancelled', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const api = await import('@/api.js');
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(vi.mocked(api.deletePhoto)).not.toHaveBeenCalled();
+  });
+
+  it('clears state.photoA when it matches the deleted photo', async () => {
+    state.photoA = photo;
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(state.photoA).toBeNull();
+  });
+
+  it('clears state.photoB when it matches the deleted photo', async () => {
+    state.photoB = photo;
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(state.photoB).toBeNull();
+  });
+
+  it('leaves state.photoA intact when it does not match the deleted photo', async () => {
+    const other = {id: 99, url: '/photos/other.jpg', filename: 'other.jpg', captured_at: '2026-01-01T10:00:00Z', rotation: 0, growing_units: []};
+    state.photoA = other;
+    const e = {stopPropagation: vi.fn()};
+    await gridDelete(e, 20);
+    expect(state.photoA).toBe(other);
   });
 });

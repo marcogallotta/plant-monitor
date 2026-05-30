@@ -14,7 +14,7 @@ vi.mock('@/photos.js', () => ({
   loadPhotos: mockFn(),
   applyFilter: vi.fn(), clearFilter: vi.fn(), loadMorePhotos: vi.fn(),
   selectA: vi.fn(), selectB: vi.fn(),
-  flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(),
+  flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(), gridDelete: vi.fn(),
   renderQuickChips: vi.fn(),
 }));
 
@@ -84,7 +84,7 @@ describe('window exports', () => {
     'selectA', 'selectB',
     'rotatePhoto',
     'handleLabelInput', 'handleLabelKeydown',
-    'flickerToggle', 'flickerAuto', 'gridRotate',
+    'flickerToggle', 'flickerAuto', 'gridRotate', 'gridDelete',
     'tlPrev', 'tlPlayPause', 'tlNext',
     'noteSave', 'noteDelete', 'noteCancel',
     'submitManualUpload',

@@ -29,7 +29,7 @@ import {
   applyFilter, clearFilter,
   selectA, selectB,
   flickerToggle, flickerAuto, stopAuto,
-  gridRotate,
+  gridRotate, gridDelete,
   loadMorePhotos,
   renderQuickChips,
 } from './photos.js';
@@ -90,7 +90,7 @@ Object.assign(window, {
   openModal, closeModal, modalImgClick,
   modalPrev, modalNext,
   selectA, selectB,
-  rotatePhoto, gridRotate,
+  rotatePhoto, gridRotate, gridDelete,
   handleLabelInput, handleLabelKeydown,
   flickerToggle, flickerAuto,
   tlPrev, tlPlayPause, tlNext,

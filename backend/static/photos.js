@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getPhotos, updatePhoto } from './api.js';
+import { getPhotos, updatePhoto, deletePhoto } from './api.js';
 import { setStatus, formatDate, orientedUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
@@ -83,6 +83,7 @@ function renderGrid() {
         '<button onclick="gridRotate(event,' + p.id + ',-90)">↺</button>' +
         '<button onclick="gridRotate(event,' + p.id + ',90)">↻</button>' +
       '</div>' +
+      '<button class="card-del" onclick="gridDelete(event,' + p.id + ')" title="Delete photo">🗑</button>' +
       '<div class="caption">' + caption + '</div>';
     grid.appendChild(card);
   }
@@ -250,6 +251,23 @@ export function stopAuto() {
   if (state.flickerTimer) { clearInterval(state.flickerTimer); state.flickerTimer = null; }
   document.getElementById('btn-auto').classList.remove('active');
   document.getElementById('btn-auto').textContent = 'Auto flicker';
+}
+
+export async function gridDelete(e, photoId) {
+  e.stopPropagation();
+  if (!confirm('Delete this photo? This cannot be undone.')) return;
+  try {
+    await deletePhoto(photoId);
+    state.allPhotos = state.allPhotos.filter(p => p.id !== photoId);
+    state.totalPhotos = Math.max(0, (state.totalPhotos || 0) - 1);
+    if (state.photoA?.id === photoId) { state.photoA = null; updateCompare(); stopAuto(); }
+    if (state.photoB?.id === photoId) { state.photoB = null; updateCompare(); stopAuto(); }
+    renderGrid();
+    const total = state.totalPhotos;
+    setStatus(total === 0 ? 'No photos found.' : total + ' photo' + (total === 1 ? '' : 's'));
+  } catch(err) {
+    alert('Delete failed: ' + err.message);
+  }
 }
 
 export async function gridRotate(e, photoId, delta) {

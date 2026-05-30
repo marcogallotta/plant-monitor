@@ -75,6 +75,9 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .card-rot { position: absolute; top: 4px; right: 4px; display: flex; gap: 3px; opacity: 0; transition: opacity 0.15s; }
 .photo-card:hover .card-rot { opacity: 1; }
 .card-rot button { padding: 0 0.35rem; font-size: 0.85rem; border-radius: 3px; line-height: 1.5; background: #222; border-color: #555; color: #ccc; }
+.card-del { position: absolute; bottom: 28px; right: 4px; padding: 0 0.35rem; font-size: 1rem; line-height: 1.4; border-radius: 3px; background: #2a0a0a; border-color: #a33; color: #f88; opacity: 0; transition: opacity 0.15s; }
+.photo-card:hover .card-del { opacity: 1; }
+.card-del:hover { background: #6a1a1a; border-color: #f44; color: #fff; }
 .card-ab button.sel-a         { background: #1a2a4a; border-color: #48f; color: #8af; }
 .card-ab button.sel-b         { background: #2a1a4a; border-color: #a4f; color: #c8f; }
 .card-ab button.sel-a.active  { background: #2a4a8a; border-color: #6af; }
