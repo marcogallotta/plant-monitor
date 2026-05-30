@@ -588,7 +588,13 @@ async function sdUploadBrowser(queue, btn, status) {
     try {
       await uploadPhoto(fd);
       sdSetThumbStatus(idx, 'done'); done++;
-    } catch(e) { sdSetThumbStatus(idx, 'error', String(e)); failed++; console.warn('Upload error', entry.file.name, e); }
+    } catch(e) {
+      var msg = String(e);
+      sdSetThumbStatus(idx, 'error', msg);
+      failed++;
+      if (failed === 1) status.textContent = 'Error: ' + msg;
+      console.warn('Upload error', entry.file.name, e);
+    }
   }
 
   btn.disabled = false;
