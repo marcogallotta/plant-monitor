@@ -29,7 +29,7 @@ def _filtered_photo_query(
     growing_unit_id: Optional[int] = None,
     label_id: Optional[int] = None,
 ):
-    q = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at, Photo.id)
+    q = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).order_by(Photo.captured_at.desc(), Photo.id.desc())
     if start is not None:
         q = q.filter(Photo.captured_at >= start)
     if end is not None:

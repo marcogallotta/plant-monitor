@@ -41,9 +41,9 @@ def test_list_photos_sorted_by_captured_at(client, db_session):
     data = client.get("/photos").json()
     filenames = [d["filename"] for d in data["photos"]]
     assert filenames == [
-        "2026-05-26T100000Z.jpg",
-        "2026-05-26T110000Z.jpg",
         "2026-05-26T120000Z.jpg",
+        "2026-05-26T110000Z.jpg",
+        "2026-05-26T100000Z.jpg",
     ]
 
 
