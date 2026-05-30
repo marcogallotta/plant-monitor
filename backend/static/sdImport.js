@@ -4,9 +4,9 @@ import {
   isImportablePhoto, isRawPhoto, sortCameraFiles, detectSessionBoundary,
   detectAllBoundaries, scanForJpeg, deriveTimestamp, buildUploadFormData,
 } from './sdImportCore.js';
+import { formatDate } from './utils.js';
 
 const SD_PAGE = 20;
-const SD_TZ   = 'Europe/Rome';
 
 let sdFiles = [];
 let sdShown = 0;
@@ -282,7 +282,7 @@ function sdMakeThumb(i) {
   tsSpan.className = 'sd-ts-line';
   tsSpan.id        = 'sd-ts-line-' + i;
   if (entry.tsBadge) tsSpan.dataset.badge = entry.tsBadge;
-  tsSpan.textContent = entry.capturedAt ? sdFmtTs(entry.capturedAt) : '';
+  tsSpan.textContent = entry.capturedAt ? formatDate(entry.capturedAt) : '';
   caption.appendChild(nameSpan);
   caption.appendChild(tsSpan);
 
@@ -346,14 +346,6 @@ async function sdExtractRawThumbs(from, to) {
   }
 }
 
-function sdFmtTs(iso) {
-  try {
-    return new Date(iso).toLocaleString('sv-SE', {timeZone: SD_TZ,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit'}).replace('T', ' ');
-  } catch(e) { return iso.slice(0, 16); }
-}
-
 async function sdParseExif(from, to) {
   for (var i = from; i < to; i++) {
     var entry = sdFiles[i];
@@ -367,7 +359,7 @@ async function sdParseExif(from, to) {
     entry.capturedAt = result.iso;
     entry.tsBadge    = result.badge;
     var tsEl = document.getElementById('sd-ts-line-' + i);
-    if (tsEl) { tsEl.textContent = sdFmtTs(result.iso); tsEl.dataset.badge = result.badge; }
+    if (tsEl) { tsEl.textContent = formatDate(result.iso); tsEl.dataset.badge = result.badge; }
   }
 }
 
