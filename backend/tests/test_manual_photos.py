@@ -19,6 +19,11 @@ def test_manual_upload_sets_source_manual(client):
     assert r.json()["source"] == "manual"
 
 
+def test_manual_upload_sets_source_phone(client):
+    r = _upload(client, source="phone")
+    assert r.json()["source"] == "phone"
+
+
 def test_manual_upload_preserves_original_filename(client):
     r = _upload(client, filename="my_plant_photo.jpg")
     assert r.json()["original_filename"] == "my_plant_photo.jpg"
