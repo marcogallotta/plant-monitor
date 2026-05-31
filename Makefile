@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions submit-tagging-batch ingest-tagging-batch agreement-gate compare-ab-runs up down build verify-up verify-down verify-reset tunnel
+.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions submit-tagging-batch ingest-tagging-batch agreement-gate triage-plant compare-ab-runs up down build verify-up verify-down verify-reset tunnel
 
 TEST_COMPOSE   := docker compose -p plant-monitoring-test   -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
@@ -50,6 +50,14 @@ agreement-gate:
 	@set -a && . ./.env && set +a && docker compose run --rm \
 	  -e ANTHROPIC_API_KEY -e ASSISTANT_API_TOKEN \
 	  backend python scripts/agreement_gate.py --run-id $(RUN_ID) $(ARGS)
+
+triage-plant:
+	@test -n "$(PLANT)" || (echo "Usage: make triage-plant PLANT=lemongrass [RUN_ID=ab_rich]" && exit 1)
+	@set -a && . ./.env && set +a && docker compose run --rm \
+	  -e ASSISTANT_API_TOKEN \
+	  -e BACKEND_URL=http://backend:8000 \
+	  backend python scripts/triage_plant.py --plant "$(PLANT)" \
+	  $(if $(RUN_ID),--run-id $(RUN_ID),) $(ARGS)
 
 compare-ab-runs:
 	@test -n "$(RICH)" || (echo "Usage: make compare-ab-runs RICH=ab_rich THIN=ab_thin" && exit 1)
