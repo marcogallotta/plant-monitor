@@ -43,12 +43,12 @@ function render() {
     const labels = (s.suggested_labels || []).map(esc).join(', ');
     const hasRegion = [s.x, s.y, s.x2, s.y2].every(v => v != null);
     const region = hasRegion ? buildRegionOverlay(s) : '';
-    const actions = active ? `
+    const actions = `
         <div class="review-actions">
           <button class="review-btn-accept" onclick="event.stopPropagation(); reviewResolve('accept', ${i})" title="Accept (A)">Accept</button>
           <button class="review-btn-reject" onclick="event.stopPropagation(); reviewResolve('reject', ${i})" title="Reject (R)">Reject</button>
           <button class="review-btn-delete" onclick="event.stopPropagation(); reviewResolve('deleted', ${i})" title="Delete photo (D)">Delete photo</button>
-        </div>` : '';
+        </div>`;
 
     return `<div class="review-card${active ? ' active' : ''}" data-index="${i}" onclick="reviewFocus(${i})">
       <div class="review-photo-wrap" onclick="event.stopPropagation(); reviewOpenPhoto(${i})" style="cursor:zoom-in;">
