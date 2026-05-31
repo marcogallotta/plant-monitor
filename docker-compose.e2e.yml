@@ -18,6 +18,7 @@ services:
       - "8002:8000"
     volumes:
       - ./backend:/app
+      - ./scripts:/app/scripts
     depends_on:
       db-test:
         condition: service_healthy

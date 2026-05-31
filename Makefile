@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions up down build verify-up verify-down verify-reset tunnel
+.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions submit-tagging-batch ingest-tagging-batch agreement-gate up down build verify-up verify-down verify-reset tunnel
 
 TEST_COMPOSE   := docker compose -p plant-monitoring-test   -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
@@ -33,6 +33,17 @@ migrate:
 
 seed:
 	docker compose run --rm backend python scripts/seed.py --backend-url http://backend:8000
+
+submit-tagging-batch:
+	docker compose run --rm -e ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY) backend python scripts/submit_tagging_batch.py $(ARGS)
+
+ingest-tagging-batch:
+	@test -n "$(RUN_ID)" || (echo "Usage: make ingest-tagging-batch RUN_ID=<run_id> [ARGS='--poll']" && exit 1)
+	docker compose run --rm -e ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY) backend python scripts/ingest_tagging_batch.py --run-id $(RUN_ID) $(ARGS)
+
+agreement-gate:
+	@test -n "$(RUN_ID)" || (echo "Usage: make agreement-gate RUN_ID=<run_id> [ARGS='']" && exit 1)
+	docker compose run --rm -e ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY) backend python scripts/agreement_gate.py --run-id $(RUN_ID) $(ARGS)
 
 ingest-suggestions:
 	@test -n "$(FILE)" || (echo "Usage: make ingest-suggestions FILE=path/to/suggestions.json" && exit 1)

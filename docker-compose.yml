@@ -17,6 +17,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/plantmonitoring
       ASSISTANT_API_TOKEN: ${ASSISTANT_API_TOKEN}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
       SENSOR_API_URL: ${SENSOR_API_URL:-}
@@ -30,6 +31,8 @@ services:
     volumes:
       - ./backend:/app
       - ./data/photos:/app/data/photos
+      - ./scripts:/app/scripts
+      - ./data/tagging-runs:/app/data/tagging-runs
       - /media:/media:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
