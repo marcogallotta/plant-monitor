@@ -95,24 +95,30 @@ Don't rebuild any of that. The grid is dead.
 
 ---
 
-## Closed set (authoritative — 23 plants)
+## Closed set (authoritative)
 
 **Distinctive (a confident single label is OK):** Dill, Parsley, Rocket, Rosemary, Sage,
 Sorrel, French tarragon, Fenugreek, Lemongrass (when mature).
 
 **Confusable / variety groups (`options` only — never a confident single pick):**
-- Mints: **Peppermint / Moroccan mint**
+- Mints: **Peppermint / Moroccan mint / Spearmint** (spearmint is real — a short-lived
+  supermarket buy)
 - Allium clumps: **Chives / Garlic chives / Welsh onion**
 - Apiaceae seedlings: **Parsley / Cilantro**
-- Basil: **Basil (sweet/genovese) / Thai basil**
+- Basil: **Genovese basil / Thai basil**. Note there are **two distinct, real Thai basils** —
+  the seed-grown `Thai basil` and the visually-distinctive `Thai basil vendita`. Label both
+  "Thai basil", but **always surface them as a binary review choice**.
 - Chillies: **Bird's eye / Hangjiao H7 / Hangjiao H4** — pixel-identical; variety is a
   composition/which-pot lookup, never a vision call
 - Stem cuttings / sprawl: **Lemongrass / Rau ram**, and **Sorrel / Rau ram**
 - Small woody: **Thyme / Lemon thyme** (not visually separable; options unless container known)
 
-**DB cleanup required before running** (noise from the failed calibration accepts): drop the
-spurious **Spearmint** unit (not a real plant); merge **Basil / Genovese basil / Thai basil
-vendita** → canonical **Basil + Thai basil**. Verify against `growing_units`.
+**DB cleanup (done 2026-05-31):** merged the generic **Basil** unit into **Genovese basil**
+(no plain "basil"). **Kept as real:** `Spearmint` (short-lived supermarket buy), and **both**
+Thai basils — `Thai basil` (seed-grown) and `Thai basil vendita` (a distinct cultivar). The
+two Thai basils are a permanent binary on review. Several real plants still have no unit
+(cilantro, sage, plain thyme, chives, fenugreek, the chilli varieties) — these get created on
+accept, not pre-seeded.
 
 ---
 
@@ -124,7 +130,7 @@ re-registerable, and Phase 2 detects change by diffing frames.
 | Container | Contents |
 |---|---|
 | Trough | dill + parsley + chives |
-| Trough | 2 Basil (genovese) + 1 Thai basil |
+| Trough | 2 Genovese basil + 1 Thai basil |
 | Trough | rocket + cilantro |
 | Trough | Moroccan mint (solo) |
 | Small trough | Welsh onion (seedlings) |
@@ -205,13 +211,15 @@ in general, and do not free-guess outside it.
 
 KNOWN PLANTS (only valid labels):
   Distinctive: dill, parsley, rocket, rosemary, sage, sorrel, French tarragon, fenugreek, lemongrass
-  Confusable groups (use options): peppermint/Moroccan mint · chives/garlic chives/Welsh onion ·
-    parsley/cilantro · basil/Thai basil · bird's-eye/Hangjiao-H7/Hangjiao-H4 chilli ·
+  Confusable groups (use options): peppermint/Moroccan mint/spearmint · chives/garlic chives/Welsh onion ·
+    parsley/cilantro · genovese basil/Thai basil · bird's-eye/Hangjiao-H7/Hangjiao-H4 chilli ·
     lemongrass/rau ram · sorrel/rau ram · thyme/lemon thyme
+  (Two real Thai basils — "Thai basil" and "Thai basil vendita". Label "Thai basil"; always
+   present both as a binary on review.)
 
 CONTAINER MAP (HINTS, not facts — pots move and troughs get replanted):
   trough: dill + parsley + chives
-  trough: 2 basil + 1 Thai basil
+  trough: 2 genovese basil + 1 Thai basil
   trough: rocket + cilantro
   trough: Moroccan mint (solo)
   small trough: Welsh onion (seedlings) | cilantro (solo) | fenugreek (solo) | thyme + lemon thyme
@@ -335,7 +343,8 @@ Operations the review UI needs against `photo_ai_suggestions`:
 **Outstanding (new plan):**
 - **Batch API submission + ingest** for Phase 1 (individual 1024px images, cached prior
   prompt, Sonnet). No interactive Claude reads.
-- **DB cleanup**: drop spurious Spearmint; merge basil dupes.
+- ✅ **DB cleanup done**: merged plain `Basil` → `Genovese basil`. Spearmint and both Thai
+  basils (`Thai basil` + `Thai basil vendita`) are real — kept.
 - **Container/composition registry** as a first-class store (seeds Phase 2); seed from the map
   above + Appendix A.
 - **Agreement-gate triage** (Sonnet vs Opus) + a review queue scoped to disagreements.
