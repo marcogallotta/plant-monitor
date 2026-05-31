@@ -209,6 +209,31 @@ class EventOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SuggestionOut(BaseModel):
+    id: int
+    photo_id: int
+    photo_url: str
+    photo_captured_at: datetime
+    model: str
+    batch_hint: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    x2: Optional[float] = None
+    y2: Optional[float] = None
+    suggested_plant_id: Optional[int] = None
+    suggested_plant_name: Optional[str] = None
+    suggested_photo_type: Optional[str] = None
+    suggested_rotation: Optional[int] = None
+    suggested_labels: Optional[list] = None
+    confidence: Optional[str] = None
+    question: Optional[str] = None
+    observation: Optional[str] = None
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AssistantSummary(BaseModel):
     photo_count: int
     unclassified_count: int

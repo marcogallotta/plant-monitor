@@ -25,6 +25,7 @@ from .helpers import EVENT_LOAD_OPTIONS, _event_out, _filtered_photo_query, _get
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
+from .routers.suggestions import router as suggestions_router
 from .schemas import (
     VALID_ROTATIONS,
     EventCreate,
@@ -51,6 +52,7 @@ app.include_router(camera_import_router)
 app.include_router(assistant_router)
 app.include_router(assistant_public_router)
 app.include_router(sensors_router)
+app.include_router(suggestions_router)
 
 
 @app.middleware("http")
