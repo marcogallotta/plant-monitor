@@ -24,7 +24,12 @@ SCRIPTS_DIR = Path(__file__).parent
 REPO_ROOT = SCRIPTS_DIR.parent
 RUNS_DIR = REPO_ROOT / "data" / "tagging-runs"
 
-sys.path.insert(0, str(REPO_ROOT / "backend"))
+# Inside Docker the backend is mounted at /app (== REPO_ROOT); on the host it lives at
+# <repo>/backend/.  Insert whichever contains the `app` package.
+for _p in (REPO_ROOT / "backend", REPO_ROOT):
+    if (_p / "app").is_dir():
+        sys.path.insert(0, str(_p))
+        break
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 

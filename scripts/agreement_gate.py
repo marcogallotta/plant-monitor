@@ -34,7 +34,10 @@ REPO_ROOT = SCRIPTS_DIR.parent
 PHOTOS_DIR = REPO_ROOT / "data" / "photos"
 RUNS_DIR = REPO_ROOT / "data" / "tagging-runs"
 
-sys.path.insert(0, str(REPO_ROOT / "backend"))
+for _p in (REPO_ROOT / "backend", REPO_ROOT):
+    if (_p / "app").is_dir():
+        sys.path.insert(0, str(_p))
+        break
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from PIL import Image

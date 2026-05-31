@@ -35,15 +35,21 @@ seed:
 	docker compose run --rm backend python scripts/seed.py --backend-url http://backend:8000
 
 submit-tagging-batch:
-	docker compose run --rm -e ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY) backend python scripts/submit_tagging_batch.py $(ARGS)
+	@set -a && . ./.env && set +a && docker compose run --rm \
+	  -e ANTHROPIC_API_KEY -e ASSISTANT_API_TOKEN \
+	  backend python scripts/submit_tagging_batch.py $(ARGS)
 
 ingest-tagging-batch:
 	@test -n "$(RUN_ID)" || (echo "Usage: make ingest-tagging-batch RUN_ID=<run_id> [ARGS='--poll']" && exit 1)
-	docker compose run --rm -e ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY) backend python scripts/ingest_tagging_batch.py --run-id $(RUN_ID) $(ARGS)
+	@set -a && . ./.env && set +a && docker compose run --rm \
+	  -e ANTHROPIC_API_KEY -e ASSISTANT_API_TOKEN \
+	  backend python scripts/ingest_tagging_batch.py --run-id $(RUN_ID) $(ARGS)
 
 agreement-gate:
 	@test -n "$(RUN_ID)" || (echo "Usage: make agreement-gate RUN_ID=<run_id> [ARGS='']" && exit 1)
-	docker compose run --rm -e ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY) backend python scripts/agreement_gate.py --run-id $(RUN_ID) $(ARGS)
+	@set -a && . ./.env && set +a && docker compose run --rm \
+	  -e ANTHROPIC_API_KEY -e ASSISTANT_API_TOKEN \
+	  backend python scripts/agreement_gate.py --run-id $(RUN_ID) $(ARGS)
 
 compare-ab-runs:
 	@test -n "$(RICH)" || (echo "Usage: make compare-ab-runs RICH=ab_rich THIN=ab_thin" && exit 1)

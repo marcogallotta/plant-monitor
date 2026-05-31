@@ -136,8 +136,10 @@ def _get_photos(base_url: str, token: str) -> list[dict]:
 def _pending_photo_ids() -> set[int]:
     """Return photo IDs that already have a pending suggestion (via DB)."""
     try:
-        # Import here so the script can still run without a DB if needed
-        sys.path.insert(0, str(REPO_ROOT / "backend"))
+        for _p in (REPO_ROOT / "backend", REPO_ROOT):
+            if (_p / "app").is_dir():
+                sys.path.insert(0, str(_p))
+                break
         from app.database import build_engine, build_session_factory
         from app.models import PhotoAiSuggestion
 
