@@ -16,6 +16,7 @@
   <button class="tab-btn" data-tab="import"    onclick="switchTab('import')">Import</button>
   <button class="tab-btn" data-tab="events"    onclick="switchTab('events')">Events</button>
   <button class="tab-btn" data-tab="manage"    onclick="switchTab('manage')">Manage</button>
+  <button class="tab-btn" data-tab="review"    onclick="switchTab('review')">Review</button>
 </nav>
 
 <!-- Gallery tab -->
@@ -361,6 +362,17 @@
     </div>
   </div>
 
+  <div class="pb"></div>
+</div>
+
+<!-- Review tab -->
+<div class="tab-content" id="tab-review">
+  <div class="review-header">
+    <span id="review-counter" class="review-counter"></span>
+    <button onclick="initReview()" class="review-reload">↺ Refresh</button>
+    <span id="review-status" class="status-msg"></span>
+  </div>
+  <div id="review-container" class="review-container"></div>
   <div class="pb"></div>
 </div>
 

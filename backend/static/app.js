@@ -24,6 +24,7 @@ import {
 } from './modal.js';
 import { handleLabelInput, handleLabelKeydown } from './labels.js';
 import { loadSensorStrip } from './sensors.js';
+import { initReview, reviewFocus, reviewResolve, reviewKeydown } from './review.js';
 import {
   loadPhotos,
   applyFilter, clearFilter,
@@ -69,8 +70,10 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'ArrowLeft')  modalPrev();
   }
   if ((e.key === 'f' || e.key === 'F') && document.getElementById('tab-gallery')?.classList.contains('active')) flickerToggle();
+  reviewKeydown(e);
 });
 
+let reviewLoaded = false;
 function switchTab(name) {
   if (!document.getElementById('tab-' + name)) name = 'gallery';
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -80,6 +83,7 @@ function switchTab(name) {
   const params = new URLSearchParams(window.location.hash.slice(1));
   params.set('tab', name);
   history.replaceState(null, '', '#' + params.toString());
+  if (name === 'review' && !reviewLoaded) { reviewLoaded = true; initReview(); }
 }
 
 initNotes(visualToStored);
@@ -109,4 +113,5 @@ Object.assign(window, {
   toggleModalLogEvent, logModalEvent,
   switchTab,
   toggleSelectMode, selectAll, deleteSelected,
+  initReview, reviewFocus, reviewResolve,
 });
