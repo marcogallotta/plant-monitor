@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed up down build verify-up verify-down verify-reset tunnel
+.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions up down build verify-up verify-down verify-reset tunnel
 
 TEST_COMPOSE   := docker compose -p plant-monitoring-test   -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
@@ -33,6 +33,10 @@ migrate:
 
 seed:
 	docker compose run --rm backend python scripts/seed.py --backend-url http://backend:8000
+
+ingest-suggestions:
+	@test -n "$(FILE)" || (echo "Usage: make ingest-suggestions FILE=path/to/suggestions.json" && exit 1)
+	docker compose run --rm -v $(CURDIR)/$(FILE):/tmp/suggestions.json backend python scripts/ingest_suggestions.py /tmp/suggestions.json
 
 up:
 	docker compose up -d
