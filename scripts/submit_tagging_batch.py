@@ -263,7 +263,7 @@ def submit(
         print("No requests to submit.")
         return
 
-    photo_ids = [int(r.custom_id) for r in requests]
+    photo_ids = [int(r["custom_id"]) for r in requests]
     print(f"\n{len(requests)} request(s) ready  |  prior: {prior_label}  |  model: {MODEL}")
 
     if dry_run:
