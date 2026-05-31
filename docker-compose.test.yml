@@ -16,6 +16,7 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db-test:5432/plantmonitoring_test
     volumes:
       - ./backend:/app
+      - ./scripts:/app/scripts
     depends_on:
       db-test:
         condition: service_healthy
