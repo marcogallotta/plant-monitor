@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import BigInteger, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -123,6 +124,41 @@ class PhotoLabel(Base):
     photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), primary_key=True)
     label_id: Mapped[int] = mapped_column(Integer, ForeignKey("labels.id"), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PhotoAiSuggestion(Base):
+    __tablename__ = "photo_ai_suggestions"
+    __table_args__ = (
+        Index("photo_ai_suggestions_photo_id_idx", "photo_id"),
+        Index("photo_ai_suggestions_status_idx", "status"),
+        CheckConstraint("status IN ('pending', 'accepted', 'edited', 'rejected', 'deleted')", name="photo_ai_suggestions_status_check"),
+        CheckConstraint("confidence IN ('high', 'medium', 'low')", name="photo_ai_suggestions_confidence_check"),
+        CheckConstraint("suggested_rotation IS NULL OR suggested_rotation IN (0, 90, 180, 270)", name="photo_ai_suggestions_rotation_check"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    batch_hint: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    prompt_context: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    x: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    y: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    x2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    y2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    suggested_plant_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("growing_units.id"), nullable=True)
+    suggested_plant_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suggested_photo_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suggested_rotation: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    suggested_labels: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    confidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    question: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    edited_plant_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("growing_units.id"), nullable=True)
+    edited_photo_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    edited_labels: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PhotoNote(Base):

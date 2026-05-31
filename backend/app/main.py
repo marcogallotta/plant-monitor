@@ -22,7 +22,7 @@ from .database import get_db
 logger = logging.getLogger(__name__)
 
 from .helpers import EVENT_LOAD_OPTIONS, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _photo_out
-from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote
+from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
 from .schemas import (
@@ -335,6 +335,7 @@ def delete_photo(photo_id: int, db: Session = Depends(get_db)):
     db.query(PhotoNote).filter_by(photo_id=photo_id).delete()
     db.query(PhotoLabel).filter_by(photo_id=photo_id).delete()
     db.query(PhotoGrowingUnit).filter_by(photo_id=photo_id).delete()
+    db.query(PhotoAiSuggestion).filter_by(photo_id=photo_id).delete()
     db.query(EventPhoto).filter_by(photo_id=photo_id).delete()
     storage_path = Path(photo.storage_path) if photo.storage_path else None
     metadata_path = Path(photo.metadata_path) if photo.metadata_path else None

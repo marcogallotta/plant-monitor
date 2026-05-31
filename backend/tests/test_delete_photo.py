@@ -5,7 +5,7 @@ import pytest
 from app.models import (
     Event, EventPhoto,
     GrowingUnit, Label,
-    Photo, PhotoGrowingUnit, PhotoLabel, PhotoNote,
+    Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote,
 )
 
 
@@ -87,6 +87,16 @@ def test_delete_photo_removes_event_links(client, db_session, isolated_photos_di
     db_session.commit()
     client.delete(f"/photos/{photo.id}")
     assert db_session.query(EventPhoto).filter_by(photo_id=photo.id).count() == 0
+
+
+def test_delete_photo_removes_ai_suggestions(client, db_session, isolated_photos_dir):
+    photo = _photo(db_session, isolated_photos_dir)
+    suggestion = PhotoAiSuggestion(photo_id=photo.id, model="claude-sonnet-4-6", status="pending")
+    db_session.add(suggestion)
+    db_session.commit()
+    resp = client.delete(f"/photos/{photo.id}")
+    assert resp.status_code == 204
+    assert db_session.query(PhotoAiSuggestion).filter_by(photo_id=photo.id).count() == 0
 
 
 def test_delete_photo_unknown_returns_404(client, db_session):
