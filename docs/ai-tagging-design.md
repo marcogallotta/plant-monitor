@@ -528,20 +528,23 @@ The human stays in the loop at the tagging step and the capture step. Claude han
 4. ✅ `PATCH /suggestions/{id}` — resolve: accept / reject / deleted. Accept writes through
    to `photos.photo_type`, `photos.rotation`, `photo_growing_units`, `photo_labels` and
    creates a `growing_unit` or `label` if one doesn't exist yet.
-5. ✅ Review tab — card list with region overlays, keyboard nav (A/R/D/arrows), click
-   thumbnail to open photo in the full modal (`openModalForPhoto`).
+5. ✅ Review tab — card list with region overlays, keyboard nav (A/R/D/J/K), keyboard
+   shortcut hint bar, click thumbnail to open photo in the full modal.
+6. ✅ Action buttons on every card (not just the focused one).
+7. ✅ Inline edit form — plant name (with datalist autocomplete from known units), type
+   picker, labels. Accept with overrides writes `edited_*` columns and sets
+   `status = "edited"`; accept without overrides sets `status = "accepted"`. Unit lookup
+   is case-insensitive.
+8. ✅ `suggested_options` JSONB field (migration 0011) — Claude emits a structured list of
+   candidate plant names for ambiguous cases. Review card renders one choice button per
+   option ("Which is it?") instead of the normal accept/reject row. Choosing one accepts
+   with that name as `edited_plant_name`.
 
-**Review tab — outstanding (stage 1 not yet complete):**
-- **Bug:** only the first card renders action buttons (Accept/Reject/Delete). Every card
-  should show them when focused.
-- **Keyboard shortcuts not surfaced** — A/R/D/arrows work but are not shown anywhere in
-  the UI.
-- **Edit action not built** — `edited_plant_id / edited_photo_type / edited_labels`
-  columns exist in the schema, but `"edit"` is not in `VALID_ACTIONS`, there is no edit
-  UI, and what "edit" means for the UX needs to be decided before building.
-- **Question answer + rerun not built** — low-confidence suggestions show the question
-  text but there is no answer input or rerun trigger. This is the main interaction path
-  for ambiguous suggestions.
+**Review tab — outstanding:**
+- **Open-ended question with no options** — when `question` is set but `suggested_options`
+  is empty/null, the question text is shown but there is no way to answer. The structured
+  `suggested_options` mechanism handles the binary/n-ary case; a truly open-ended fallback
+  (free-text answer input) is not yet built.
 - **Enlarge / focused review mode (future consideration)** — clicking a thumbnail opens
   the full photo modal. Long-term we may want the review UI itself to operate in a larger
   / full-screen mode so the photo and suggestion detail are both comfortably visible
@@ -558,4 +561,3 @@ it; add real rules only after observing actual Pi captures.
 
 - Should `capture_requests` be auto-generated on a schedule, or triggered manually after each import batch?
 - Do we want a mobile-friendly review UI for quick yes/no from the phone, or is desktop-only fine for now?
-- What does "Edit" mean in the review UI? Options: (a) inline field overrides before accepting, (b) opens the photo modal so the user can classify manually, (c) a dedicated edit form. Decide before building.
