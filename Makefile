@@ -54,7 +54,10 @@ agreement-gate:
 compare-ab-runs:
 	@test -n "$(RICH)" || (echo "Usage: make compare-ab-runs RICH=ab_rich THIN=ab_thin" && exit 1)
 	@test -n "$(THIN)" || (echo "Usage: make compare-ab-runs RICH=ab_rich THIN=ab_thin" && exit 1)
-	.venv/bin/python scripts/compare_ab_runs.py --rich $(RICH) --thin $(THIN) $(ARGS)
+	@set -a && . ./.env && set +a && docker compose run --rm \
+	  -e ASSISTANT_API_TOKEN \
+	  -e BACKEND_URL=http://backend:8000 \
+	  backend python scripts/compare_ab_runs.py --rich $(RICH) --thin $(THIN) $(ARGS)
 
 ingest-suggestions:
 	@test -n "$(FILE)" || (echo "Usage: make ingest-suggestions FILE=path/to/suggestions.json" && exit 1)

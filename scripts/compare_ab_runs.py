@@ -20,7 +20,10 @@ SCRIPTS_DIR = Path(__file__).parent
 REPO_ROOT = SCRIPTS_DIR.parent
 RUNS_DIR = REPO_ROOT / "data" / "tagging-runs"
 
-sys.path.insert(0, str(REPO_ROOT / "backend"))
+for _p in (REPO_ROOT / "backend", REPO_ROOT):
+    if (_p / "app").is_dir():
+        sys.path.insert(0, str(_p))
+        break
 
 
 def _fetch_thumbnail(base_url: str, token: str, photo_id: int) -> str | None:
@@ -201,8 +204,8 @@ def main() -> None:
     if not token:
         sys.exit("error: ASSISTANT_API_TOKEN not set")
 
-    port = os.environ.get("BACKEND_PORT", "8000")
-    base_url = f"http://localhost:{port}"
+    base_url = os.environ.get("BACKEND_URL") or \
+               f"http://localhost:{os.environ.get('BACKEND_PORT', '8000')}"
     output = Path(args.output) if args.output else RUNS_DIR / "ab_compare.html"
 
     print(f"Comparing {args.rich} (rich) vs {args.thin} (thin)…")
