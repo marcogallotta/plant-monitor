@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions submit-tagging-batch ingest-tagging-batch agreement-gate up down build verify-up verify-down verify-reset tunnel
+.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions submit-tagging-batch ingest-tagging-batch agreement-gate compare-ab-runs up down build verify-up verify-down verify-reset tunnel
 
 TEST_COMPOSE   := docker compose -p plant-monitoring-test   -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
@@ -44,6 +44,11 @@ ingest-tagging-batch:
 agreement-gate:
 	@test -n "$(RUN_ID)" || (echo "Usage: make agreement-gate RUN_ID=<run_id> [ARGS='']" && exit 1)
 	docker compose run --rm -e ANTHROPIC_API_KEY=$(ANTHROPIC_API_KEY) backend python scripts/agreement_gate.py --run-id $(RUN_ID) $(ARGS)
+
+compare-ab-runs:
+	@test -n "$(RICH)" || (echo "Usage: make compare-ab-runs RICH=ab_rich THIN=ab_thin" && exit 1)
+	@test -n "$(THIN)" || (echo "Usage: make compare-ab-runs RICH=ab_rich THIN=ab_thin" && exit 1)
+	.venv/bin/python scripts/compare_ab_runs.py --rich $(RICH) --thin $(THIN) $(ARGS)
 
 ingest-suggestions:
 	@test -n "$(FILE)" || (echo "Usage: make ingest-suggestions FILE=path/to/suggestions.json" && exit 1)
