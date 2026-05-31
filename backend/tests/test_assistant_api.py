@@ -593,4 +593,27 @@ def test_assistant_summary_recent_photos_include_related_data(client):
         p = next(x for x in summary["recent_photos"] if x["id"] == p1["id"])
         assert p["location_name"] == loc["name"]
         assert any(u["id"] == unit["id"] for u in p["growing_units"])
+
+
+def test_contact_sheet_invalid_ids_returns_422(client):
+    r = client.get("/assistant/contact-sheet?ids=abc")
+    assert r.status_code == 422
+
+
+def test_contact_sheet_too_many_ids_returns_422(client):
+    ids = ",".join(str(i) for i in range(1, 27))  # 26 ids
+    r = client.get(f"/assistant/contact-sheet?ids={ids}")
+    assert r.status_code == 422
+
+
+def test_contact_sheet_missing_photo_still_returns_200(client, isolated_photos_dir):
+    p = client.post("/manual-photos",
+                    files={"image": ("x.jpg", b"FAKEIMAGE", "image/jpeg")}).json()
+    real_id = p["id"]
+    missing_id = real_id + 9999
+    r = client.get(f"/assistant/contact-sheet?ids={real_id},{missing_id}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["photo_ids"] == [real_id, missing_id]
+    assert "image_data_url" in body
     assert client.get("/photos").status_code == 200

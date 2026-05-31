@@ -1,4 +1,6 @@
+import base64
 import io
+import math
 import os
 import re
 import threading
@@ -11,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -312,3 +314,94 @@ def assistant_openapi(request: Request):
 def assistant_unclassified(db: Session = Depends(get_db)):
     photos = db.query(Photo).options(*PHOTO_LOAD_OPTIONS).filter(Photo.photo_type.is_(None)).order_by(Photo.captured_at).all()
     return [_assistant_photo_out(p) for p in photos]
+
+
+_CONTACT_SHEET_MAX = 25
+_ROTATION_MAP = {90: Image.ROTATE_270, 180: Image.ROTATE_180, 270: Image.ROTATE_90}
+
+
+@router.get("/contact-sheet")
+def assistant_contact_sheet(
+    ids: str = Query(..., description="Comma-separated photo IDs, max 25"),
+    cell_size: int = Query(default=256, ge=64, le=512),
+    cols: Optional[int] = Query(default=None, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    """Return a labeled JPEG contact sheet for the given photo IDs.
+
+    Response JSON: {photo_ids, cols, rows, cell_size, image_data_url}
+    Cells are ordered left-to-right, top-to-bottom. Each cell is labeled with its photo ID.
+    Missing or unreadable photos render as a gray placeholder.
+    """
+    try:
+        photo_ids = [int(x.strip()) for x in ids.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=422, detail="ids must be comma-separated integers")
+    if not photo_ids:
+        raise HTTPException(status_code=422, detail="ids is required")
+    if len(photo_ids) > _CONTACT_SHEET_MAX:
+        raise HTTPException(status_code=422, detail=f"max {_CONTACT_SHEET_MAX} photos per contact sheet")
+
+    photos_by_id = {
+        p.id: p for p in db.query(Photo).filter(Photo.id.in_(photo_ids)).all()
+    }
+
+    n = len(photo_ids)
+    num_cols = cols if cols else max(1, math.ceil(math.sqrt(n)))
+    num_rows = math.ceil(n / num_cols)
+
+    sheet = Image.new("RGB", (num_cols * cell_size, num_rows * cell_size), color=(40, 40, 40))
+    draw = ImageDraw.Draw(sheet)
+    try:
+        font = ImageFont.load_default(size=max(12, cell_size // 16))
+    except TypeError:
+        font = ImageFont.load_default()
+
+    for idx, pid in enumerate(photo_ids):
+        col = idx % num_cols
+        row = idx // num_cols
+        ox, oy = col * cell_size, row * cell_size
+
+        photo = photos_by_id.get(pid)
+        cell_img = None
+        if photo:
+            file_path = Path(photo.storage_path).resolve()
+            if file_path.exists():
+                try:
+                    with Image.open(file_path) as src:
+                        src.load()
+                        img = src.copy()
+                    if photo.rotation and photo.rotation in _ROTATION_MAP:
+                        img = img.transpose(_ROTATION_MAP[photo.rotation])
+                    img.thumbnail((cell_size, cell_size))
+                    cell_img = img
+                except Exception:
+                    pass
+
+        if cell_img:
+            # centre the thumbnail within the cell
+            px = ox + (cell_size - cell_img.width) // 2
+            py = oy + (cell_size - cell_img.height) // 2
+            sheet.paste(cell_img, (px, py))
+        else:
+            draw.rectangle([ox + 4, oy + 4, ox + cell_size - 4, oy + cell_size - 4], outline=(80, 80, 80))
+            draw.text((ox + cell_size // 2, oy + cell_size // 2), "missing", fill=(120, 120, 120), font=font, anchor="mm")
+
+        # ID label — top-left corner with a dark background for readability
+        label = str(pid)
+        bbox = draw.textbbox((0, 0), label, font=font)
+        lw, lh = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        draw.rectangle([ox, oy, ox + lw + 6, oy + lh + 4], fill=(0, 0, 0))
+        draw.text((ox + 3, oy + 2), label, fill=(255, 255, 0), font=font)
+
+    buf = io.BytesIO()
+    sheet.save(buf, format="JPEG", quality=80)
+    image_data_url = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    return JSONResponse({
+        "photo_ids": photo_ids,
+        "cols": num_cols,
+        "rows": num_rows,
+        "cell_size": cell_size,
+        "image_data_url": image_data_url,
+    })
