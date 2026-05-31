@@ -24,7 +24,7 @@ import {
 } from './modal.js';
 import { handleLabelInput, handleLabelKeydown } from './labels.js';
 import { loadSensorStrip } from './sensors.js';
-import { initReview, reviewFocus, reviewResolve, reviewKeydown, reviewOpenPhoto, reviewEdit, reviewEditCancel, reviewAcceptEdited } from './review.js';
+import { initReview, reviewFocus, reviewResolve, reviewKeydown, reviewOpenPhoto, reviewEdit, reviewEditCancel, reviewAcceptEdited, reviewChoose } from './review.js';
 import {
   loadPhotos,
   applyFilter, clearFilter,
@@ -113,5 +113,5 @@ Object.assign(window, {
   toggleModalLogEvent, logModalEvent,
   switchTab,
   toggleSelectMode, selectAll, deleteSelected,
-  initReview, reviewFocus, reviewResolve, reviewOpenPhoto, reviewEdit, reviewEditCancel, reviewAcceptEdited,
+  initReview, reviewFocus, reviewResolve, reviewOpenPhoto, reviewEdit, reviewEditCancel, reviewAcceptEdited, reviewChoose,
 });

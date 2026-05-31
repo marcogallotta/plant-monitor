@@ -152,6 +152,7 @@ class PhotoAiSuggestion(Base):
     suggested_labels: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     confidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     question: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suggested_options: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     observation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     edited_plant_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("growing_units.id"), nullable=True)

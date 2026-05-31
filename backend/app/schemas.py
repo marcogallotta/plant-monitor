@@ -228,6 +228,7 @@ class SuggestionOut(BaseModel):
     suggested_labels: Optional[list] = None
     confidence: Optional[str] = None
     question: Optional[str] = None
+    suggested_options: Optional[list] = None
     observation: Optional[str] = None
     status: str
     created_at: datetime

@@ -48,6 +48,7 @@ def _suggestion_out(s: PhotoAiSuggestion, photo: Photo) -> SuggestionOut:
         suggested_labels=s.suggested_labels,
         confidence=s.confidence,
         question=s.question,
+        suggested_options=s.suggested_options,
         observation=s.observation,
         status=s.status,
         created_at=s.created_at,
@@ -175,7 +176,7 @@ def resolve_suggestion(
             db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=suggestion.suggested_plant_id))
     elif plant_name:
         normalised = plant_name.strip()
-        unit = db.query(GrowingUnit).filter_by(name=normalised).first()
+        unit = db.query(GrowingUnit).filter(GrowingUnit.name.ilike(normalised)).first()
         if not unit:
             unit = GrowingUnit(name=normalised)
             db.add(unit)

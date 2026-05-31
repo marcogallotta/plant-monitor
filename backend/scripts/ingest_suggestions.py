@@ -55,6 +55,9 @@ def _validate(row, idx: int) -> list[str]:
         errors.append(f"[{idx}] invalid status: {status!r}")
     if "suggested_labels" in row and row["suggested_labels"] is not None and not isinstance(row["suggested_labels"], list):
         errors.append(f"[{idx}] suggested_labels must be a list")
+    if "suggested_options" in row and row["suggested_options"] is not None:
+        if not isinstance(row["suggested_options"], list) or not all(isinstance(x, str) for x in row["suggested_options"]):
+            errors.append(f"[{idx}] suggested_options must be a list of strings")
     for coord in ("x", "y", "x2", "y2"):
         val = row.get(coord)
         if val is not None and not isinstance(val, (int, float)):
@@ -121,6 +124,7 @@ def ingest_rows(rows: list[dict], db) -> int:
             suggested_labels=row.get("suggested_labels"),
             confidence=row.get("confidence"),
             question=row.get("question"),
+            suggested_options=row.get("suggested_options"),
             observation=row.get("observation"),
             status=row.get("status", "pending"),
         ))

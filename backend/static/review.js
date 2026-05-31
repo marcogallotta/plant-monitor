@@ -1,3 +1,5 @@
+import { state } from './state.js';
+
 let suggestions = [];
 let currentIndex = 0;
 let editingIndex = null;
@@ -48,7 +50,8 @@ function render() {
     const actions = editing ? `
         <div class="review-edit-form" onclick="event.stopPropagation()">
           <label class="review-edit-label">Plant</label>
-          <input id="review-edit-plant-${i}" class="review-edit-input" type="text" value="${esc(s.suggested_plant_name || '')}" placeholder="plant name">
+          <input id="review-edit-plant-${i}" class="review-edit-input" type="text" list="review-units-list" value="${esc(s.suggested_plant_name || '')}" placeholder="plant name">
+          <datalist id="review-units-list">${(state.allUnits || []).map(u => `<option value="${esc(u.name)}">`).join('')}</datalist>
           <label class="review-edit-label">Type</label>
           <select id="review-edit-type-${i}" class="review-edit-input">
             <option value="">— none —</option>
@@ -62,13 +65,19 @@ function render() {
             <button class="review-btn-accept" onclick="reviewAcceptEdited(${i})">Accept</button>
             <button class="review-btn-cancel" onclick="reviewEditCancel()">Cancel</button>
           </div>
+        </div>` : (s.suggested_options && s.suggested_options.length ? `
+        <div class="review-actions review-actions-choice">
+          <span class="review-choice-label">Which is it?</span>
+          ${s.suggested_options.map((opt, oi) => `<button class="review-btn-choice" onclick="event.stopPropagation(); reviewChoose(${i}, ${oi})">${esc(opt)}</button>`).join('')}
+          <button class="review-btn-reject" onclick="event.stopPropagation(); reviewResolve('reject', ${i})" title="Reject (R)">Reject</button>
+          <button class="review-btn-delete" onclick="event.stopPropagation(); reviewResolve('deleted', ${i})" title="Delete photo (D)">Delete photo</button>
         </div>` : `
         <div class="review-actions">
           <button class="review-btn-accept" onclick="event.stopPropagation(); reviewResolve('accept', ${i})" title="Accept (A)">Accept</button>
           <button class="review-btn-edit" onclick="event.stopPropagation(); reviewEdit(${i})" title="Edit">Edit</button>
           <button class="review-btn-reject" onclick="event.stopPropagation(); reviewResolve('reject', ${i})" title="Reject (R)">Reject</button>
           <button class="review-btn-delete" onclick="event.stopPropagation(); reviewResolve('deleted', ${i})" title="Delete photo (D)">Delete photo</button>
-        </div>`;
+        </div>`);
 
     return `<div class="review-card${active ? ' active' : ''}" data-index="${i}" onclick="reviewFocus(${i})">
       <div class="review-photo-wrap" onclick="event.stopPropagation(); reviewOpenPhoto(${i})" style="cursor:zoom-in;">
@@ -113,6 +122,36 @@ export function reviewOpenPhoto(index) {
 export function reviewFocus(index) {
   currentIndex = index;
   render();
+}
+
+export async function reviewChoose(index, optionIndex) {
+  const plantName = suggestions[index]?.suggested_options?.[optionIndex];
+  if (!plantName) return;
+  if (resolving || suggestions.length === 0) return;
+  resolving = true;
+
+  const s = suggestions[index];
+  const status = document.getElementById('review-status');
+  status.textContent = '';
+
+  try {
+    const resp = await fetch(`/suggestions/${s.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'accept', edited_plant_name: plantName }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + resp.status);
+    }
+    suggestions.splice(index, 1);
+    if (currentIndex >= suggestions.length) currentIndex = Math.max(0, suggestions.length - 1);
+    render();
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    resolving = false;
+  }
 }
 
 export function reviewEdit(index) {
