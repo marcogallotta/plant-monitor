@@ -285,6 +285,36 @@ On top of that runs the actual goal:
   time from the consistent framing). This is the "how's it doing" axis extended to "is it
   pickable" — the live, recurring value that justifies Phase 1's registry work.
 
+### Pi as a ground-truth generator (the build-order flip)
+
+Fixed camera + pots mostly static + same viewpoint even when they shuffle ⇒ **per-shot delta
+is near-zero.** Consequences:
+
+- **One good human-verified reference frame anchors the whole stream.** Later frames inherit
+  identity by a trivial diff; the diff only lights up on genuine change (repot/new plant) →
+  re-register *that region*. Registration is one-time + self-maintaining, not per-photo.
+- **Every Pi frame is a labelled example** (identity is anchored, not guessed). Over weeks
+  this builds a per-species, per-stage **visual-prior corpus of the user's actual plants** —
+  the reference set Appendix A never had, and the dataset harvestability models train on.
+- **Build-order flip:** do the **Pi first as the truth source**; the messy non-Pi phone
+  backfill is cheaper *and more accurate* once that corpus exists (use confirmed examples as
+  priors). Caveats: overhead→oblique viewpoint transfer is partial (identity/texture carry
+  over, exact silhouette less so); the corpus is forward-looking, so it best serves
+  current/persistent plants.
+- **The whole-scene frame yields comparative features** unavailable in isolated shots: with
+  every plant in one frame at one scale/time, *relative* cues disambiguate look-alikes —
+  lemongrass **sparse** vs garlic chives **dense** (resolves the grassy-clump confusion), Thai
+  basil small, cilantro = the tiny seedlings. These are time-dependent (the growth track
+  updates them) but the snapshot captures the current comparative state. Isolated phone
+  closeups can't provide this — no shared scale/reference.
+- **Growth is *measured*, not inferred.** Don't ask the model to be "clever" about how much a
+  plant grew between a shot and the reference (implicit visual reasoning is the flaky path we
+  watched fail). The fixed frame makes a region's area/coverage directly comparable over time,
+  so growth is a measured number; a simple per-species expected-vs-actual curve then drives
+  both anomaly flags (lagging = stunting/stress, racing = vigour) and harvestability (ready at
+  a coverage threshold). The model's role stays *interpretation* (e.g. "looks leggy/stressed")
+  — a soft overlay on the hard measurement.
+
 ---
 
 ## DB schema
