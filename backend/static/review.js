@@ -118,18 +118,32 @@ export async function reviewResolve(action, index = currentIndex) {
   }
 }
 
+function isTypingTarget(el) {
+  return el && (
+    el.tagName === 'INPUT' ||
+    el.tagName === 'TEXTAREA' ||
+    el.tagName === 'SELECT' ||
+    el.isContentEditable
+  );
+}
+
 export function reviewKeydown(e) {
   if (!document.getElementById('tab-review')?.classList.contains('active')) return;
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.key === 'a' || e.key === 'A') { e.preventDefault(); reviewResolve('accept'); }
-  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); reviewResolve('reject'); }
-  if (e.key === 'd' || e.key === 'D') { e.preventDefault(); reviewResolve('deleted'); }
-  if (e.key === 'ArrowDown' && suggestions.length) {
+  if (isTypingTarget(e.target)) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  const key = e.key.toLowerCase();
+
+  if (key === 'a') { e.preventDefault(); reviewResolve('accept'); }
+  if (key === 'r') { e.preventDefault(); reviewResolve('reject'); }
+  if (key === 'd') { e.preventDefault(); reviewResolve('deleted'); }
+
+  if (key === 'arrowdown' && suggestions.length) {
     e.preventDefault();
     currentIndex = Math.min(currentIndex + 1, suggestions.length - 1);
     render();
   }
-  if (e.key === 'ArrowUp' && suggestions.length) {
+  if (key === 'arrowup' && suggestions.length) {
     e.preventDefault();
     currentIndex = Math.max(currentIndex - 1, 0);
     render();
