@@ -144,12 +144,12 @@ export function reviewKeydown(e) {
   if (key === 'r') { e.preventDefault(); reviewResolve('reject'); }
   if (key === 'd') { e.preventDefault(); reviewResolve('deleted'); }
 
-  if (key === 'arrowdown' && suggestions.length) {
+  if ((key === 'arrowdown' || key === 'j') && suggestions.length) {
     e.preventDefault();
     currentIndex = Math.min(currentIndex + 1, suggestions.length - 1);
     render();
   }
-  if (key === 'arrowup' && suggestions.length) {
+  if ((key === 'arrowup' || key === 'k') && suggestions.length) {
     e.preventDefault();
     currentIndex = Math.max(currentIndex - 1, 0);
     render();

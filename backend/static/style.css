@@ -292,6 +292,8 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .review-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1.5rem; border-bottom: 1px solid #222; background: #161616; }
 .review-counter { font-size: 0.8rem; color: #888; flex: 1; }
 .review-reload { font-size: 0.75rem; padding: 0.2rem 0.6rem; }
+.review-keys { font-size: 0.72rem; color: #555; }
+.review-keys kbd { background: #222; border: 1px solid #333; border-radius: 3px; padding: 0 4px; font-size: 0.72rem; color: #888; }
 .review-container { display: flex; flex-direction: column; gap: 2px; padding: 0.5rem 1.5rem; }
 .review-empty { padding: 2rem; text-align: center; color: #555; font-size: 0.85rem; }
 
