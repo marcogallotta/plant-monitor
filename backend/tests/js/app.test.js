@@ -21,7 +21,7 @@ vi.mock('@/photos.js', () => ({
 }));
 
 vi.mock('@/modal.js', () => ({
-  openModal: vi.fn(), closeModal: vi.fn(), showModalPhoto: vi.fn(),
+  openModal: vi.fn(), closeModal: vi.fn(), showModalPhoto: vi.fn(), openModalForPhoto: vi.fn(),
   rotatePhoto: vi.fn(), identityUpdate: mockFn(),
   toggleModalLogEvent: vi.fn(), logModalEvent: mockFn(),
 }));

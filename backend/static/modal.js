@@ -9,12 +9,15 @@ import { loadPhotoSensorContext } from './sensors.js';
 export async function rotatePhoto(delta) {
   state.currentRotation = ((state.currentRotation + delta) % 360 + 360) % 360;
   resetZoom();
-  const photo = state.allPhotos[state.currentIndex];
-  photo.rotation = state.currentRotation;
-  const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
-  if (card) {
-    var img = card.querySelector('img');
-    if (img) img.src = orientedUrl(photo);
+  // only update gallery card when opened from the gallery
+  if (state.currentIndex >= 0) {
+    const photo = state.allPhotos[state.currentIndex];
+    photo.rotation = state.currentRotation;
+    const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
+    if (card) {
+      var img = card.querySelector('img');
+      if (img) img.src = orientedUrl(photo);
+    }
   }
   try {
     await updatePhoto(state.currentPhotoId, {rotation: state.currentRotation});
@@ -26,18 +29,30 @@ export function openModal(index) {
   document.getElementById('modal').classList.remove('hidden');
 }
 
+
 export function showModalPhoto(index) {
   state.currentIndex = index;
-  const p = state.allPhotos[index];
+  _showPhoto(state.allPhotos[index]);
+  document.getElementById('modal-prev').disabled = index === 0;
+  document.getElementById('modal-next').disabled = index === state.allPhotos.length - 1;
+}
+
+export function openModalForPhoto(photo) {
+  state.currentIndex = -1;
+  _showPhoto(photo);
+  document.getElementById('modal-prev').disabled = true;
+  document.getElementById('modal-next').disabled = true;
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function _showPhoto(p) {
   state.currentRotation = p.rotation || 0;
   resetZoom();
   noteCancel();
   state.currentPhotoId = p.id;
   document.getElementById('modal-img').src = p.url;
   document.getElementById('modal-caption').textContent =
-    formatDate(p.captured_at) + ' — ' + p.filename;
-  document.getElementById('modal-prev').disabled = index === 0;
-  document.getElementById('modal-next').disabled = index === state.allPhotos.length - 1;
+    p.filename ? formatDate(p.captured_at) + ' — ' + p.filename : formatDate(p.captured_at);
   showIdentityPanel(p);
   renderLabelSection(p);
   loadNotes();

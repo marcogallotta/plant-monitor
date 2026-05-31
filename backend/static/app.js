@@ -17,14 +17,14 @@ import { tlPrev, tlPlayPause, tlNext } from './timelapse.js';
 import { initUpload, submitManualUpload } from './upload.js';
 import { visualToStored } from './zoom.js';
 import {
-  openModal, closeModal, showModalPhoto,
+  openModal, closeModal, showModalPhoto, openModalForPhoto,
   rotatePhoto,
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
 } from './modal.js';
 import { handleLabelInput, handleLabelKeydown } from './labels.js';
 import { loadSensorStrip } from './sensors.js';
-import { initReview, reviewFocus, reviewResolve, reviewKeydown } from './review.js';
+import { initReview, reviewFocus, reviewResolve, reviewKeydown, reviewOpenPhoto } from './review.js';
 import {
   loadPhotos,
   applyFilter, clearFilter,
@@ -96,7 +96,7 @@ switchTab(new URLSearchParams(window.location.hash.slice(1)).get('tab') || local
 
 Object.assign(window, {
   applyFilter, clearFilter, loadMorePhotos,
-  openModal, closeModal, modalImgClick,
+  openModal, closeModal, openModalForPhoto, modalImgClick,
   modalPrev, modalNext,
   selectA, selectB,
   rotatePhoto, gridRotate, gridDelete,
@@ -113,5 +113,5 @@ Object.assign(window, {
   toggleModalLogEvent, logModalEvent,
   switchTab,
   toggleSelectMode, selectAll, deleteSelected,
-  initReview, reviewFocus, reviewResolve,
+  initReview, reviewFocus, reviewResolve, reviewOpenPhoto,
 });

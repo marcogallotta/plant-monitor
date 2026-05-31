@@ -31,6 +31,7 @@ def _suggestion_out(s: PhotoAiSuggestion, photo: Photo) -> SuggestionOut:
         photo_id=s.photo_id,
         photo_url=f"/photos/{photo.filename}",
         photo_captured_at=photo.captured_at,
+        photo_rotation=photo.rotation or 0,
         model=s.model,
         batch_hint=s.batch_hint,
         x=s.x,

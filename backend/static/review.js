@@ -51,7 +51,7 @@ function render() {
         </div>` : '';
 
     return `<div class="review-card${active ? ' active' : ''}" data-index="${i}" onclick="reviewFocus(${i})">
-      <div class="review-photo-wrap">
+      <div class="review-photo-wrap" onclick="event.stopPropagation(); reviewOpenPhoto(${i})" style="cursor:zoom-in;">
         <img src="${esc(s.photo_url)}" alt="" loading="lazy">
         ${region}
       </div>
@@ -82,6 +82,12 @@ function buildRegionOverlay(s) {
   const width  = Math.abs(s.x2 - s.x) * 100;
   const height = Math.abs(s.y2 - s.y) * 100;
   return `<div class="review-region" style="left:${left}%;top:${top}%;width:${width}%;height:${height}%;"></div>`;
+}
+
+export function reviewOpenPhoto(index) {
+  const s = suggestions[index];
+  if (!s) return;
+  window.openModalForPhoto({ id: s.photo_id, url: s.photo_url, captured_at: s.photo_captured_at, rotation: s.photo_rotation ?? 0 });
 }
 
 export function reviewFocus(index) {

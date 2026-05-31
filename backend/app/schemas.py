@@ -214,6 +214,7 @@ class SuggestionOut(BaseModel):
     photo_id: int
     photo_url: str
     photo_captured_at: datetime
+    photo_rotation: int = 0
     model: str
     batch_hint: Optional[str] = None
     x: Optional[float] = None
