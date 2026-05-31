@@ -17,7 +17,11 @@ for (const rotation of [90, 180, 270]) {
     expect(resp.status()).toBe(201);
     const { id: photoId } = await resp.json();
 
+    let galleryReady = page.waitForResponse(
+      r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+    );
     await page.goto('/');
+    await galleryReady;
     await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
     const modal = page.locator('#modal');
     await expect(modal).toBeVisible();
@@ -58,7 +62,11 @@ for (const rotation of [90, 180, 270]) {
     await assertPinAt(page, 0.3, 0.4);
 
     // Reload: rotation and note must survive a round-trip through the DB.
+    galleryReady = page.waitForResponse(
+      r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+    );
     await page.reload();
+    await galleryReady;
     await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
     await expect(modal).toBeVisible();
     await page.waitForFunction(() => {

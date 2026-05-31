@@ -16,7 +16,11 @@ async function uploadAndOpenModal(page, request, filename) {
   expect(resp.status()).toBe(201);
   const { id: photoId } = await resp.json();
 
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
   await page.goto('/');
+  await galleryReady;
   await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
   await expect(page.locator('#modal')).toBeVisible();
   await page.waitForFunction(() => {

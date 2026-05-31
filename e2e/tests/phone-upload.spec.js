@@ -27,13 +27,18 @@ test('phone upload: shows Choose photos, uploads appear in grid', async ({ page 
   await expect(page.locator('.sd-thumb-wrap')).toHaveCount(2);
   await expect(page.locator('.sd-thumb-wrap.selected')).toHaveCount(2);
 
-  // Upload
-  const [r1, r2] = await Promise.all([
-    page.waitForResponse(r => r.url().includes('/manual-photos') && r.request().method() === 'POST'),
-    page.waitForResponse(r => r.url().includes('/manual-photos') && r.request().method() === 'POST'),
-    page.locator('#sd-upload-btn').click(),
-  ]);
+  // Collect both upload responses via event listener — two waitForResponse calls
+  // with the same predicate would both resolve to the first matching response.
+  const uploadResponses = [];
+  page.on('response', r => {
+    if (r.url().includes('/manual-photos') && r.request().method() === 'POST')
+      uploadResponses.push(r);
+  });
 
+  await page.locator('#sd-upload-btn').click();
+  await expect.poll(() => uploadResponses.length, { timeout: 10_000 }).toBe(2);
+
+  const [r1, r2] = uploadResponses;
   expect(r1.status()).toBe(201);
   expect(r2.status()).toBe(201);
 

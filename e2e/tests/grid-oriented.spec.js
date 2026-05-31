@@ -19,7 +19,11 @@ test('rotating a grid photo re-points its thumbnail at the oriented URL', async 
   expect(resp.status()).toBe(201);
   const { id: photoId } = await resp.json();
 
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
   await page.goto('/');
+  await galleryReady;
   const card = page.locator(`.photo-card[data-id="${photoId}"]`);
   const img = card.locator('img');
   await img.waitFor();
@@ -29,11 +33,13 @@ test('rotating a grid photo re-points its thumbnail at the oriented URL', async 
 
   // Rotate clockwise once via the grid control; wait for the PUT to persist.
   await card.hover();
+  const rotBtn = card.locator('.card-rot button:last-child');
+  await expect(rotBtn).toBeVisible();
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().includes(`/photos/${photoId}`) && r.request().method() === 'PUT',
     ),
-    card.locator('.card-rot button:last-child').click(),
+    rotBtn.click(),
   ]);
 
   // The thumbnail (and therefore the native drag/open target) now uses the rotated variant.

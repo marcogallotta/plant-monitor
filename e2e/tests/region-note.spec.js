@@ -40,7 +40,11 @@ async function uploadAndOpenModal(page, request, filename) {
   expect(resp.status()).toBe(201);
   const { id: photoId } = await resp.json();
 
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
   await page.goto('/');
+  await galleryReady;
   await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
   await expect(page.locator('#modal')).toBeVisible();
   await page.waitForFunction(() => {
@@ -92,7 +96,11 @@ test('shift-drag creates region note at expected visual position and persists af
   await expect(page.locator('#modal .note-rect')).toHaveCount(1);
   await assertRectAt(page, 0.2, 0.2, 0.7, 0.65);
 
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
   await page.reload();
+  await galleryReady;
   await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
   await expect(page.locator('#modal')).toBeVisible();
   await page.waitForFunction(() => {

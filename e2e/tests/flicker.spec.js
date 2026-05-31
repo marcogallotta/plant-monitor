@@ -17,8 +17,16 @@ async function uploadPhoto(request, filename) {
   return (await resp.json()).id;
 }
 
-test('modal open, prev/next navigation, close', async ({ page }) => {
+async function gotoGallery(page) {
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
   await page.goto('/');
+  await galleryReady;
+}
+
+test('modal open, prev/next navigation, close', async ({ page }) => {
+  await gotoGallery(page);
 
   // Seeded photos are always present. Click whichever is first in the grid —
   // it has index 0, so prev must be disabled.
@@ -64,7 +72,7 @@ test('A/B select loads compare slots; toggle flicker switches label', async ({ p
     uploadPhoto(request, 'flicker-b.jpg'),
   ]);
 
-  await page.goto('/');
+  await gotoGallery(page);
 
   // Toggle and Auto are disabled until both slots are filled
   await expect(page.locator('#btn-toggle')).toBeDisabled();
