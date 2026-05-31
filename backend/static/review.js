@@ -1,5 +1,6 @@
 let suggestions = [];
 let currentIndex = 0;
+let editingIndex = null;
 let resolving = false;
 
 function esc(v) {
@@ -43,9 +44,28 @@ function render() {
     const labels = (s.suggested_labels || []).map(esc).join(', ');
     const hasRegion = [s.x, s.y, s.x2, s.y2].every(v => v != null);
     const region = hasRegion ? buildRegionOverlay(s) : '';
-    const actions = `
+    const editing = editingIndex === i;
+    const actions = editing ? `
+        <div class="review-edit-form" onclick="event.stopPropagation()">
+          <label class="review-edit-label">Plant</label>
+          <input id="review-edit-plant-${i}" class="review-edit-input" type="text" value="${esc(s.suggested_plant_name || '')}" placeholder="plant name">
+          <label class="review-edit-label">Type</label>
+          <select id="review-edit-type-${i}" class="review-edit-input">
+            <option value="">— none —</option>
+            ${['overview','closeup','incident','comparison','harvest','propagation','new_purchase','other'].map(t =>
+              `<option value="${t}"${s.suggested_photo_type === t ? ' selected' : ''}>${t}</option>`
+            ).join('')}
+          </select>
+          <label class="review-edit-label">Labels</label>
+          <input id="review-edit-labels-${i}" class="review-edit-input" type="text" value="${esc((s.suggested_labels || []).join(', '))}" placeholder="comma-separated">
+          <div class="review-edit-actions">
+            <button class="review-btn-accept" onclick="reviewAcceptEdited(${i})">Accept</button>
+            <button class="review-btn-cancel" onclick="reviewEditCancel()">Cancel</button>
+          </div>
+        </div>` : `
         <div class="review-actions">
           <button class="review-btn-accept" onclick="event.stopPropagation(); reviewResolve('accept', ${i})" title="Accept (A)">Accept</button>
+          <button class="review-btn-edit" onclick="event.stopPropagation(); reviewEdit(${i})" title="Edit">Edit</button>
           <button class="review-btn-reject" onclick="event.stopPropagation(); reviewResolve('reject', ${i})" title="Reject (R)">Reject</button>
           <button class="review-btn-delete" onclick="event.stopPropagation(); reviewResolve('deleted', ${i})" title="Delete photo (D)">Delete photo</button>
         </div>`;
@@ -93,6 +113,56 @@ export function reviewOpenPhoto(index) {
 export function reviewFocus(index) {
   currentIndex = index;
   render();
+}
+
+export function reviewEdit(index) {
+  editingIndex = index;
+  currentIndex = index;
+  render();
+}
+
+export function reviewEditCancel() {
+  editingIndex = null;
+  render();
+}
+
+export async function reviewAcceptEdited(index) {
+  if (resolving || suggestions.length === 0) return;
+  resolving = true;
+
+  const s = suggestions[index];
+  const status = document.getElementById('review-status');
+  status.textContent = '';
+
+  const plantName = document.getElementById(`review-edit-plant-${index}`)?.value.trim() || null;
+  const photoType = document.getElementById(`review-edit-type-${index}`)?.value || null;
+  const labelsRaw = document.getElementById(`review-edit-labels-${index}`)?.value || '';
+  const labels = labelsRaw.split(',').map(l => l.trim()).filter(Boolean);
+
+  try {
+    const resp = await fetch(`/suggestions/${s.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'accept',
+        edited_plant_name: plantName,
+        edited_photo_type: photoType,
+        edited_labels: labels,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || 'HTTP ' + resp.status);
+    }
+    editingIndex = null;
+    suggestions.splice(index, 1);
+    if (currentIndex >= suggestions.length) currentIndex = Math.max(0, suggestions.length - 1);
+    render();
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    resolving = false;
+  }
 }
 
 export async function reviewResolve(action, index = currentIndex) {

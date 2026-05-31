@@ -327,10 +327,19 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .review-question { font-size: 0.78rem; color: #fa8; background: #1e1600; border-left: 3px solid #a64; padding: 0.3rem 0.5rem; border-radius: 2px; }
 .review-hint   { font-size: 0.72rem; color: #555; font-style: italic; }
 
-.review-actions { display: flex; gap: 0.4rem; margin-top: auto; padding-top: 0.5rem; }
+.review-actions { display: flex; gap: 0.4rem; margin-top: auto; padding-top: 0.5rem; flex-wrap: wrap; }
 .review-btn-accept { background: #1a3a1a; border-color: #3a6a3a; color: #6c6; }
 .review-btn-accept:hover { background: #2a4a2a; border-color: #4a8; color: #8f8; }
+.review-btn-edit { background: #1a2a3a; border-color: #2a4a6a; color: #68a; }
+.review-btn-edit:hover { background: #2a3a4a; border-color: #4a6a8a; }
 .review-btn-reject { background: #2a2a1a; border-color: #5a5a2a; color: #aa8; }
 .review-btn-reject:hover { background: #3a3a1a; }
 .review-btn-delete { background: #2a0a0a; border-color: #6a2a2a; color: #f88; }
 .review-btn-delete:hover { background: #3a1010; border-color: #a33; }
+.review-btn-cancel { background: #222; border-color: #444; color: #888; }
+.review-btn-cancel:hover { background: #2a2a2a; }
+.review-edit-form { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.review-edit-label { font-size: 0.7rem; color: #666; margin-top: 0.2rem; }
+.review-edit-input { background: #111; border: 1px solid #333; border-radius: 3px; color: #ccc; font-size: 0.8rem; padding: 0.25rem 0.4rem; width: 100%; box-sizing: border-box; }
+.review-edit-input:focus { outline: none; border-color: #555; }
+.review-edit-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; }

@@ -19,6 +19,9 @@ VALID_ACTIONS = {"accept", "reject", "deleted"}
 
 class SuggestionResolve(BaseModel):
     action: str
+    edited_plant_name: Optional[str] = None
+    edited_photo_type: Optional[str] = None
+    edited_labels: Optional[list[str]] = None
 
 
 class IngestResponse(BaseModel):
@@ -150,21 +153,28 @@ def resolve_suggestion(
             created_at=now,
         )
 
-    # action == "accept"
-    if suggestion.suggested_photo_type:
-        photo.photo_type = suggestion.suggested_photo_type
+    # action == "accept" (with optional inline overrides)
+    plant_overridden = body.edited_plant_name is not None
+    type_overridden = body.edited_photo_type is not None
+    labels_overridden = body.edited_labels is not None
+    has_overrides = plant_overridden or type_overridden or labels_overridden
+
+    photo_type = body.edited_photo_type if type_overridden else suggestion.suggested_photo_type
+    if photo_type:
+        photo.photo_type = photo_type
 
     if suggestion.suggested_rotation is not None:
         photo.rotation = suggestion.suggested_rotation
 
-    if suggestion.suggested_plant_id:
+    plant_name = body.edited_plant_name if plant_overridden else suggestion.suggested_plant_name
+    if suggestion.suggested_plant_id and not plant_overridden:
         existing = db.query(PhotoGrowingUnit).filter_by(
             photo_id=photo.id, growing_unit_id=suggestion.suggested_plant_id
         ).first()
         if not existing:
             db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=suggestion.suggested_plant_id))
-    elif suggestion.suggested_plant_name:
-        normalised = suggestion.suggested_plant_name.strip()
+    elif plant_name:
+        normalised = plant_name.strip()
         unit = db.query(GrowingUnit).filter_by(name=normalised).first()
         if not unit:
             unit = GrowingUnit(name=normalised)
@@ -175,14 +185,22 @@ def resolve_suggestion(
         ).first()
         if not existing:
             db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=unit.id))
+        if plant_overridden:
+            suggestion.edited_plant_id = unit.id
 
-    for label_name in (suggestion.suggested_labels or []):
+    labels = body.edited_labels if labels_overridden else (suggestion.suggested_labels or [])
+    for label_name in labels:
         label = _find_or_create_label(label_name, db)
         existing = db.query(PhotoLabel).filter_by(photo_id=photo.id, label_id=label.id).first()
         if not existing:
             db.add(PhotoLabel(photo_id=photo.id, label_id=label.id))
 
-    suggestion.status = "accepted"
+    if type_overridden:
+        suggestion.edited_photo_type = body.edited_photo_type
+    if labels_overridden:
+        suggestion.edited_labels = body.edited_labels
+
+    suggestion.status = "edited" if has_overrides else "accepted"
     suggestion.reviewed_at = now
     db.commit()
     db.refresh(suggestion)

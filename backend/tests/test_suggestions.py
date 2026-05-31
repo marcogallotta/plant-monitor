@@ -182,6 +182,50 @@ def test_resolve_accept_marks_suggestion(client, db_session):
     assert s.reviewed_at is not None
 
 
+def test_resolve_accept_with_overrides_marks_edited(client, db_session):
+    photo = _photo(db_session)
+    s = _suggestion(db_session, photo.id, suggested_plant_name="Dill", suggested_photo_type="overview", suggested_labels=["wilting"])
+    resp = client.patch(f"/suggestions/{s.id}", json={
+        "action": "accept",
+        "edited_plant_name": "Mint",
+        "edited_photo_type": "health_check",
+        "edited_labels": ["new_growth"],
+    })
+    assert resp.status_code == 200
+    db_session.refresh(s)
+    assert s.status == "edited"
+    assert s.reviewed_at is not None
+    unit = db_session.query(GrowingUnit).filter_by(name="Mint").first()
+    assert unit is not None
+    assert s.edited_plant_id == unit.id
+    assert s.edited_photo_type == "health_check"
+    assert s.edited_labels == ["new_growth"]
+    db_session.refresh(photo)
+    assert photo.photo_type == "health_check"
+
+
+def test_resolve_accept_without_overrides_marks_accepted(client, db_session):
+    photo = _photo(db_session)
+    s = _suggestion(db_session, photo.id, suggested_plant_name="Dill")
+    resp = client.patch(f"/suggestions/{s.id}", json={"action": "accept"})
+    assert resp.status_code == 200
+    db_session.refresh(s)
+    assert s.status == "accepted"
+    assert s.edited_plant_id is None
+    assert s.edited_photo_type is None
+    assert s.edited_labels is None
+
+
+def test_resolve_accept_only_labels_overridden_does_not_set_edited_plant_id(client, db_session):
+    photo = _photo(db_session)
+    s = _suggestion(db_session, photo.id, suggested_plant_name="Dill", suggested_labels=["wilting"])
+    client.patch(f"/suggestions/{s.id}", json={"action": "accept", "edited_labels": ["new_growth"]})
+    db_session.refresh(s)
+    assert s.status == "edited"
+    assert s.edited_plant_id is None
+    assert s.edited_labels == ["new_growth"]
+
+
 def test_resolve_deleted_removes_photo(client, db_session):
     photo = _photo(db_session)
     s = _suggestion(db_session, photo.id)
