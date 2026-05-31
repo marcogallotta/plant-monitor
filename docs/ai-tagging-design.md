@@ -1,402 +1,228 @@
-# AI-Assisted Tagging & Capture Queue — Design Doc
+# AI-Assisted Tagging — Design & Handoff
 
-_Date: 2026-05-29_
-_Status: Draft_
-
----
-
-## Context
-
-This doc covers two sequential features:
-
-1. **Claude-assisted tagging**: unclassified photos → Claude suggestions → human review → DB write. Build now.
-2. **Capture queue**: gap detection → "what to photograph next" → Pi acts on it. Build before Pi arrives (Pi Zero 2W arriving Mon/Tue).
-
-Both live in the web UI. Neither writes final data without human confirmation.
-
-Note: `growing_units`, `photo_labels`, and `photo_type` are already in the DB.
+_Status: active. Last restructured 2026-05-31._
 
 ---
 
-## What the trial run taught us
+## How to use this doc (read first)
 
-Before describing the design, here's what the human-Claude tagging loop looked like in practice (May 2026 session):
+This is the handoff surface for any Claude picking up AI tagging. Orientation:
 
-| Photo | Claude's read | Reality | Why it failed |
-|---|---|---|---|
-| Lemongrass (ID 5) | Garlic chives | Lemongrass | Visually similar at this angle. Species ID needs known-plant list + close-up |
-| Dill pre-aphid (ID 67) | Healthy dill on counter | Floppy dill, early aphid stress | No targeted "is it drooping?" prompt. Generic description missed it |
-| Garlic chives bundle (ID 69) | Harvested leaves | New plant arrival | No context that this was delivery day |
-| Thyme in flower (ID 4) | Thyme | Lemon thyme, stress-flowering | Variety and stress history both invisible without metadata |
+1. **Read "Current approach" — the authoritative, live plan**, including "Confusable rules &
+   heuristics" (the classification cheat-sheet). It is what to *do today*. Where it conflicts
+   with anything in the Appendix, this section wins.
+2. **Verify state against the live DB.** Known plants / container bindings are in
+   `growing_units` (source of truth), not prose — query `GET /assistant/growing-units` and
+   reason by capture date; any plant list in this doc is a stale hint.
+3. **The Appendices are evidence/bootstrap, not instructions.** Appendix A = the confirmed
+   few-shot example pool (bootstrap for reference sheets; migrate to a live
+   `photo_ai_suggestions` query when built). Appendix B = dated session logs (why the
+   decisions were reached); don't act on a superseded log over the head.
 
-**Key lessons:**
-
-- **Timestamp proximity is a strong signal.** Photos taken within 60 seconds of each other are almost certainly the same subject or event. Photos from the same 10-minute window are the same session. This should influence how the batch is assembled and what context Claude receives.
-- **Targeted prompts beat generic ones.** "Is the plant standing upright or drooping?" catches floppy-dill stress. "Look for insect clusters on stems" catches aphids. A generic prompt would not have flagged either.
-- **Delivery-day context unlocks plant association.** If the batch hint says "new deliveries", a bundle of leaves reads as new_purchase, not harvest.
-- **Variety information is invisible from photos alone.** Lemon thyme vs. thyme, peppermint vs. spearmint — Claude cannot distinguish these without being told the known plant list including varieties.
-
----
-
-## What the bulk backfill taught us (≈2,600-photo triage, May 2026)
-
-A one-off backfill of the phone camera roll (2,626 JPEGs) was triaged into the DB. Method: downscale to 160px thumbnails, pack 25 per 5×5 **contact sheet**, and have Claude judge whole sheets at once for a binary **keep / discard** ("is this a monitoring photo of one of my plants?"). This is the cheap **pre-filter gate** that should run _before_ the per-photo species/condition tagging described below. Result: 2,626 → 891 phone keepers (956 total with manual/sd).
-
-**This is a separate, earlier stage than the tagging loop above.** Tagging assumes the photo is already a legitimate plant photo. The backfill showed that assumption doesn't hold for a raw camera roll — roughly **half** of it is not monitoring material at all, and that junk must be filtered first or it pollutes the suggestion queue.
-
-### The keep/discard rule (learned by correction)
-
-The bar is **narrower than "gardening-related."** Keep only if an **actual living plant of the user's own** is in frame — in a pot/planter/tray, including seedlings, wilted, dying, ugly. Discard, even when green or garden-adjacent:
-
-- Bare soil / potting mix / sand / substrate close-ups with no visible plant
-- Empty pots, saucers, drainage trays, stacked planters
-- Garden-product packaging (fertiliser/pesticide bottles, soil bags, seed boxes)
-- Store / nursery displays: seed-packet racks, plants-for-sale shelves
-- Store-bought / bagged herbs with price tags; harvested herbs being washed, weighed, bundled, or on a cutting board
-- Cooking / food; kitchen scraps (onion/ginger) sprouting in a pan
-- Screens, thermostats, documents
-
-### Calibration numbers (useful for setting auto-filter thresholds)
-
-- **False-keep rate ≈30%** in the first two human-reviewed batches before the rule tightened. The single biggest miscalibration: treating "contains a plant or gardening context" as keep. Requiring an actual living plant would have caught ~1/3 of the over-keeps.
-- An aggressive automated discard pass then had a **false-reject rate ≈8%** — genuine potted seedlings wrongly discarded. So an automated gate should **bias toward keep on ambiguous soil/tray shots** and surface them for a cheap human glance rather than hard-deleting.
-
-### Confusable categories a classifier must handle
-
-These are the boundaries that produced nearly all the errors at thumbnail scale:
-
-- **Grains / oats / flour / sawdust vs. soil** — visually identical at 160px; the food versions are the trap.
-- **Sparse seedling tray vs. bare-soil tray** — a freshly-sown cell tray reads as "empty soil." Bias keep.
-- **Lemongrass / leek / spring-onion stalks** — harvested-on-a-board (discard) vs. growing-in-a-pot (keep) vs. rooting-in-water for propagation (keep).
-- **Sprouting kitchen scraps vs. propagation** — onion bottoms in a glass (discard) look like a deliberate cutting (keep).
-- **Jars of yellowish liquid** — recurring false-keep (assumed propagation/rooting in water); at least one was not horticultural at all. Default discard unless a plant/cutting is clearly visible in the jar.
-
-**Implication for the pipeline:** add a cheap binary keep/discard gate (thumbnail-grid batching keeps the token cost near-free) ahead of the expensive per-photo tagging. Photos that fail the gate never reach `photo_ai_suggestions`. Ambiguous gate results get a lightweight "confirm import" review, distinct from the richer tagging review.
+**Source-of-truth split:** this doc = durable *mechanism + decisions + classification
+cheat-sheet*. `growing_units` (DB) = live plant/container *state*. `photo_ai_suggestions`
+(DB) = raw per-photo verdicts (Tier 2). _(The former `tagging-calibration.md` is merged into
+this doc as of 2026-05-31.)_
 
 ---
 
-## Session findings — first live ingest run (2026-05-31)
+## Current approach (authoritative)
 
-A full end-to-end run of the ingest pipeline: 7 batches × 6 photos = 42 suggestions
-ingested, reviewed, and resolved via the dashboard review tab.
+### Goal & constraint
 
-### What worked
+Triage ~1000 unclassified photos into the DB with human-in-the-loop confirmation. **Hard
+constraint: the producer is a Claude Code session on a Max $100 plan** — every read burns
+the user's capped allowance (not a per-token API bill). Optimise for *throughput within a
+fixed budget*, not perfect classification. Do not build infrastructure before the cheap
+pass is validated.
 
-- **Contact sheet endpoint is the right primitive.** `GET /assistant/contact-sheet?ids=…`
-  packs thumbnails into a JPEG grid that Claude reads in a single turn. 256px cells in a
-  3×2 grid (768×512) is the practical sweet spot for species ID — enough detail to
-  distinguish dill from cilantro, mint texture, basil leaf shape. Above 3×3 the per-cell
-  resolution starts to hurt accuracy on ambiguous cases.
-- **`suggested_options` choice buttons work well.** Surfacing 2–3 candidates instead of
-  a single guess + question produced faster human resolution. The confusable-binary
-  mechanism validated again: mint disambiguation (Peppermint / Moroccan Mint / Spearmint),
-  basil (Genovese / Thai), Welsh onion vs garlic chives — all resolved correctly by the
-  human picking from the offered set.
-- **Unit vocabulary grows fast.** 8 new `growing_units` created in one session (Lemon
-  Thyme, Spearmint, Moroccan Mint, Peppermint, Thai basil, Genovese basil, Welsh onion,
-  Parsley). Cold-start is genuinely a vocabulary-building exercise.
-- **Ingest script + DB reset workflow is practical.** Accidental rejections were fixed
-  directly via SQL; the ingest script (stdin mode) is convenient for iterative runs.
-
-### What did not work — prior wiring
-
-The "priors active" batches were **not meaningfully better** than cold-start. Root cause:
-the known-unit list (richer names) was used, but no confirmed photo thumbnails were shown
-as visual anchors. The design doc's Tier 2 mechanism requires _visual_ few-shot examples
-— "this is what confirmed Moroccan Mint looks like" — not just a name list. Claude cannot
-carry images across turns, so prior thumbnails must be included _in the same turn_ as the
-new batch.
-
-**Implication:** the "reference sheet + batch sheet in one turn" approach (two images shown
-together) is the correct implementation of visual priors, not a richer unit list alone.
-Until that is built, every batch is effectively cold-start on species ID.
-
-### Practical cell/batch sizes
-
-| Use case | Cell size | Grid | Notes |
-|---|---|---|---|
-| Keep/discard gate | 160px | 5×5 (25) | Binary judgment, fine detail not needed |
-| Species tagging | 256px | 3×2 (6) | Detail needed for leaf shape, texture |
-| Species tagging (reference sheet) | 256px | up to 3×3 | Reference + new batch shown in same turn |
-
-### Next step for prior wiring
-
-Before each tagging turn: build a reference contact sheet of 1–2 confirmed photos per
-confusable species (pulled from accepted/edited `photo_ai_suggestions`), show it first,
-then show the new batch — both in the same Claude turn. The session sees both images and
-can cross-reference visually.
-
----
-
-## Session findings & decisions (2026-05-30)
-
-A short research session ran Claude (the Claude Code session itself, reading photos
-off disk — see decision 2) over a 6-photo sample spread across the 957-photo set,
-to test cold-start suggestion quality. Decisions and findings below **supersede the
-original design where they conflict** — the sections further down predate them.
-
-### Decisions
-
-1. **No keep/discard gate.** The Pi only ever produces overhead balcony shots, which
-   are by definition monitoring photos of the user's plants. The gate existed solely
-   to clean the one-time 2,626-photo phone camera-roll backfill, which is done.
-   _Caveat:_ this holds for the **Pi pipeline only**. Batch-tagging `manual`/`phone`
-   source photos again would reintroduce junk and need the gate.
-
-2. **Claude Code is the producer, never the Anthropic API.** The backend does not call
-   Claude. A Claude Code session reads photos and emits suggestion JSON; the backend's
-   only jobs are (a) serve the unclassified list + known units/labels, and (b) ingest
-   the JSON into `photo_ai_suggestions`. _Why:_ no API key, no SDK dependency, no
-   per-call cost, no rate limits. This **removes the `/assistant/ai-suggestions/batch`
-   (sync, Claude API) endpoint** from the design and replaces it with a thin ingest
-   path. The earlier "async via shell script" preference falls out naturally: the
-   script just ingests a JSON file the session produced. Build shrinks to **ingest +
-   review UI**.
-
-3. **Cold start is vocabulary-building, not accuracy.** With most units/labels not yet
-   existing, `suggested_plant_id` is null on a cold batch and the value is in
-   `suggested_plant_name` (free text) + `question`. The first batches teach the
-   taxonomy (and create units/labels on accept); quality climbs as the known-list and
-   confirmed-neighbour signals fill in. Expect batch 1 to be messy and convergent.
-
-4. **Batch hints are per-group, not per-photo or per-batch.** A single hint per batch
-   is too coarse; per-photo is too tedious. Submit flow: select photos → split into
-   groups → one hint per group. No schema change (hint already stored per row).
-
-### Findings from the 6-photo calibration
-
-Scoreboard vs. ground truth: photos 2 (Thai basil), 3 (dill), 4 (lemongrass — my
-binary question held the answer), and the sage pot in 5 were **correct**. Photos 1, 5,
-6 were a **structural miss** (see below).
-
-- **Known list value is real but bounded.** It confirms mature/distinctive plants
-  (dill, sage, Thai basil) and turns confusables into a clean binary that held the
-  right answer (lemongrass vs rau ram → lemongrass). It does **nothing** for early
-  seedlings.
-- **Adding a species (fenugreek) expands the candidate set but does not lift seedling
-  confidence.** The bottleneck is leaf-stage resolution, not list coverage.
-- **Headline: one photo contains multiple species, arranged spatially.** Photo 1 =
-  peppermint (pot) + fenugreek + rocket/cilantro (one trough, split) + parsley/dill
-  (another trough, split). Photo 5 = sage pot + parsley/dill + rocket/cilantro. Photo
-  6 = parsley (top 6 cells) + genovese basil (bottom 6). **The one-photo → one-
-  suggestion model is wrong for this dataset.** The unit of tagging is a *region within
-  a photo*. No model cleverness recovers "left third is rocket" from seedling pixels —
-  it must come from the human (layout hint or drawn region). The note system already
-  stores `x,y,x2,y2` rectangles; tagging should **reuse region rectangles to assign a
-  species per zone**, turning one photo into N suggestions.
-- **Context is unrecoverable from pixels.** Photo 4 being a *new nursery purchase* could
-  only come from a hint — validates batch hints.
-- **Date is a growth signal.** Capture date + a known sowing/registration date gives
-  the plant's age, and age predicts expected growth stage. This cuts both ways: (a) it
-  helps disambiguate seedlings — "12 days from sowing" rules in/out species by expected
-  size and leaf stage, narrowing what vision alone can't; and (b) running it forward,
-  a registered container's age predicts what a new photo *should* look like, so a photo
-  that lags (or races ahead of) the expected stage is itself a condition signal
-  (stunting, leggy stretch, vigorous growth). Feeds both the "what" axis (age as a prior
-  for species) and the "how's it doing" axis (actual vs. expected stage).
-
-### Round 2 — priors applied (second 6-photo sample)
-
-A second sample was read with the **batch-1 priors active**: the confirmed plant set
-(peppermint, Moroccan mint, fenugreek, rocket, cilantro, parsley, dill, sage, Thai &
-genovese basil, lemongrass, chives, rosemary, sorrel, rau ram, chilli…) and the
-expectation that one photo holds several species.
-
-Scoreboard vs. ground truth: confidently-named mature plants were right (lemongrass,
-rosemary, parsley, the basils, chives). Three confusable photos were posed as binary
-questions, and **all three brackets contained the true answer** — chives (vs Welsh
-onion/garlic chives), chilli (vs basil seedling), rau ram (vs sorrel). The misses were
-(a) peppermint-vs-Moroccan-mint species, and (b) undercounting secondary species at
-frame edges.
-
-- **The confusable-binary mechanism is validated.** When Claude can't decide, it poses
-  a tight question; the human picks. 3/3 of the offered sets contained the truth. The
-  metric that matters is **recall of the offered set**, not the model's own pick — keep
-  the question format, and bias it toward *including* a candidate rather than committing.
-- **Container shape/type carries species.** The same-looking mint is *peppermint in a
-  pot* vs *Moroccan mint in a trough*; the human disambiguates by container, not leaf.
-  So the container is not just "which unit" — it *is* part of the species identity. Once
-  the trough is registered as Moroccan mint, the mint ambiguity is gone — but only the
-  container→species binding persists, **not** where the trough sits (the user moves pots;
-  see the "what vs. how's it doing" reframe below).
-- **Delete must be a first-class review action.** One photo was a soil-moisture test
-  shot to bin — neither tag nor keep. Accept / Edit / Reject is insufficient; the review
-  UI needs **Delete**. (Also: even the `manual` source set contains non-plant test
-  shots, so "no gate" ≠ "no junk ever.")
-- **Zone undercounting is the consistent real miss.** Claude reliably names the dominant
-  plant(s) but drops secondary species at the frame edges. This is the multi-species /
-  region problem again, and the fix is region-level tagging + per-container layout, not
-  a better single-label guess.
-
-### Round 3 — priors applied (third sample), and two new signals
-
-Strongest round: the confusable-binary held a 4th/5th/6th time (peppermint vs Moroccan
-mint, rau ram vs bolted mint, parsley vs cilantro), and all mature basils were correct.
-The single miss was **stage/context, not species**: a pot of peppermint freshly moved
-from water to soil (a propagation transplant, stressed) was read as "seedlings." That
-distinction is not in the pixels — it's in the timeline.
-
-**Date is the missing primary signal (and it's load-bearing).** A capture date sitting
-just after a known propagation/sowing event resolves exactly the ambiguity vision can't:
-seedling vs transplant vs mature, and "is this read even plausible for this plant's age?"
-Implications:
-
-- The persistent inventory should be **time-indexed per unit**, not a flat list: sown /
-  propagated / purchased / died dates. A session aligns each photo's capture date against
-  the unit timeline to infer expected stage and flag implausible reads.
-- This is also the **staleness fix**: don't trust a static plant list — reason from photo
-  dates about what was alive and at what stage on that date.
-
-**Rotation as a suggestion (or auto-fix).** The `rotation` field (0/90/180/270) already
-exists in the DB and all write paths. A tagging pass should read with stored rotation
-applied, detect when upright orientation disagrees, and **emit a suggested rotation**
-alongside the species suggestion — auto-fix on high confidence, queue the rest. It also
-improves Claude's own reads on subsequent passes. Add an optional `suggested_rotation`
-to the suggestion schema.
-
-### State persistence between sessions (two-tier memory)
-
-Every future session starts cold (reads docs, nothing else), so persistence must target
-"what a cold session will reliably find and act on." Two tiers, different lifecycles:
-
-- **Tier 1 — distilled, always loaded.** A dedicated `docs/tagging-calibration.md`
-  (separate from this design doc — different churn rate). Holds: the known-plant
-  inventory **with varieties and dates** (time-indexed, per above); the confusable rules
-  learned by correction (peppermint=pot/Moroccan mint=trough; fine grassy allium → ask
-  chives/Welsh onion/garlic chives; lobed apiaceae seedling → parsley vs cilantro;
-  reddish-node stem cutting → lemongrass vs rau ram); and meta-heuristics (offer binary
-  questions — they bracket the truth; vision reliable on mature/distinctive, useless on
-  seedlings; watch frame edges for undercounted zones; keep "unknown" open rather than
-  forcing a wrong binary; species errors are rare, stage/context errors are the live
-  failure mode).
-- **Tier 2 — raw, queried on demand.** The `photo_ai_suggestions` table itself: every
-  `(photo → suggestion → confidence → human verdict/correction)` triple. This is already
-  the design — the human correction is the training label. It enables (a) **few-shot
-  priming** (about to tag mints → pull past confirmed mint photos as visual examples) and
-  (b) **confidence calibration** (track stated confidence vs correctness → auto-accept
-  high-confidence, only surface medium/low — the thing that makes 1,000 photos tractable).
-
-**Bridge:** a recurring **distillation step** — after a tagging session, review the last
-N corrections and propose updates to Tier 1. Tier 2 grows unboundedly and can't be read
-whole; Tier 1 stays compact and is what loads cold, refreshed from the data.
-
-**Caveat:** Tier 1 prose goes stale (plants die, new purchases, pots move). Treat the
-doc's list as a hint; the DB (`growing_units`, time-indexed) is the source of truth.
-Verify Tier 1 against live data — by date — before trusting it.
-
-### The reframe: "what" vs. "how's it doing"
-
-Two things were tangled together in the original design; they have **different
-persistence**, and that distinction is the whole point:
-
-- **Container → species binding: persistent.** "This specific trough *is* Moroccan
-  mint", "that pot *is* peppermint." Holds until the container is repotted/resown. The
-  pot carries its plant wherever it goes. This is the durable asset (a `growing_unit`),
-  and it's what fixes the seedling case — register it at sowing, when the human knows
-  what went in, and vision never has to ID a cotyledon.
-- **Spatial layout: ephemeral.** Where pots sit, and where they land in a photo,
-  **changes constantly because the user moves pots around.** A layout is therefore only
-  as persistent as a *hint* — valid for the session it was captured in, not a registered
-  fact. **Do not persist layouts.**
-
-So the two axes are:
-
-- **"What is it?" — persistent per container, ephemeral per position.** Species is a
-  stable property of the *container*, not of a screen location. Knowing the species is a
-  lookup *once you know which container you're looking at* — and that mapping is the hard,
-  non-persistent part.
-- **"How's it doing?" — dynamic.** Wilting, aphids, new growth, flowering. Visible per
-  photo; what each new photo genuinely adds, and where Claude stays useful.
-
-The catch: **position ≠ identity.** Because pots move, the Pi's fixed overhead mount
-gives consistent *framing* but does **not** tell you which container is which — an
-earlier draft of this doc claimed it did; that was wrong. Identifying the container in a
-given photo needs either visual recognition (hard: identical terracotta troughs) or a
-per-session human link (hint-level). Container→species invalidates only on repot/resow/
-harvest events; the photo→container mapping is re-established every session.
-
-_Implied schema direction:_ the durable record is `growing_unit` (container → species),
-**not** a stored layout. `photo_ai_suggestions` rows gain an optional bounding box so a
-photo can carry several region-level suggestions, and each region is linked to a
-`growing_unit` per-photo (ephemeral), not via a persisted layout.
-
----
-
-## Claude-assisted tagging
-
-### Flow (current)
+### Pipeline shape
 
 ```
-Unclassified photos (+ optional per-group hint, known plants, calibration state)
-  → A Claude Code session reads them and emits suggestion JSON (region-level)
-  → Ingest writes rows to photo_ai_suggestions   [ingest = script or endpoint, see below]
-  → Review UI shows each suggestion alongside its photo/region
-  → Human: Accept / Edit / Reject / Delete   (Accept may create a growing_unit/label)
-  → Confirmed values move to photos, photo_growing_units, photo_labels
+prepare batch → Claude Code reads sheet(s) + emits suggestion JSON
+  → ingest JSON into photo_ai_suggestions → human review → repeat
 ```
 
-Claude never writes the final tables directly — only `photo_ai_suggestions`; human
-review moves values across.
+Claude never writes final tables. Ingest is the simplest thing that works (script or thin
+endpoint — both exist; see Build status). The backend makes **no Claude API calls**.
 
-**Producer & ingest are not (necessarily) an API.** The producer is a Claude Code
-session, not a backend Claude call. Ingest can be the simplest thing that works — a
-script writing rows directly to the DB — so **don't assume an HTTP API**. If on-demand
-runs are wanted later, a thin endpoint is one option, not a requirement. Decide when
-building, not now.
+### The unit of work is a track, not a photo
 
-> Batch hints, temporal context, and the structured-response shape below are unchanged
-> from the original draft and still apply.
+Don't classify 1000 cold photos. Classify **tracks**: a container's photos ordered over
+time. One identity decision per track, and the growth trajectory both (a) resolves the
+seedling/stage ambiguity that pixels and static date cannot, and (b) *is* the "how's it
+doing" monitoring signal (growth rate, stress onset, recovery). Same sequence answers both
+"what is it" and "how's it doing."
 
-### Batch hints
+**Dependency — but NOT a blocker for the bulk run.** A *cross-week* track requires the
+photo→container mapping threaded across time, which needs container identity — the hard,
+non-persistent part (pots move; identical troughs; position ≠ identity). **Do not block the
+first 1000 on solving this.** For the bulk run, simulate threading with **per-session
+hints** ("herb shelf; Moroccan mint in the trough, peppermint in the pot"). Within a
+session, threading is trivial (adjacent shots, same subject), so sequence + age inference
+work *within* each session for free. True cross-week threading (per-session human link vs.
+visual recognition) is a later problem; deferring it only defers cross-week date-inference,
+not the ingest.
 
-The hint input is the key feature. Without it, Claude guesses blind. With it, accuracy jumps dramatically.
+### Batching: time-chunked sessions, with stacked context
 
-Examples:
-- `"These are from delivery day — probably rau ram and sorrel arriving"`
-- `"Balcony session, mostly herbs on the shelf"`
-- `"Repotting session — expect root balls and disturbed soil"`
-- `"Check for stress — I was away for a week"`
+Group photos by **capture-time gaps** (same 10–15 min window = same session = same plants,
+light, day). Feed a session together so the model cross-references — the clearest shot
+anchors the ambiguous neighbours.
 
-Hint is stored with each suggestion row so the reasoning is auditable.
+The priors **compound**, and this is the core insight:
 
-### Temporal context Claude receives
+- **Time-chunk** → batch shares subjects, lighting, day.
+- **Date + unit timeline** → "shot May 20, unit sown Mar 1 ≈ 80 days = mature" collapses
+  stage ambiguity *before* looking at a leaf. **Date is a first-class input** (derived by
+  inference — see "Date is wired in by inference" below).
+- **Sequence** → later identifiable frames back-propagate identity to early seedling frames.
+- **Reference sheet** → anchors cross-session confusables (the two mints, etc.).
+- **Within-batch anchoring** → clean neighbour pins the species for blurry ones.
 
-For each photo, the prompt includes:
-- Thumbnail (base64, 256px — already served by `/assistant/photos/{id}/vision-context`)
-- Batch hint (if set)
-- Photos captured within ±5 minutes: their IDs, timestamps, and any already-confirmed plant associations
-- Known growing units list (names, types, varieties)
-- Existing labels on this photo (if any)
+**Consequence — context compensates for resolution.** When the model has session + age +
+sequence + look-alike anchors, it is not guessing from leaf pixels alone, so it tolerates
+*lower* per-cell resolution. That loosens batch size: bigger batches become viable because
+the other (free) priors carry the load resolution used to. "Keep it to 6 cells" was a
+pixels-only rule and does not bind once context is stacked.
 
-This means if photo A in a burst is confidently identified as sorrel, photo B taken 30 seconds later gets that as a strong prior.
+**Pick the batch size empirically.** Bounded above by (a) output length — a turn can only
+emit so many reliable JSON rows — and (b) attention decay across a long image set. Find the
+sweet spot in the calibration run (try 256px sheets at 6 / 12 / 20 per batch *with* dates +
+ref + session grouping on the first ~60–100 photos; scale with whatever holds accuracy).
 
-### Claude's structured response
+### Resolution & model (the budget decisions)
 
-```json
-{
-  "suggested_plant_id": 12,
-  "suggested_plant_name": "Sorrel",
-  "confidence": "high",
-  "suggested_photo_type": "health_check",
-  "suggested_labels": ["delivery_stress", "wilting"],
-  "question": null,
-  "observation": "Plant is dramatically drooping over pot sides, reddish stems, consistent with transplant shock."
-}
-```
+- **One pass, 256px contact sheets, on a cheap model (Sonnet; Haiku for obvious repeats).**
+- **No mass 1024px escalation pass.** 1000×1024 ≈ 1.2M image tokens (`(w*h)/750`,
+  ~1,200/photo) would torch the weekly Max allowance. 256px ≈ 87 tokens/photo → ~87k for
+  all 1000 (~14× cheaper). Reserve Opus, if at all, for a tiny hand-picked confusable set.
+- **Gate on confusable-class membership, NOT stated confidence.** At 256px, confidence is
+  *anti-calibrated* on look-alikes — in the A/B test both "high"-confidence 256px calls were
+  wrong (chilli→basil, Moroccan→peppermint). "High confidence on a confusable" is a red
+  flag. Auto-accept only distinctive/mature plants outside the confusable classes.
+- **Confusables → fix by hand** in the review tab (a handful per batch, not 1000).
+- **Seedling-stage cases → route to date/sequence**, not resolution. Resolution does not
+  fix them (chilli-vs-basil seedling stayed wrong even at 1024px); the time sequence does.
 
-When `confidence` is `"low"`, `question` is populated:
-```json
-{
-  "suggested_plant_id": null,
-  "confidence": "low",
-  "question": "The long flat leaves resemble either lemongrass or garlic chives. Which is registered on this balcony?",
-  "observation": "Cannot distinguish without knowing the known-plant list variants."
-}
-```
+### Reference sheet (cheap, keep it)
 
-Questions are shown in the dashboard review UI and the user can answer inline, which re-runs the suggestion for that photo.
+Show **one reference sheet per batch**, amortised: ~9 confirmed examples at 256px (3×3 ≈ 786
+tokens) ÷ ~10 photos ≈ 79 tokens/photo. For all 1000 that's ~87k → ~166k total — trivial on
+the plan. Rules:
 
-### DB schema
+- **Target the confusable classes only** (two mints, allium clump, parsley/cilantro,
+  basil/chilli, rau ram/sorrel). A sheet of distinctive plants is wasted tokens.
+- Source examples from **Appendix A** (confirmed few-shot pool).
+- Show **ref sheet + batch sheet in the same turn** (Claude can't carry images across
+  turns). Keep the *batch* sheet's cells legible; the ref sheet can be denser (it's an
+  anchor, not judged).
+- Honest limit: lifts species ID (already the strong axis). Does nothing for seedling-stage
+  or zone-undercounting — those need date/sequence and region tagging respectively.
+
+### Confusable rules & heuristics (classification cheat-sheet)
+
+Merged from the former `tagging-calibration.md`; learned by correction. When you hit a
+confusable, **emit a tight `suggested_options` set rather than committing** — the offered set
+has reliably bracketed the truth (every binary held across calibration rounds). Keep
+"unknown" open; never force a plausible-but-wrong pick. Disambiguate look-alikes by
+**container**, not position.
+
+| Looks like | Offer | Resolved by |
+|---|---|---|
+| Same-looking mint | peppermint / Moroccan mint / **spearmint** | container (peppermint=pot, Moroccan=trough); spearmint = the 3rd mint the old binary missed |
+| Fine grassy allium clump | chives / Welsh onion / garlic chives | near-identical as clumps |
+| Lobed apiaceae seedling | parsley / cilantro | date / sequence |
+| Reddish-node stem cuttings | lemongrass / rau ram | both propagate this way |
+| Broad oval-leaf seedling | basil / chilli | date-from-sowing (resolution does NOT fix it) |
+| Sprawling reddish stems, poor condition | rau ram | rau ram reddens/sprawls under stress |
+
+**Heuristics:**
+- **Offer binary/n-ary options — they bracket the truth.** Recall of the offered set is the
+  metric, not the model's own pick.
+- **Species is the easy part.** Vision is reliable on mature/distinctive plants. The live
+  failure modes are **zone undercounting** (always scan frame edges of multi-plant shots) and
+  **stage/context** (seedling vs transplant vs mature) — neither fixed by looking harder; use
+  date/sequence + hint.
+- **Not everything is a plant.** Soil-moisture tests, repot-in-progress, process shots →
+  **Delete**, don't tag.
+- **Suggest rotation.** Read with stored `rotation` applied; if upright disagrees, emit
+  `suggested_rotation` (auto-fix high confidence, queue the rest).
+
+### Region-level / multi-species
+
+One photo often holds several species arranged spatially. Tag **per region**, not per photo
+(`photo_ai_suggestions` carries an optional bbox; one photo → many rows). **Zone
+undercounting** (dropping secondary species at frame edges) is a persistent real miss —
+always scan edges of a multi-plant shot.
+
+### What vs. how's it doing (persistence model)
+
+- **Container → species: persistent** until repot/resow/harvest. The durable asset is the
+  `growing_unit`; register it at sowing so vision never has to ID a cotyledon.
+- **Spatial layout: ephemeral** — pots move. **Do not persist layouts.** Photo→container is
+  re-established per session (the threading problem above).
+
+### No keep/discard gate (Pi only)
+
+The Pi produces overhead balcony shots — monitoring photos by definition, so no gate. The
+gate existed only for the one-off 2,626-photo phone camera-roll backfill (done). **Caveat:**
+batch-tagging `manual`/`phone` source photos again reintroduces junk and needs the gate.
+Even `manual` shots include the occasional non-plant test image → **Delete** is a
+first-class review action.
+
+### Date is wired in by inference, not by manual entry
+
+Date is the **highest-leverage, near-free prior** (text, not pixels) and fixes the one
+failure resolution can't (seedling-stage). But **do not require the user to record
+sowing/purchase dates per unit — that's recurring work that won't get done.** Derive the
+age anchor from the photo timeline itself:
+
+- A **confidently-identified frame anchors the age** of the whole track. A clearly-readable
+  Thai basil seedling in early April establishes "this container was ~a seedling then," which
+  implies sown ~X weeks prior and dates the rest of the track.
+- That anchor **propagates along the time-ordered photos** (capture dates are known): earlier
+  ambiguous frames are "younger than the anchor," later ones "older," so each ambiguous frame
+  inherits an expected stage and the seedling guesswork collapses.
+- The clear frames don't have to be the seedling ones — a confident *mature* ID also dates
+  the track backwards ("obvious mature basil in June ⇒ the April seedling frames in this
+  track were that basil").
+
+So the model reconstructs the timeline from the few most-identifiable frames rather than
+from a hand-maintained date field. Manual `started_at`/event dates remain an *optional*
+refinement when known, never a prerequisite.
+
+**What this needs:** photos ordered by `captured_at` within a track. *Within a session*
+that's free (no threading needed), so age inference works on the bulk run today. *Cross-week*
+inference waits on container threading — deferred, not blocking. No new mandatory schema.
+
+### Rollout plan (calibrate, then scale)
+
+Don't run 1000 at once; find the batch size empirically, then scale.
+
+- **A. Choice flow** — `suggested_options` is built (migration 0011). Outstanding: the
+  open-ended-question fallback (free-text answer when no option set fits).
+- **B. Minimal `scripts/prepare_tagging_run.py`** (the calibration instrument): query
+  unclassified photos sorted by `captured_at`; group into sessions by capture-time gap
+  (default 15 min); batch at configurable size; call `GET /assistant/contact-sheet` per
+  batch; optionally attach a confusable reference sheet; write
+  `data/tagging-runs/<run_id>/manifest.json` + one prompt `.md` per batch. **No Claude API,
+  no ingest.** Keep it thin — don't gold-plate manifest infra before the format is proven.
+  Manifest = restartability (status per batch: `prepared|ingested|reviewed`); without it
+  1000 photos becomes mud.
+- **C. Calibration run, ~60–100 photos, three formats: 6 / 12 / 20 photos per 256px sheet**,
+  same prompt + reference context. Measure per format: review time/photo, delete rate, edit
+  rate, wrong-option rate, missed-secondary-species rate.
+- **D. Pick the winning batch size.** Criterion: **lowest review time/photo at an acceptable
+  correction rate.** Reject any size where missed-secondary-species or wrong-option rate
+  visibly rises — throughput from bigger batches is worthless if it leaks errors into the
+  accepted set.
+- **E. Run ~200** → review → adjust prompt.
+- **F. Run the remaining ~700–800.**
+
+---
+
+## DB schema
 
 ```sql
 CREATE TABLE photo_ai_suggestions (
@@ -412,6 +238,7 @@ CREATE TABLE photo_ai_suggestions (
     suggested_photo_type TEXT,
     suggested_rotation INTEGER,    -- 0/90/180/270 if upright orientation disagrees with stored
     suggested_labels JSONB,        -- list of label strings
+    suggested_options JSONB,       -- candidate names for confusables (migration 0011)
     confidence TEXT,               -- high / medium / low
     question TEXT,                 -- populated when confidence is low
     observation TEXT,              -- one-sentence visual note
@@ -424,193 +251,263 @@ CREATE TABLE photo_ai_suggestions (
 );
 ```
 
-Notes:
-- **`suggested_plant_id` is usually NULL at cold start** (units mostly don't exist yet); the real output is the free-text `suggested_plant_name`. Accepting can *create* a `growing_unit`, not just link one.
-- **Region-level:** `x/y/x2/y2` reuse the note-rectangle convention. One photo → many rows. NULL bbox means the suggestion is about the whole photo.
-- **`status = 'deleted'`** records a review decision to bin the underlying photo (test/process shots that are neither tag nor keep).
-- `edited_*` fields hold the human's corrections if they chose "Edit".
+- `suggested_plant_id` usually NULL at cold start; the real output is free-text
+  `suggested_plant_name`. Accepting can *create* a `growing_unit`.
+- Region-level: `x/y/x2/y2` reuse the note-rectangle convention. NULL bbox = whole photo.
+- `status = 'deleted'` records a decision to bin the underlying photo (test/process shots).
+- `edited_*` hold the human's corrections on "Edit".
 
-### Surfaces needed (minimal, transport-agnostic)
+## Claude's structured response
 
-Not a fixed API — just the operations the review UI needs against
-`photo_ai_suggestions`. Whether these are HTTP endpoints, a script, or direct queries is
-a build-time decision (see "Producer & ingest" above).
+```json
+{
+  "suggested_plant_id": 12,
+  "suggested_plant_name": "Sorrel",
+  "confidence": "high",
+  "suggested_photo_type": "health_check",
+  "suggested_labels": ["delivery_stress", "wilting"],
+  "suggested_options": ["Rau ram", "Sorrel"],
+  "suggested_rotation": null,
+  "question": null,
+  "observation": "Dramatically drooping over pot sides, reddish stems — transplant shock."
+}
+```
+
+For confusables, prefer `suggested_options` (a tight candidate set) over a confident single
+guess — recall of the offered set is the metric that matters, and the offered set has
+reliably bracketed the truth. When `confidence` is `low` and no clean option set fits,
+populate `question`.
+
+## Surfaces (transport-agnostic)
+
+Operations the review UI needs against `photo_ai_suggestions`:
 
 - **Ingest** a batch of suggestion rows (produced by a Claude Code session).
-- **List** pending suggestions with their photos/regions.
-- **Resolve** a suggestion: accept / edit / reject / delete. Accept writes through to
-  `photos.photo_type`, `photo_growing_units`, `photo_labels` (and may create a
-  `growing_unit`/label) in one transaction; delete bins the underlying photo.
+- **List** pending suggestions with photos/regions.
+- **Resolve**: accept / edit / reject / delete. Accept writes through to
+  `photos.photo_type`, `photos.rotation`, `photo_growing_units`, `photo_labels` (may create
+  a `growing_unit`/label) in one transaction; delete bins the underlying photo.
 
-> The original draft listed `/assistant/ai-suggestions/batch` (which *ran* Claude
-> server-side) — **cut**, since Claude Code is the producer and the backend makes no
-> Claude calls.
+## Build status
 
-### Web UI — review panel
+**Tagging — done:**
+1. ✅ `photo_ai_suggestions` table + migration (region fields, `suggested_rotation`,
+   nullable `suggested_plant_id`, `deleted` status).
+2. ✅ Ingest path — `scripts/ingest_suggestions.py` + `POST /suggestions/ingest`.
+3. ✅ `GET /suggestions` — list pending with photo metadata + region coords.
+4. ✅ `PATCH /suggestions/{id}` — accept / reject / deleted; accept writes through and
+   creates a `growing_unit`/`label` if needed.
+5. ✅ Review tab — region overlays, keyboard nav (A/R/D/J/K), shortcut hints, click
+   thumbnail → full modal.
+6. ✅ Action buttons on every card.
+7. ✅ Inline edit form — plant name (datalist autocomplete), type picker, labels.
+   Overrides → `edited_*` + `status='edited'`; no overrides → `status='accepted'`.
+   Case-insensitive unit lookup.
+8. ✅ `suggested_options` (migration 0011) — choice buttons for ambiguous cases.
 
-The dashboard gets a new **"Review" tab** (or sidebar panel):
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Unreviewed suggestions: 14                          │
-│ Batch hint: [                              ] [Run]  │
-├───────────────────┬─────────────────────────────────┤
-│  [Photo thumbnail] │ Suggested: Sorrel               │
-│                   │ Type: health_check               │
-│                   │ Labels: delivery_stress, wilting │
-│                   │ Confidence: high                 │
-│                   │ "Plant dramatically drooping..." │
-│                   │                                  │
-│                   │ [Accept] [Edit] [Reject]         │
-├───────────────────┼─────────────────────────────────┤
-│  [Photo thumbnail] │ ⚠ Question:                     │
-│                   │ "Long flat leaves — lemongrass   │
-│                   │ or garlic chives?"               │
-│                   │                                  │
-│                   │ [Answer: ___________] [Rerun]   │
-└───────────────────┴─────────────────────────────────┘
-```
-
-Keyboard shortcuts: `A` accept, `E` edit, `R` reject, `D` delete (bin a non-plant /
-test shot), arrow keys to navigate. Same pattern as the existing photo modal. The mockup
-above predates region-level tagging — a real photo may show several suggestions, one per
-region.
+**Tagging — outstanding:**
+- **Date-by-inference**: feed time-ordered track photos so a confidently-identified frame
+  anchors the track's age and propagates to ambiguous frames (no manual date entry). *Top
+  priority — see "Date is wired in by inference" above.* Depends on track threading.
+- **Track/sequence tagging** + the photo→container threading it depends on.
+- **`scripts/prepare_tagging_run.py`** — the calibration instrument (see Rollout plan B).
+  Build it *thin* for the calibration run; expand manifest infra only once the format proves
+  out.
+- **Session-propagation review actions** — "same plant/type as previous", "apply this plant
+  to selected pending". **Human-triggered only** — never auto, since a near-duplicate may be
+  a different pot. Likely the single biggest throughput win, more than a smarter model.
+- **Run provenance (before scaling past calibration, not before it)** — add `run_id` +
+  `batch_id` to `photo_ai_suggestions` (or at minimum store them inside the existing
+  `prompt_context` JSONB) so a bad suggestion is traceable to the run that produced it.
+  Columns are cleaner before the 1000-photo run; `prompt_context` is enough for calibration.
+- **Duplicate-ingest protection** — accidental re-ingest will happen at scale. Skip on
+  `(run_id, photo_id, bbox, plant/options)` match. Not perfect dedupe — just enough to keep
+  duplicates out of the review queue.
+- **Open-ended question fallback** — when `question` is set but `suggested_options` is empty,
+  there's no free-text answer input yet.
+- **Enlarge / focused review mode** — future; clicking a thumbnail currently opens the modal.
 
 ---
 
-## Capture queue (Pi integration)
+## Capture queue (deferred — reference only)
 
-> **Scope (2026-05-30): deferred.** The gap rules below are pre-Pi guesses. Don't build
-> them until real Pi capture behaviour exists — see "Build order". The section is kept
-> as reference, not a commitment.
+> **Scope:** pre-Pi guesses. Do not build the gap rules until real Pi capture behaviour
+> exists. Kept as reference, not a commitment. At most, stub the `capture_requests` table +
+> a trivial list/resolve surface if something needs to write to it.
 
-### Purpose
-
-Build this before the Pi arrives so it's ready on day one. The Pi auto-captures overviews on a schedule; the system tells it what to photograph next and why. This closes the loop: Claude analyses overviews → flags gaps or concerns → Pi captures follow-up → Claude reviews again.
-
-### Gap detection rules
-
-The backend evaluates these rules against current DB state to produce capture requests:
+The Pi auto-captures overviews; the system tells it what to shoot next. Gap-detection rules
+evaluate DB state to produce capture requests.
 
 | Rule | Trigger | Suggested shot |
 |---|---|---|
-| Stress label with no follow-up | Plant has `wilting`/`sulking`/`delivery_stress` and no photo in last 3 days | `health_check` overview |
-| Incident with no resolution | `aphids`/`pest_damage` label and no follow-up photo | `closeup` of affected area |
-| No photo in 7+ days | Growing unit has no photo this week | `overview` |
-| Unregistered plant visible | Photo with `multi_plant` flag and no plant association | `overview` of each pot individually |
-| Post-repot gap | `root_bound` label and no photo since event date | `health_check` |
-| New purchase with no follow-up | `new_purchase` or `delivery_stress` and no photo 48h later | `health_check` |
-
-### Capture request schema
+| Stress label, no follow-up | `wilting`/`sulking`/`delivery_stress`, no photo in 3 days | `health_check` |
+| Incident, no resolution | `aphids`/`pest_damage`, no follow-up | `closeup` |
+| No photo in 7+ days | unit has no photo this week | `overview` |
+| Unregistered plant visible | `multi_plant`, no plant association | per-pot `overview` |
+| Post-repot gap | `root_bound`, no photo since event | `health_check` |
+| New purchase, no follow-up | `new_purchase`/`delivery_stress`, no photo 48h later | `health_check` |
 
 ```sql
 CREATE TABLE capture_requests (
     id SERIAL PRIMARY KEY,
     growing_unit_id INTEGER REFERENCES growing_units(id),
-    plant_name TEXT,               -- for unregistered plants
+    plant_name TEXT,
     suggested_shot_type TEXT NOT NULL,  -- overview / closeup / health_check
     reason TEXT NOT NULL,
-    priority INTEGER DEFAULT 2,    -- 1=urgent, 2=normal, 3=low
-    source_photo_id INTEGER REFERENCES photos(id),  -- photo that triggered this
+    priority INTEGER DEFAULT 2,         -- 1=urgent, 2=normal, 3=low
+    source_photo_id INTEGER REFERENCES photos(id),
     status TEXT NOT NULL DEFAULT 'open',  -- open / captured / dismissed
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resolved_at TIMESTAMPTZ
 );
 ```
 
-### API
-
 ```
-GET /assistant/capture-queue         → open requests, ordered by priority
-PATCH /assistant/capture-queue/{id}  → mark captured or dismissed
+GET   /assistant/capture-queue         → open requests by priority
+PATCH /assistant/capture-queue/{id}    → captured | dismissed
 ```
-
-The Pi checks `GET /assistant/capture-queue` before each session. When it captures a photo that satisfies a request, it POSTs the photo and patches the request `status: captured`.
-
-### Web UI — capture queue panel
-
-Second tab in the Review panel:
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Capture queue: 4 open                               │
-├─────────────────────────────────────────────────────┤
-│ ● URGENT  Rau ram — health_check                    │
-│   "Last photo (104) shows severe wilt. 2 days ago." │
-│   [Dismiss]                                         │
-├─────────────────────────────────────────────────────┤
-│ ● NORMAL  Dill — closeup                            │
-│   "Aphid infestation documented (photo 66). No      │
-│    follow-up since."                                │
-│   [Dismiss]                                         │
-├─────────────────────────────────────────────────────┤
-│ ● LOW     Lemon thyme — overview                    │
-│   "No photo since stress event. Recovery unclear."  │
-│   [Dismiss]                                         │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-## What this enables end-to-end
-
-```
-Pi captures overview on schedule
-  → photo uploaded, enters unclassified queue
-  → Claude runs on it (or user triggers batch)
-  → suggestion: "Rau ram, health_check, wilting"
-  → user accepts in 2 keystrokes
-  → capture queue sees: wilting + no follow-up in 3 days
-  → capture queue adds: "Rau ram closeup, urgent"
-  → Pi (or you) captures closeup
-  → repeat
-```
-
-The human stays in the loop at the tagging step and the capture step. Claude handles the pattern recognition and the gap detection. You handle the judgment calls — which is exactly how the manual session above worked.
-
----
-
-## Build order
-
-**Tagging:**
-1. ✅ `photo_ai_suggestions` table + migration (region fields, `suggested_rotation`,
-   nullable `suggested_plant_id`, `deleted` status).
-2. ✅ Ingest path — script (`scripts/ingest_suggestions.py`) + thin HTTP endpoint
-   (`POST /suggestions/ingest`) that delegates to it.
-3. ✅ `GET /suggestions` — list pending suggestions with photo metadata and region coords.
-4. ✅ `PATCH /suggestions/{id}` — resolve: accept / reject / deleted. Accept writes through
-   to `photos.photo_type`, `photos.rotation`, `photo_growing_units`, `photo_labels` and
-   creates a `growing_unit` or `label` if one doesn't exist yet.
-5. ✅ Review tab — card list with region overlays, keyboard nav (A/R/D/J/K), keyboard
-   shortcut hint bar, click thumbnail to open photo in the full modal.
-6. ✅ Action buttons on every card (not just the focused one).
-7. ✅ Inline edit form — plant name (with datalist autocomplete from known units), type
-   picker, labels. Accept with overrides writes `edited_*` columns and sets
-   `status = "edited"`; accept without overrides sets `status = "accepted"`. Unit lookup
-   is case-insensitive.
-8. ✅ `suggested_options` JSONB field (migration 0011) — Claude emits a structured list of
-   candidate plant names for ambiguous cases. Review card renders one choice button per
-   option ("Which is it?") instead of the normal accept/reject row. Choosing one accepts
-   with that name as `edited_plant_name`.
-
-**Review tab — outstanding:**
-- **Open-ended question with no options** — when `question` is set but `suggested_options`
-  is empty/null, the question text is shown but there is no way to answer. The structured
-  `suggested_options` mechanism handles the binary/n-ary case; a truly open-ended fallback
-  (free-text answer input) is not yet built.
-- **Enlarge / focused review mode (future consideration)** — clicking a thumbnail opens
-  the full photo modal. Long-term we may want the review UI itself to operate in a larger
-  / full-screen mode so the photo and suggestion detail are both comfortably visible
-  without a modal hop. No decision yet; revisit after the basics are solid.
-
-**Capture queue (defer):** keep the design here for reference, but **do not build the gap
-rules yet** — they're guesses until real Pi behaviour exists. At most, stub the
-`capture_requests` table + a trivial list/resolve surface if something needs to write to
-it; add real rules only after observing actual Pi captures.
 
 ---
 
 ## Open questions
 
-- Should `capture_requests` be auto-generated on a schedule, or triggered manually after each import batch?
-- Do we want a mobile-friendly review UI for quick yes/no from the phone, or is desktop-only fine for now?
+- Container threading (cross-week): per-session human link, visual recognition, or something
+  else? Deferred — the bulk run simulates it with per-session hints; this only gates
+  cross-week date-inference, not ingest.
+- Auto-generate `capture_requests` on a schedule, or manually after each import batch?
+- Mobile-friendly review UI for quick phone yes/no, or desktop-only for now?
+
+---
+
+## Appendix A — confirmed few-shot example pool
+
+Ground-truthed by the human across calibration rounds (2026-05-30). Re-read these thumbnails
+as visual priors when tagging the matching species; they are the source for the per-batch
+**reference sheet** (confusables only). Filenames under `data/photos/`. **Bootstrap** — when
+a live `photo_ai_suggestions` query is built (pull accepted/edited examples per species),
+retire this static list. Verify against the DB; pots move and plants die.
+
+**Single / dominant subject:**
+- `554b3a646dc64b3399b6382c3c81ce68.jpg` — dill, mature, leggy/floppy
+- `291ff4b9585540eab4f55c00347d02ca.jpg` — Thai basil, seedlings
+- `457790d2c20d4d2090dbf1a87242dcf0.jpg` — genovese basil, seedling
+- `c9860a82b9594b83a0f0c1658becc874.jpg` — genovese basil, young plant
+- `b2d470329a6f43c9b3f78bd3a5e47837.jpg` — chilli, seedling (guessed basil-or-chilli; chilli)
+- `892b874e1bac4f25821c8f744ee3dd9e.jpg` — chives clump (allium binary; chives)
+- `19af7b97567d47f8bf32f2a57db45334.jpg` — peppermint, fresh water→soil propagation, stressed (misread as seedlings — stage error)
+- `7236f3ff21474d17be7ab0e287f728a5.jpg` — rau ram, sprawling/stressed
+- `db60aae6b3e6418f99c107c3bf2bc039.jpg` — rau ram, severely wilted (moved indoors)
+- `7faf996c30144613a03c21aad20830ee.jpg` — lemongrass cuttings, new nursery purchase
+
+**Multi-species (region-tagged):**
+- `000cf7f3d4f64299b2d3dd454fd06eab.jpg` — peppermint (top-right pot), fenugreek (top-left trough), rocket (left third middle trough) + cilantro (right 2/3), parsley (middle third bottom trough) + dill (right)
+- `ac85543fb0e442549ef03b2f6e56d3ff.jpg` — sage (top-left pot), parsley + dill (right), rocket + cilantro (middle)
+- `d630dda5ddf643f2bc4ff61df40cefa7.jpg` — parsley (top 6 cells) + genovese basil (bottom 6)
+- `09923168f26e487992fa7c65a9a1237c.jpg` — Moroccan mint (trough), genovese basil (below), Thai basil (bottom-left), Welsh onion (above), rocket (top-right)
+- `5e43054b5eb545658514a1681c88a1d9.jpg` — lemongrass, rosemary, sage, peppermint, genovese basil (dense pot), sorrel (leaf, bottom-right), parsley, chives
+- `9b523deb3f3b46db9ecbb8b25916e713.jpg` — parsley / cilantro seedlings (6-cell tray)
+- `f6304791e4a64bf18f19172622ec836f.jpg` — Thai basil + genovese basil (one trough)
+
+**Discard (not monitoring photos):**
+- `34af94c1ded745ee95828eb2a2d41062.jpg` — soil-moisture test close-up → delete
+
+_Scoreboard: 18 photos over 3 rounds — every confusable binary held; misses were zone
+undercounting and stage/context (propagation transplant read as seedling)._
+
+---
+
+## Appendix B — session findings (evidence log, chronological)
+
+Dated records of how the decisions above were reached. **Evidence, not instructions** —
+where these conflict with "Current approach", the head wins. Earlier prose in this log that
+the head supersedes (e.g. the original per-photo flow, the keep/discard gate for Pi, the
+server-side Claude-API endpoint) is retained only for context.
+
+### 2026-05-29 — original draft, trial run, and bulk backfill
+
+**Trial-run lessons (human-Claude loop):** timestamp proximity is a strong signal (±60s ≈
+same subject; same 10-min window ≈ same session); targeted prompts beat generic; delivery-day
+context unlocks plant association; variety info is invisible from photos alone.
+
+**Bulk backfill (~2,626-photo phone roll → 891 keepers):** a cheap binary keep/discard gate
+(25-per-5×5 contact sheet, "is this a monitoring photo of my plant?") ran *before* per-photo
+tagging. Keep only if an actual living plant of the user's own is in frame. False-keep ≈30%
+before the rule tightened; an aggressive auto-discard then hit ≈8% false-reject — so an
+automated gate should bias toward keep on ambiguous soil/tray shots. Confusables at 160px:
+grains/flour vs soil, sparse seedling tray vs bare soil, harvested-on-board vs growing-in-pot,
+sprouting scraps vs propagation, jars of liquid. _(Superseded for the Pi pipeline by the
+2026-05-30 "no gate" decision; still applies to any manual/phone re-tag.)_
+
+The original draft also specified a per-photo flow, batch hints, temporal context (±5 min
+neighbours, known units, existing labels), and a server-side `/assistant/ai-suggestions/batch`
+endpoint that *ran* Claude. The endpoint is **cut** (see 2026-05-30 decision 2).
+
+**Batch hints** remain valid and load-bearing: per-group hint (not per-photo or per-batch),
+stored per suggestion row for audit. Examples: "delivery day — probably rau ram and sorrel",
+"repotting session — expect root balls", "check for stress — away a week".
+
+### 2026-05-30 — decisions & calibration
+
+**Decisions:** (1) **No keep/discard gate** for the Pi pipeline (overhead monitoring shots
+only); still needed if re-tagging manual/phone. (2) **Claude Code is the producer, never the
+Anthropic API** — backend serves lists + ingests JSON; no key, no SDK, no per-call cost.
+(3) **Cold start is vocabulary-building, not accuracy** — first batches teach the taxonomy;
+`suggested_plant_name` (free text) carries it until units exist. (4) **Batch hints are
+per-group.**
+
+**Findings (two 6-photo samples, full-res off disk):** known-list value is real but bounded
+— confirms mature/distinctive plants, turns confusables into a binary that held the truth,
+does nothing for early seedlings. **One photo contains multiple species arranged spatially →
+tag per region.** Context (new purchase) is unrecoverable from pixels → validates hints.
+**Date is a growth signal** — capture date + sowing date = age = expected stage, cutting both
+the species (seedling disambiguation) and condition (actual vs expected stage) axes.
+Confusable-binary mechanism validated (offered set bracketed truth repeatedly); container
+shape carries species (peppermint=pot, Moroccan mint=trough); **Delete must be a first-class
+review action**; zone undercounting is the consistent miss. **Rotation** can be emitted as a
+suggestion. Two-tier memory: Tier 1 = distilled
+cheat-sheet (now merged into this doc's head + Appendix A); Tier 2 = `photo_ai_suggestions`
+(raw verdicts, few-shot + confidence calibration). Reframe:
+"what" (persistent per container, ephemeral per position) vs "how's it doing" (dynamic).
+
+### 2026-05-31 — first live ingest run (42 suggestions, 7×6)
+
+**Worked:** contact-sheet endpoint (`GET /assistant/contact-sheet?ids=…`) is the right
+primitive; 256px 3×2 is the species sweet spot (above 3×3 per-cell resolution hurts);
+`suggested_options` choice buttons resolve confusables fast; vocabulary grows fast (8 new
+units in one session); ingest + DB-reset workflow is practical.
+
+**Did not work — prior wiring:** "priors active" batches were **not better than cold-start**.
+Root cause: the richer unit *name* list was passed, but **no confirmed photo thumbnails were
+shown as visual anchors**. Claude can't carry images across turns → visual priors must be a
+**reference sheet shown in the same turn** as the new batch. Until built, every batch is
+effectively cold-start on species ID. _(Now resolved in the head: amortised per-batch ref
+sheet targeting confusables.)_
+
+### 2026-05-31 — resolution A/B test & token-budget decision
+
+Blind A/B (fresh readers, no calibration doc, same known-plant list, 6 known-failure photos):
+**256px contact-sheet vs ~1024px individual.**
+
+- Set-recall (offered set contains truth): **256px 3/6 → 1024px 5/6.** Correct top pick
+  0/6 → 2/6. Full-res *flipped two confidently-wrong 256px calls* (peppermint→Moroccan,
+  cilantro→parsley).
+- **256px stated confidence is anti-calibrated on confusables:** both "high"-confidence 256px
+  calls were WRONG (chilli→basil, Moroccan→peppermint). → gate on confusable-class membership,
+  not confidence.
+- **One failure survived even at 1024px (chilli vs basil seedling).** Seedling-stage
+  confusables don't resolve at any resolution — only date/sequence fixes them.
+
+**Token math:** ~1,200 tokens/photo at 1024 (`(w*h)/750`) → ~1.2M for 1000. 256px ≈ 87/photo
+→ ~87k for 1000 (~14× cheaper). **Decision (Max $100):** producer is a Claude Code session →
+this burns the capped allowance, not a $ bill. One 256px pass on a cheap model; no mass 1024
+escalation; fix confusables by hand; date/sequence for seedlings. _(Folded into the head.)_
+
+### 2026-05-31 — design discussion (folded into head)
+
+Stacked-context batching (session grouping + date + sequence + ref sheet + within-batch
+anchoring; context compensates for resolution → bigger batches viable, size found
+empirically). **Tag tracks, not photos** — growth sequence resolves seedlings and doubles as
+the health axis; depends on photo→container threading. Per-batch ref sheet is cheap enough to
+keep. Date is the unused, near-free, highest-leverage prior and is **not yet wired** — top
+priority (later reframed as inference-from-timeline within a track, needing no mandatory
+schema; see head).
