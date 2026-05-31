@@ -75,6 +75,59 @@ These are the boundaries that produced nearly all the errors at thumbnail scale:
 
 ---
 
+## Session findings — first live ingest run (2026-05-31)
+
+A full end-to-end run of the ingest pipeline: 7 batches × 6 photos = 42 suggestions
+ingested, reviewed, and resolved via the dashboard review tab.
+
+### What worked
+
+- **Contact sheet endpoint is the right primitive.** `GET /assistant/contact-sheet?ids=…`
+  packs thumbnails into a JPEG grid that Claude reads in a single turn. 256px cells in a
+  3×2 grid (768×512) is the practical sweet spot for species ID — enough detail to
+  distinguish dill from cilantro, mint texture, basil leaf shape. Above 3×3 the per-cell
+  resolution starts to hurt accuracy on ambiguous cases.
+- **`suggested_options` choice buttons work well.** Surfacing 2–3 candidates instead of
+  a single guess + question produced faster human resolution. The confusable-binary
+  mechanism validated again: mint disambiguation (Peppermint / Moroccan Mint / Spearmint),
+  basil (Genovese / Thai), Welsh onion vs garlic chives — all resolved correctly by the
+  human picking from the offered set.
+- **Unit vocabulary grows fast.** 8 new `growing_units` created in one session (Lemon
+  Thyme, Spearmint, Moroccan Mint, Peppermint, Thai basil, Genovese basil, Welsh onion,
+  Parsley). Cold-start is genuinely a vocabulary-building exercise.
+- **Ingest script + DB reset workflow is practical.** Accidental rejections were fixed
+  directly via SQL; the ingest script (stdin mode) is convenient for iterative runs.
+
+### What did not work — prior wiring
+
+The "priors active" batches were **not meaningfully better** than cold-start. Root cause:
+the known-unit list (richer names) was used, but no confirmed photo thumbnails were shown
+as visual anchors. The design doc's Tier 2 mechanism requires _visual_ few-shot examples
+— "this is what confirmed Moroccan Mint looks like" — not just a name list. Claude cannot
+carry images across turns, so prior thumbnails must be included _in the same turn_ as the
+new batch.
+
+**Implication:** the "reference sheet + batch sheet in one turn" approach (two images shown
+together) is the correct implementation of visual priors, not a richer unit list alone.
+Until that is built, every batch is effectively cold-start on species ID.
+
+### Practical cell/batch sizes
+
+| Use case | Cell size | Grid | Notes |
+|---|---|---|---|
+| Keep/discard gate | 160px | 5×5 (25) | Binary judgment, fine detail not needed |
+| Species tagging | 256px | 3×2 (6) | Detail needed for leaf shape, texture |
+| Species tagging (reference sheet) | 256px | up to 3×3 | Reference + new batch shown in same turn |
+
+### Next step for prior wiring
+
+Before each tagging turn: build a reference contact sheet of 1–2 confirmed photos per
+confusable species (pulled from accepted/edited `photo_ai_suggestions`), show it first,
+then show the new batch — both in the same Claude turn. The session sees both images and
+can cross-reference visually.
+
+---
+
 ## Session findings & decisions (2026-05-30)
 
 A short research session ran Claude (the Claude Code session itself, reading photos
