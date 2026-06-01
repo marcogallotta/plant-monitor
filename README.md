@@ -85,6 +85,10 @@ docs/                   # design documents and roadmap
 - Filter and tab state persisted in the URL hash (shareable links)
 - Click a photo to open it in a modal; arrow keys to navigate
 - Delete a photo from the gallery (removes DB record and files on disk)
+- Select mode: toggle on to multi-select photos by click, select-all, or drag across cards
+  - Download selected as a single `photos.zip` (rotation baked in)
+  - Copy a contact sheet of the selection to the clipboard (paste into ChatGPT or anywhere)
+  - Bulk-delete the selection
 - A/B comparison: select two photos and view side by side
 - Flicker comparison: toggle or auto-flicker between A and B to spot changes
 - Timelapse: play/pause, prev/next, speed control

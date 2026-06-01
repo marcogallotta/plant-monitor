@@ -73,6 +73,14 @@ After files are on disk, `_upsert_photo_record()` creates the DB row if one does
 
 `GET /photos/{filename}` validates the filename format, checks the DB for a matching record, then serves the file from `data/photos/`. The DB check (not just a filesystem check) prevents path traversal — a filename that doesn't match any DB row gets a 404 even if the file happens to exist on disk.
 
+### Exporting photos as a zip
+
+`GET /photos/export?ids=1,2,3` streams a single `photos.zip` of the requested photos. `ids` is a comma-separated list — each part must be numeric (422 otherwise), and an empty list is rejected. Photos whose `storage_path` resolves outside `PHOTOS_DIR` are skipped (path-traversal guard via `Path.relative_to`), as are missing files and undecodable images.
+
+Rotation is **baked in**: if `photo.rotation` is non-zero the image is re-encoded through Pillow (`_ROTATION_TRANSPOSE` maps stored rotation → `Image.Transpose`) and saved as JPEG at quality 90; otherwise the original file is written verbatim.
+
+The route is registered **before** `GET /photos/{filename}` so FastAPI does not match `export` as a filename. Keep it above that handler if you reorder routes.
+
 ### Manual upload
 
 `POST /manual-photos` accepts a multipart upload from the dashboard. Only `image` (JPEG) is required; `captured_at`, `photo_type`, `location_id`, `growing_unit_ids`, `note_text`, `rotation`, `original_size_bytes`, and `source` are optional form fields. The filename is a random UUID hex — no timestamp stem requirement. `source` defaults to `"manual"` when not supplied; pass `"phone"` for phone uploads. `original_filename` records the browser filename. If `note_text` is supplied a `PhotoNote` with `x=0, y=0` is created in the same transaction.
@@ -265,6 +273,22 @@ Key JS state (all fields live on the single `state` object in `state.js`):
 
 `gridDelete(e, photoId)` in `photos.js` shows a `confirm()` dialog then calls `DELETE /photos/{photo_id}`. On success it removes the photo from `state.allPhotos` and re-renders the grid without a full reload.
 
+### Gallery select mode
+
+`photos.js` holds two module-level pieces of state: `selectMode` (bool) and `selectedIds` (a `Set`). `toggleSelectMode()` flips the mode, clears the selection, and toggles the `select-mode` class on the grid plus the visibility of the `#select-bar`. Rendering checks `selectedIds.has(p.id)` to apply the `selected` class, so a grid re-render preserves the selection.
+
+Selection inputs:
+
+- **Click** — the grid's click handler toggles a single card's membership (guarded by `if (!selectMode) return`).
+- **`selectAll()`** — adds every photo in `state.allPhotos` to the set.
+- **Drag-to-select** — `mousedown` on a card starts a drag (`_dragSelecting`), records the toggle direction from the first card (`_dragToggleTo = !selectedIds.has(id)`), and applies it; `mouseover` while dragging applies the same direction to each hovered card; `mouseup` ends the drag. The `mousedown` handler calls `e.preventDefault()` to stop the browser's native image-drag from swallowing `mouseover` events, and sets `_dragMoved = true` immediately so the click event that follows `mousedown` is suppressed (otherwise the first card would be double-toggled — click would undo the mousedown toggle).
+
+Selection actions (operate on `selectedIds`):
+
+- **`downloadSelected()`** — creates an `<a download>` pointing at `/photos/export?ids=…` and clicks it (single zip download).
+- **`copySheet()`** — builds a contact-sheet PNG on a `<canvas>` and writes it to the clipboard via `ClipboardItem`. Layout: up to 2 columns, `TARGET_W` 2048px, per-cell size `max(512, TARGET_W/cols - pad)` so a single photo is never tiny, 22px bold labels showing growing unit + capture date. Images are fetched via `orientedUrl(photo)` (server-rotated). If `navigator.clipboard.write()` is denied (e.g. Brave shields, lost focus) it falls back to opening the PNG blob in a new tab. The build runs inside the user-gesture window so the clipboard write is permitted.
+- **`deleteSelected()`** — `confirm()`s, then issues `DELETE /photos/{id}` per selected id and updates state.
+
 Note pin positions use `left: x*100%; top: y*100%` inside `.note-pins`, which is absolutely positioned over the image wrapper. The image wrapper is `display: inline-block` so it shrinks to fit the rendered image size, not the surrounding flex container. Normalised x/y are calculated from `img.getBoundingClientRect()` at click time. For region notes (shift+drag), x2/y2 are stored the same way; rendering uses the min/max of the two corners so drag direction doesn't matter.
 
 `zoom.js` owns all pointer events on `#zoom-viewport`. `visualToStored(rx, ry)` maps a click position in the rotated visual space back to the canonical stored coordinate system — any code that records a note position must go through this function.
@@ -275,7 +299,8 @@ The SD import panel supports two modes: a backend scanner (primary) and a browse
 
 **Backend scanner** (`GET /camera-import/scan`, `POST /camera-import/import`):
 
-- Configured via `IMPORT_SCAN_PATH` env var (e.g. `/media/marco/4621-0000/DCIM/101MSDCF`). The host's `/media` directory is mounted read-only into the container at `/media`, so paths are identical inside and outside the container.
+- Configured via `IMPORT_SCAN_PATH` env var (e.g. `/media/marco/4621-0000/DCIM/101MSDCF`). The host's `/media` directory is mounted into the container at `/media` with `propagation: rslave` (see `docker-compose.yml`), so paths are identical inside and outside the container and SD cards mounted on the host after the container starts appear inside it.
+- `rslave` propagation only works if `/media` is its own **shared mountpoint** on the host. On a default install `/media` is just a directory on the root partition, so card mounts never propagate in. `scripts/media-shared.service` is a oneshot systemd unit that bind-mounts `/media` onto itself and marks it shared before `docker.service` starts. Install with `sudo cp scripts/media-shared.service /etc/systemd/system/ && sudo systemctl enable --now media-shared.service`.
 - `app/camera_import.py` owns scanning, HMAC-based opaque file IDs, in-process scan cache (TTL: `IMPORT_SCAN_CACHE_TTL_SECONDS`), embedded JPEG extraction from RAW files, and import logic.
 - Duplicate detection uses `original_filename + original_size_bytes` (source file size) — tolerates camera counter rollover where `DSC00001.ARW` repeats on a new card.
 - `save_photo()` in `camera_import.py` is the shared helper used by both `/camera-import/import` (source `"sd"`) and `/manual-photos` (source `"manual"`). It writes files atomically (tmp → rename) and commits the DB row.
@@ -310,6 +335,12 @@ Run via Make:
 ```sh
 make seed   # runs inside Docker, hits http://backend:8000
 ```
+
+### Timestamp repair script
+
+`scripts/fix_timestamps.py` (and the container-path copy at `backend/scripts/fix_timestamps.py`) scans every photo, reads EXIF `DateTimeOriginal`, and corrects `captured_at` where it differs. It is a dry run by default; pass `--apply` to write changes.
+
+Photos whose EXIF carries **no UTC offset** are refused, not guessed — assuming a wall-clock time is UTC would corrupt timestamps for any photo actually taken in another timezone. Those are reported separately in the summary as "no tz offset" so they can be handled by hand.
 
 ---
 
