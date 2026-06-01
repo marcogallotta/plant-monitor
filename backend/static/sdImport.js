@@ -379,7 +379,7 @@ async function _processPhoneBatch(from, to, statusEl) {
 
       // Parse EXIF from the same blob — no second file access needed
       var exif = null;
-      try { exif = await window.exifr.parse(uploadBlob, ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal']); } catch(e) {}
+      try { exif = await window.exifr.parse(uploadBlob, ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal']); } catch(e) { console.warn('exifr parse failed for', entry.filename, e); }
       var tsResult = deriveTimestamp(exif, {lastModified: file.lastModified});
 
       entry.uploadBlob = uploadBlob;
@@ -600,7 +600,7 @@ async function sdParseExif(from, to) {
     try {
       // exifr can read JPEG and ARW; ORF is not supported — will return null
       exif = await window.exifr.parse(entry.file, ['DateTimeOriginal', 'CreateDate', 'OffsetTimeOriginal']);
-    } catch(e) { /* unsupported format — fallback below */ }
+    } catch(e) { console.warn('exifr parse failed for', entry.file.name, e); }
     var result      = deriveTimestamp(exif, entry.file);
     entry.capturedAt = result.iso;
     entry.tsBadge    = result.badge;
