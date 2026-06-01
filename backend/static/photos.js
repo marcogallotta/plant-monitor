@@ -374,6 +374,7 @@ document.getElementById('photo-grid').addEventListener('click', function(e) {
   if (!card) return;
   e.stopPropagation();
   e.preventDefault();
+  if (_dragMoved) { _dragMoved = false; return; } // drag already handled it
   const id = parseInt(card.dataset.id, 10);
   if (selectedIds.has(id)) {
     selectedIds.delete(id);
@@ -384,6 +385,52 @@ document.getElementById('photo-grid').addEventListener('click', function(e) {
   }
   _updateSelectBar();
 }, true);
+
+// Drag-to-select: holding mouse button and dragging over cards toggles them.
+// The first card touched sets the toggle direction (select or deselect) so
+// dragging over an already-selected region deselects it consistently.
+let _dragSelecting = false;
+let _dragToggleTo  = true; // true = select, false = deselect
+let _dragMoved     = false; // true if mouseover fired during a drag
+
+document.getElementById('photo-grid').addEventListener('mousedown', function(e) {
+  if (!selectMode) return;
+  const card = e.target.closest('.photo-card');
+  if (!card) return;
+  e.preventDefault(); // stops native image drag from hijacking mouseover events
+  _dragSelecting = true;
+  _dragMoved = false;
+  const id = parseInt(card.dataset.id, 10);
+  _dragToggleTo = !selectedIds.has(id);
+  if (_dragToggleTo) { selectedIds.add(id); card.classList.add('selected'); }
+  else               { selectedIds.delete(id); card.classList.remove('selected'); }
+  _updateSelectBar();
+}, true);
+
+document.getElementById('photo-grid').addEventListener('dragstart', function(e) {
+  if (selectMode) e.preventDefault();
+}, true);
+
+document.getElementById('photo-grid').addEventListener('mouseover', function(e) {
+  if (!selectMode || !_dragSelecting) return;
+  const card = e.target.closest('.photo-card');
+  if (!card) return;
+  _dragMoved = true;
+  const id = parseInt(card.dataset.id, 10);
+  if (_dragToggleTo && !selectedIds.has(id)) {
+    selectedIds.add(id);
+    card.classList.add('selected');
+    _updateSelectBar();
+  } else if (!_dragToggleTo && selectedIds.has(id)) {
+    selectedIds.delete(id);
+    card.classList.remove('selected');
+    _updateSelectBar();
+  }
+}, true);
+
+document.addEventListener('mouseup', function() {
+  _dragSelecting = false;
+});
 
 function _updateSelectBar() {
   const n = selectedIds.size;

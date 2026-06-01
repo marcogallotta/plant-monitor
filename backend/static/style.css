@@ -89,7 +89,7 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .select-bar-del { background: #2a0a0a; border-color: #a33; color: #f88; }
 .select-bar-del:hover:not(:disabled) { background: #6a1a1a; border-color: #f44; color: #fff; }
 .select-bar-del:disabled { opacity: 0.4; cursor: default; }
-.photo-grid.select-mode .photo-card { cursor: pointer; }
+.photo-grid.select-mode .photo-card { cursor: pointer; user-select: none; }
 .photo-grid.select-mode .card-ab,
 .photo-grid.select-mode .card-rot,
 .photo-grid.select-mode .card-del { display: none !important; }
