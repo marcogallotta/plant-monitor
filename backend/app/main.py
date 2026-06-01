@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -575,6 +576,53 @@ _ROTATION_TRANSPOSE = {
     180: Image.Transpose.ROTATE_180,
     270: Image.Transpose.ROTATE_90,
 }
+
+
+@app.get("/photos/export")
+def export_photos(ids: str, db: Session = Depends(get_db)):
+    id_list = []
+    for part in ids.split(","):
+        part = part.strip()
+        if not part.isdigit():
+            raise HTTPException(status_code=422, detail=f"invalid id: {part!r}")
+        id_list.append(int(part))
+    if not id_list:
+        raise HTTPException(status_code=422, detail="no ids provided")
+
+    photos = db.query(Photo).filter(Photo.id.in_(id_list)).all()
+    if not photos:
+        raise HTTPException(status_code=404, detail="no matching photos")
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for photo in photos:
+            file_path = Path(photo.storage_path).resolve()
+            try:
+                file_path.relative_to(PHOTOS_DIR.resolve())
+            except ValueError:
+                continue
+            if not file_path.exists():
+                continue
+
+            transpose = _ROTATION_TRANSPOSE.get(photo.rotation)
+            if transpose is not None:
+                try:
+                    with Image.open(file_path) as im:
+                        rotated = im.transpose(transpose).convert("RGB")
+                        img_buf = BytesIO()
+                        rotated.save(img_buf, format="JPEG", quality=90)
+                    zf.writestr(photo.filename, img_buf.getvalue())
+                except (UnidentifiedImageError, OSError):
+                    continue
+            else:
+                zf.write(file_path, photo.filename)
+
+    buf.seek(0)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=photos.zip"},
+    )
 
 
 @app.get("/photos/{filename}")

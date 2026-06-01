@@ -481,16 +481,13 @@ export async function copySheet() {
 }
 
 export function downloadSelected() {
-  const photos = [...selectedIds].map(id => state.allPhotos.find(p => p.id === id)).filter(Boolean);
-  if (!photos.length) return;
-  photos.forEach(photo => {
-    const a = document.createElement('a');
-    a.href = orientedUrl(photo);
-    a.download = photo.filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  });
+  if (!selectedIds.size) return;
+  const a = document.createElement('a');
+  a.href = '/photos/export?ids=' + [...selectedIds].join(',');
+  a.download = 'photos.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 export async function deleteSelected() {
