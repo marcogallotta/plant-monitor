@@ -17,7 +17,7 @@ vi.mock('@/photos.js', () => ({
   flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(), gridDelete: vi.fn(),
   renderQuickChips: vi.fn(),
   readFiltersFromHash: vi.fn(),
-  toggleSelectMode: vi.fn(), selectAll: vi.fn(), deleteSelected: vi.fn(),
+  toggleSelectMode: vi.fn(), selectAll: vi.fn(), deleteSelected: vi.fn(), downloadSelected: vi.fn(), copySheet: vi.fn(),
 }));
 
 vi.mock('@/modal.js', () => ({
@@ -97,7 +97,7 @@ describe('window exports', () => {
     'identityUpdate',
     'toggleModalLogEvent', 'logModalEvent',
     'switchTab',
-    'toggleSelectMode', 'selectAll', 'deleteSelected',
+    'toggleSelectMode', 'selectAll', 'deleteSelected', 'downloadSelected', 'copySheet',
   ];
 
   for (const name of expected) {

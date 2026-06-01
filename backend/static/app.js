@@ -34,7 +34,7 @@ import {
   loadMorePhotos,
   renderQuickChips,
   readFiltersFromHash,
-  toggleSelectMode, selectAll, deleteSelected,
+  toggleSelectMode, selectAll, deleteSelected, downloadSelected, copySheet,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -112,6 +112,6 @@ Object.assign(window, {
   identityUpdate,
   toggleModalLogEvent, logModalEvent,
   switchTab,
-  toggleSelectMode, selectAll, deleteSelected,
+  toggleSelectMode, selectAll, deleteSelected, downloadSelected, copySheet,
   initReview, reviewFocus, reviewResolve, reviewOpenPhoto, reviewEdit, reviewEditCancel, reviewAcceptEdited, reviewChoose,
 });

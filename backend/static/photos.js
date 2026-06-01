@@ -389,8 +389,10 @@ function _updateSelectBar() {
   const n = selectedIds.size;
   const count = document.getElementById('select-count');
   if (count) count.textContent = n + ' selected';
-  const btn = document.getElementById('delete-selected-btn');
-  if (btn) btn.disabled = n === 0;
+  for (const id of ['delete-selected-btn', 'download-selected-btn', 'copy-sheet-btn']) {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = n === 0;
+  }
 }
 
 export function toggleSelectMode() {
@@ -406,10 +408,30 @@ export function toggleSelectMode() {
 export function selectAll() {
   if (!selectMode) return;
   state.allPhotos.forEach(p => {
-    selectedIds.add(p.id);
-    document.querySelector('.photo-card[data-id="' + p.id + '"]')?.classList.add('selected');
+    if (!selectedIds.has(p.id)) {
+      selectedIds.add(p.id);
+      document.querySelector('.photo-card[data-id="' + p.id + '"]')?.classList.add('selected');
+    }
   });
   _updateSelectBar();
+}
+
+export async function copySheet() {
+  // TODO: build contact sheet
+  setStatus('Copy sheet not yet implemented.');
+}
+
+export function downloadSelected() {
+  const photos = [...selectedIds].map(id => state.allPhotos.find(p => p.id === id)).filter(Boolean);
+  if (!photos.length) return;
+  photos.forEach(photo => {
+    const a = document.createElement('a');
+    a.href = orientedUrl(photo);
+    a.download = photo.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
 }
 
 export async function deleteSelected() {
