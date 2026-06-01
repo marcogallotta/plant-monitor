@@ -1,0 +1,14 @@
+[Unit]
+Description=Make /media a shared mountpoint for Docker rslave bind propagation
+Documentation=https://www.kernel.org/doc/html/latest/filesystems/sharedsubtree.html
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/mount --bind /media /media
+ExecStart=/bin/mount --make-shared /media
+RemainAfterExit=yes
+
+[Install]
+WantedBy=docker.service
