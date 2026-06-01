@@ -33,7 +33,12 @@ services:
       - ./data/photos:/app/data/photos
       - ./scripts:/app/scripts
       - ./data/tagging-runs:/app/data/tagging-runs
-      - /media:/media:ro
+      - type: bind
+        source: /media
+        target: /media
+        read_only: true
+        bind:
+          propagation: rslave
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       db:
