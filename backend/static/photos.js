@@ -423,61 +423,82 @@ export async function copySheet() {
   const btn = document.getElementById('copy-sheet-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
 
-  const CELL = 1024;   // max px per side per photo
-  const COLS = 2;
-  const PAD  = 12;
-  const LABEL_H = 36;
-  const FONT = 'bold 18px sans-serif';
+  const COLS     = Math.min(2, photos.length);
+  const PAD      = 16;
+  const LABEL_H  = 52;
+  const FONT     = 'bold 22px sans-serif';
+  const TARGET_W = 2048;
+  // Each cell gets an equal share of the target width; minimum 512px so a
+  // single photo never ends up tiny even in a 2-column layout.
+  const CELL = Math.max(512, Math.floor(TARGET_W / COLS) - PAD * 2);
 
-  // Load and resize each photo into an ImageBitmap
-  const cells = await Promise.all(photos.map(async photo => {
-    const resp = await fetch(orientedUrl(photo));
-    const blob = await resp.blob();
-    const bmp  = await createImageBitmap(blob);
-    const scale = Math.min(1, CELL / Math.max(bmp.width, bmp.height));
-    const w = Math.round(bmp.width  * scale);
-    const h = Math.round(bmp.height * scale);
-    const unitNames = (photo.growing_unit_ids || [])
-      .map(id => { const u = state.allUnits.find(u => u.id === id); return u ? u.name : null; })
-      .filter(Boolean).join(', ');
-    const label = (unitNames || '—') + '  ·  ' + formatDate(photo.captured_at);
-    return { bmp, w, h, label };
-  }));
+  // Build the PNG blob asynchronously. ClipboardItem accepts a Promise<Blob>
+  // so we pass it immediately — clipboard.write() is called within the user
+  // gesture window while the build runs in the background.
+  const buildBlob = async () => {
+    const cells = await Promise.all(photos.map(async photo => {
+      const resp = await fetch(orientedUrl(photo));
+      const blob = await resp.blob();
+      const bmp  = await createImageBitmap(blob);
+      const scale = Math.min(1, CELL / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width  * scale);
+      const h = Math.round(bmp.height * scale);
+      const unitParts = (photo.growing_unit_ids || [])
+        .map(id => {
+          const u = state.allUnits.find(u => u.id === id);
+          if (!u) return null;
+          return u.variety ? u.name + ' (' + u.variety + ')' : u.name;
+        })
+        .filter(Boolean).join(', ');
+      const label = (unitParts || '—') + '  ·  ' + formatDate(photo.captured_at);
+      return { bmp, w, h, label };
+    }));
 
-  const rows = Math.ceil(cells.length / COLS);
-  const colW = CELL + PAD * 2;
-  const rowH = CELL + LABEL_H + PAD * 2;
-  const canvas = document.createElement('canvas');
-  canvas.width  = COLS * colW;
-  canvas.height = rows * rowH;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#111';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const rows = Math.ceil(cells.length / COLS);
+    const colW = CELL + PAD * 2;
+    const rowH = CELL + LABEL_H + PAD * 2;
+    const canvas = document.createElement('canvas');
+    canvas.width  = COLS * colW;
+    canvas.height = rows * rowH;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  cells.forEach(({ bmp, w, h, label }, i) => {
-    const col = i % COLS;
-    const row = Math.floor(i / COLS);
-    const x = col * colW + PAD + Math.round((CELL - w) / 2);
-    const y = row * rowH + PAD + Math.round((CELL - h) / 2);
-    ctx.drawImage(bmp, x, y, w, h);
-    bmp.close();
+    cells.forEach(({ bmp, w, h, label }, i) => {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const x = col * colW + PAD + Math.round((CELL - w) / 2);
+      const y = row * rowH + PAD + Math.round((CELL - h) / 2);
+      ctx.drawImage(bmp, x, y, w, h);
+      bmp.close();
 
-    // Label bar below the image
-    const lx = col * colW;
-    const ly = row * rowH + PAD + CELL;
-    ctx.fillStyle = '#222';
-    ctx.fillRect(lx, ly, colW, LABEL_H);
-    ctx.fillStyle = '#ddd';
-    ctx.font = FONT;
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, lx + PAD, ly + LABEL_H / 2, colW - PAD * 2);
-  });
+      const lx = col * colW;
+      const ly = row * rowH + PAD + CELL;
+      ctx.fillStyle = '#222';
+      ctx.fillRect(lx, ly, colW, LABEL_H);
+      ctx.fillStyle = '#ddd';
+      ctx.font = FONT;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, lx + PAD, ly + LABEL_H / 2, colW - PAD * 2);
+    });
 
-  const pngBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+    return new Promise(res => canvas.toBlob(res, 'image/png'));
+  };
+
+  const pngBlob = await buildBlob();
+
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+    setStatus('Copied contact sheet (' + photos.length + ' photo' + (photos.length === 1 ? '' : 's') + ') — paste into ChatGPT or anywhere.');
+  } catch (_) {
+    // Clipboard denied (Brave shields, focus lost, etc.) — open in new tab so
+    // the user can right-click → Copy Image or drag it directly.
+    const url = URL.createObjectURL(pngBlob);
+    window.open(url, '_blank');
+    setStatus('Clipboard unavailable — contact sheet opened in new tab. Right-click → Copy Image, or drag it in.');
+  }
 
   if (btn) { btn.disabled = false; btn.textContent = 'Copy sheet'; }
-  setStatus('Copied contact sheet (' + photos.length + ' photo' + (photos.length === 1 ? '' : 's') + ') — paste into ChatGPT or anywhere.');
 }
 
 export function downloadSelected() {
