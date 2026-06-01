@@ -35,6 +35,7 @@ import {
   renderQuickChips,
   readFiltersFromHash,
   toggleSelectMode, selectAll, deleteSelected, downloadSelected, copySheet,
+  batchSetType, batchSetLocation, batchAddUnit, batchAddLabel,
 } from './photos.js';
 
 async function loadDropdownData() {
@@ -52,6 +53,29 @@ async function loadDropdownData() {
   populateSelect('id-units-select',     state.allUnits,     null);
   populateSelect('new-event-location',  state.allLocations, '— none —');
   populateSelect('new-event-units',     state.allUnits,     null);
+  populateBatchSelects();
+}
+
+// Batch select-bar dropdowns keep a non-selectable placeholder (and a "clear"
+// option for location), so they can't go through populateSelect which wipes the
+// first option. Each is repopulated from scratch keeping its leading options.
+function populateBatchSelects() {
+  const appendOptions = (id, items) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.querySelectorAll('option[data-dynamic]').forEach(o => o.remove());
+    const tail = sel.querySelector('option[data-tail]');
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = item.name;
+      opt.dataset.dynamic = '1';
+      sel.insertBefore(opt, tail);
+    });
+  };
+  appendOptions('batch-location-select', state.allLocations);
+  appendOptions('batch-unit-select',     state.allUnits);
+  appendOptions('batch-label-select',    state.allLabels);
 }
 
 function modalPrev() {
@@ -113,5 +137,6 @@ Object.assign(window, {
   toggleModalLogEvent, logModalEvent,
   switchTab,
   toggleSelectMode, selectAll, deleteSelected, downloadSelected, copySheet,
+  batchSetType, batchSetLocation, batchAddUnit, batchAddLabel,
   initReview, reviewFocus, reviewResolve, reviewOpenPhoto, reviewEdit, reviewEditCancel, reviewAcceptEdited, reviewChoose,
 });

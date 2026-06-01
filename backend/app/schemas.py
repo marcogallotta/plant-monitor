@@ -166,6 +166,14 @@ class PhotoClassify(BaseModel):
         return v
 
 
+class PhotoBatchUpdate(BaseModel):
+    ids: list[int] = Field(min_length=1)
+    photo_type: Optional[str] = None
+    location_id: Optional[int] = None
+    add_unit_ids: list[int] = Field(default_factory=list)
+    add_label_ids: list[int] = Field(default_factory=list)
+
+
 class LabelCreate(BaseModel):
     name: str
 

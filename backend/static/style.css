@@ -86,6 +86,9 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 /* Select mode */
 .select-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 1.5rem; background: #1a1a1a; border-bottom: 1px solid #2a2a2a; }
 .select-bar.hidden { display: none; }
+.select-bar select:disabled { opacity: 0.4; cursor: default; }
+.select-bar-sep { width: 1px; align-self: stretch; background: #2a2a2a; margin: 0 0.25rem; }
+.select-bar { flex-wrap: wrap; row-gap: 0.4rem; }
 .select-bar-del { background: #2a0a0a; border-color: #a33; color: #f88; }
 .select-bar-del:hover:not(:disabled) { background: #6a1a1a; border-color: #f44; color: #fff; }
 .select-bar-del:disabled { opacity: 0.4; cursor: default; }

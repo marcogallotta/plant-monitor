@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { getPhotos, updatePhoto, deletePhoto } from './api.js';
+import { getPhotos, updatePhoto, deletePhoto, batchUpdatePhotos } from './api.js';
 import { setStatus, formatDate, orientedUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
@@ -436,10 +436,61 @@ function _updateSelectBar() {
   const n = selectedIds.size;
   const count = document.getElementById('select-count');
   if (count) count.textContent = n + ' selected';
-  for (const id of ['delete-selected-btn', 'download-selected-btn', 'copy-sheet-btn']) {
-    const btn = document.getElementById(id);
-    if (btn) btn.disabled = n === 0;
+  for (const id of [
+    'delete-selected-btn', 'download-selected-btn', 'copy-sheet-btn',
+    'batch-type-select', 'batch-location-select', 'batch-unit-select', 'batch-label-select',
+  ]) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = n === 0;
   }
+}
+
+// ── Batch classify (set type/location, add unit/label) ───
+// Each <select> in the select bar fires its handler on change. We apply the
+// edit to every selected photo via POST /photos/batch, splice the updated rows
+// back into state.allPhotos, and reset the control — without re-rendering the
+// grid, so the current selection survives across successive batch actions.
+async function _applyBatch(body, sel, msg) {
+  const ids = [...selectedIds];
+  if (!ids.length) { sel.value = ''; return; }
+  sel.disabled = true;
+  try {
+    const updated = await batchUpdatePhotos({ ids, ...body });
+    const byId = new Map(updated.map(p => [p.id, p]));
+    state.allPhotos = state.allPhotos.map(p => byId.get(p.id) || p);
+    setStatus(msg(ids.length));
+  } catch (e) {
+    setStatus('Batch update failed: ' + e.message);
+  } finally {
+    sel.value = '';
+    _updateSelectBar();
+  }
+}
+
+const _plural = n => n + ' photo' + (n === 1 ? '' : 's');
+
+export function batchSetType(sel) {
+  if (!sel.value) return Promise.resolve();
+  const photo_type = sel.value === '__none__' ? null : sel.value;
+  return _applyBatch({ photo_type }, sel, n => 'Set type on ' + _plural(n) + '.');
+}
+
+export function batchSetLocation(sel) {
+  if (!sel.value) return Promise.resolve();
+  const location_id = sel.value === '__none__' ? null : parseInt(sel.value);
+  return _applyBatch({ location_id }, sel, n => 'Set location on ' + _plural(n) + '.');
+}
+
+export function batchAddUnit(sel) {
+  if (!sel.value) return Promise.resolve();
+  const name = sel.options[sel.selectedIndex].text;
+  return _applyBatch({ add_unit_ids: [parseInt(sel.value)] }, sel, n => 'Added "' + name + '" to ' + _plural(n) + '.');
+}
+
+export function batchAddLabel(sel) {
+  if (!sel.value) return Promise.resolve();
+  const name = sel.options[sel.selectedIndex].text;
+  return _applyBatch({ add_label_ids: [parseInt(sel.value)] }, sel, n => 'Added label "' + name + '" to ' + _plural(n) + '.');
 }
 
 export function toggleSelectMode() {

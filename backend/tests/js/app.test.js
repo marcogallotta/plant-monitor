@@ -18,6 +18,7 @@ vi.mock('@/photos.js', () => ({
   renderQuickChips: vi.fn(),
   readFiltersFromHash: vi.fn(),
   toggleSelectMode: vi.fn(), selectAll: vi.fn(), deleteSelected: vi.fn(), downloadSelected: vi.fn(), copySheet: vi.fn(),
+  batchSetType: vi.fn(), batchSetLocation: vi.fn(), batchAddUnit: vi.fn(), batchAddLabel: vi.fn(),
 }));
 
 vi.mock('@/modal.js', () => ({
@@ -98,6 +99,7 @@ describe('window exports', () => {
     'toggleModalLogEvent', 'logModalEvent',
     'switchTab',
     'toggleSelectMode', 'selectAll', 'deleteSelected', 'downloadSelected', 'copySheet',
+    'batchSetType', 'batchSetLocation', 'batchAddUnit', 'batchAddLabel',
   ];
 
   for (const name of expected) {

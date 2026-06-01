@@ -42,6 +42,7 @@ from .schemas import (
     NoteCreate,
     NoteOut,
     NoteUpdate,
+    PhotoBatchUpdate,
     PhotoClassify,
     PhotoListOut,
     PhotoOut,
@@ -328,6 +329,67 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
     if not loaded:
         raise HTTPException(status_code=404, detail="photo not found")
     return _photo_out(loaded)
+
+
+@app.post("/photos/batch", response_model=list[PhotoOut])
+def batch_update_photos(body: PhotoBatchUpdate, db: Session = Depends(get_db)):
+    """Apply the same edits to many photos in one transaction.
+
+    `photo_type` / `location_id` are set only when present in the request body
+    (mirrors PUT /photos/{id}). `add_unit_ids` / `add_label_ids` are additive
+    merges — they never remove existing assignments and skip duplicates.
+    """
+    # Dedupe up front so repeated ids don't bloat the IN(...) clauses below; the
+    # query would collapse them anyway, but this keeps the payload deterministic.
+    ids = list(dict.fromkeys(body.ids))
+    photos = db.query(Photo).filter(Photo.id.in_(ids)).all()
+    missing = sorted(set(ids) - {p.id for p in photos})
+    if missing:
+        raise HTTPException(status_code=404, detail=f"photo(s) not found: {missing}")
+
+    set_type = "photo_type" in body.model_fields_set
+    set_location = "location_id" in body.model_fields_set
+    if set_location:
+        _check_location_exists(body.location_id, db)
+    if body.add_unit_ids:
+        _check_growing_units_exist(body.add_unit_ids, db)
+    if body.add_label_ids:
+        found = {l.id for l in db.query(Label).filter(Label.id.in_(body.add_label_ids)).all()}
+        missing_labels = sorted(set(body.add_label_ids) - found)
+        if missing_labels:
+            raise HTTPException(status_code=404, detail=f"label(s) not found: {missing_labels}")
+
+    # Preload existing unit/label assignments for all photos in one query each,
+    # so merging stays O(1) per photo rather than issuing a query per photo.
+    existing_units: dict[int, set[int]] = {p.id: set() for p in photos}
+    existing_labels: dict[int, set[int]] = {p.id: set() for p in photos}
+    if body.add_unit_ids:
+        for pid, uid in db.query(PhotoGrowingUnit.photo_id, PhotoGrowingUnit.growing_unit_id).filter(
+            PhotoGrowingUnit.photo_id.in_(ids)
+        ):
+            existing_units[pid].add(uid)
+    if body.add_label_ids:
+        for pid, lid in db.query(PhotoLabel.photo_id, PhotoLabel.label_id).filter(
+            PhotoLabel.photo_id.in_(ids)
+        ):
+            existing_labels[pid].add(lid)
+
+    for photo in photos:
+        if set_type:
+            photo.photo_type = body.photo_type
+        if set_location:
+            photo.location_id = body.location_id
+        for uid in body.add_unit_ids:
+            if uid not in existing_units[photo.id]:
+                db.add(PhotoGrowingUnit(photo_id=photo.id, growing_unit_id=uid))
+                existing_units[photo.id].add(uid)  # guard against duplicate ids in the request
+        for lid in body.add_label_ids:
+            if lid not in existing_labels[photo.id]:
+                db.add(PhotoLabel(photo_id=photo.id, label_id=lid))
+                existing_labels[photo.id].add(lid)
+
+    db.commit()
+    return [_photo_out(_get_photo_loaded(db, p.id)) for p in photos]
 
 
 @app.delete("/photos/{photo_id}", status_code=204)

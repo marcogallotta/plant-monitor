@@ -33,6 +33,7 @@ export async function getPhotos(params = {}) {
 }
 
 export function updatePhoto(id, body)          { return apiJson('/photos/' + id, 'PUT', body); }
+export function batchUpdatePhotos(body)        { return apiJson('/photos/batch', 'POST', body); }
 export async function deletePhoto(id) {
   const resp = await fetch('/photos/' + id, {method: 'DELETE'});
   if (!resp.ok) throw new Error('HTTP ' + resp.status);

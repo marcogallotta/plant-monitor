@@ -61,6 +61,29 @@
   <div id="select-bar" class="select-bar hidden">
     <span id="select-count">0 selected</span>
     <button onclick="selectAll()">Select all</button>
+    <span class="select-bar-sep"></span>
+    <select id="batch-type-select" onchange="batchSetType(this)" disabled title="Set type on selected">
+      <option value="">Set type…</option>
+      <option value="overview">Overview</option>
+      <option value="closeup">Closeup</option>
+      <option value="incident">Incident</option>
+      <option value="comparison">Comparison</option>
+      <option value="harvest">Harvest</option>
+      <option value="propagation">Propagation</option>
+      <option value="other">Other</option>
+      <option value="__none__">— clear —</option>
+    </select>
+    <select id="batch-location-select" onchange="batchSetLocation(this)" disabled title="Set location on selected">
+      <option value="">Set location…</option>
+      <option value="__none__" data-tail>— clear —</option>
+    </select>
+    <select id="batch-unit-select" onchange="batchAddUnit(this)" disabled title="Add growing unit to selected">
+      <option value="">+ Unit…</option>
+    </select>
+    <select id="batch-label-select" onchange="batchAddLabel(this)" disabled title="Add label to selected">
+      <option value="">+ Label…</option>
+    </select>
+    <span class="select-bar-sep"></span>
     <button id="download-selected-btn" onclick="downloadSelected()" disabled>Download</button>
     <button id="copy-sheet-btn" onclick="copySheet()" disabled>Copy sheet</button>
     <button id="delete-selected-btn" class="select-bar-del" onclick="deleteSelected()" disabled>Delete selected</button>

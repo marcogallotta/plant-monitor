@@ -106,6 +106,12 @@ The route is registered **before** `GET /photos/{filename}` so FastAPI does not 
 
 `PUT /photos/{photo_id}` updates `photo_type`, `location_id`, `rotation`, and/or `growing_unit_ids`. Growing unit assignments are replaced wholesale: the endpoint deletes all existing `PhotoGrowingUnit` rows for the photo then inserts the new set. Only fields present in the request body are touched (Pydantic `model_fields_set`).
 
+### Batch classification
+
+`POST /photos/batch` applies the same edits to many photos in one transaction. Body: `ids` (required, non-empty), `photo_type`, `location_id`, `add_unit_ids`, `add_label_ids`. `photo_type`/`location_id` follow the same `model_fields_set` rule as `PUT /photos/{id}` — present-in-body sets the value (including explicit `null` to clear), omitted leaves it untouched. `add_unit_ids`/`add_label_ids` are **additive merges**: they never remove existing assignments and skip ids already present. Unknown photo/location/unit/label ids return 404. Existing assignments are preloaded in one query per table and the in-memory cache is updated as inserts are queued, so duplicate ids in a single request (`add_unit_ids: [7, 7]`) can't produce a composite-PK collision. Returns the updated `PhotoOut` rows.
+
+The gallery select bar drives this: the `Set type` / `Set location` / `+ Unit` / `+ Label` dropdowns each fire one batch call on change, splice the returned rows into `state.allPhotos` **without re-rendering the grid** (so the selection survives across chained actions), then reset to their placeholder.
+
 ### Photo deletion
 
 `DELETE /photos/{photo_id}` removes a photo and all dependent rows (notes, labels, growing unit assignments, event associations) in a single transaction, then attempts to delete the image and metadata files from disk. File deletion is best-effort — an `OSError` is logged but does not fail the request (the DB row is already gone). Returns 204 on success.

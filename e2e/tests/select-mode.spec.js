@@ -126,6 +126,51 @@ test('cancel exits select mode without deleting', async ({ page, request }) => {
   await expect(page.locator(`.photo-card[data-id="${photo.id}"]`)).toBeVisible();
 });
 
+test('batch set type applies to all selected photos and preserves selection', async ({ page, request }) => {
+  const date = '2099-03-08';
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const p1 = await uploadPhoto(request, date, `${runId}-a`);
+  const p2 = await uploadPhoto(request, date, `${runId}-b`);
+
+  await goToDateFiltered(page, date);
+  await page.locator('#select-mode-btn').click();
+  await page.getByRole('button', { name: 'Select all' }).click();
+
+  const done = page.waitForResponse(
+    r => r.url().includes('/photos/batch') && r.request().method() === 'POST',
+  );
+  await page.locator('#batch-type-select').selectOption('overview');
+  const updated = await (await done).json();
+
+  expect(updated.map(p => p.id).sort()).toEqual([p1.id, p2.id].sort());
+  expect(updated.every(p => p.photo_type === 'overview')).toBe(true);
+
+  // The control resets to its placeholder and the selection survives for chaining.
+  await expect(page.locator('#batch-type-select')).toHaveValue('');
+  await expect(page.locator('#select-count')).toHaveText('2 selected');
+  await expect(page.locator('#select-bar')).toBeVisible();
+});
+
+test('batch add label assigns a label to all selected photos', async ({ page, request }) => {
+  const date = '2099-03-09';
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const p1 = await uploadPhoto(request, date, `${runId}-a`);
+  const p2 = await uploadPhoto(request, date, `${runId}-b`);
+
+  await goToDateFiltered(page, date);
+  await page.locator('#select-mode-btn').click();
+  await page.getByRole('button', { name: 'Select all' }).click();
+
+  const done = page.waitForResponse(
+    r => r.url().includes('/photos/batch') && r.request().method() === 'POST',
+  );
+  await page.locator('#batch-label-select').selectOption({ label: 'aphids' });
+  const updated = await (await done).json();
+
+  expect(updated.map(p => p.id).sort()).toEqual([p1.id, p2.id].sort());
+  expect(updated.every(p => p.labels.some(l => l.name === 'aphids'))).toBe(true);
+});
+
 test('drag across two cards selects both', async ({ page, request }) => {
   const date = '2099-03-07';
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

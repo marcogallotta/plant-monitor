@@ -4,9 +4,11 @@ vi.mock('@/api.js', () => ({
   getPhotos: vi.fn().mockResolvedValue({photos: [], total: 0}),
   updatePhoto: vi.fn().mockResolvedValue({}),
   deletePhoto: vi.fn().mockResolvedValue(undefined),
+  batchUpdatePhotos: vi.fn().mockResolvedValue([]),
 }));
 
 let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash, toggleSelectMode, selectAll, deleteSelected, downloadSelected;
+let batchSetType, batchSetLocation, batchAddUnit, batchAddLabel;
 let state;
 
 const PHOTOS = [
@@ -35,6 +37,10 @@ beforeAll(async () => {
       <button id="delete-selected-btn" disabled></button>
       <button id="download-selected-btn" disabled></button>
       <button id="copy-sheet-btn" disabled></button>
+      <select id="batch-type-select" disabled><option value="">Set type…</option><option value="overview">Overview</option><option value="__none__">— clear —</option></select>
+      <select id="batch-location-select" disabled><option value="">Set location…</option><option value="5">Balcony</option><option value="__none__">— clear —</option></select>
+      <select id="batch-unit-select" disabled><option value="">+ Unit…</option><option value="7">Basil</option></select>
+      <select id="batch-label-select" disabled><option value="">+ Label…</option><option value="9">aphids</option></select>
     </div>
     <!-- compare/flicker -->
     <div id="slot-a-empty"></div>
@@ -60,7 +66,7 @@ beforeAll(async () => {
     <span id="tl-fps"></span>
   `;
 
-  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash, toggleSelectMode, selectAll, deleteSelected, downloadSelected} =
+  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash, toggleSelectMode, selectAll, deleteSelected, downloadSelected, batchSetType, batchSetLocation, batchAddUnit, batchAddLabel} =
     await import('@/photos.js'));
   ({state} = await import('@/state.js'));
 });
@@ -699,5 +705,121 @@ describe('drag-to-select', () => {
     document.dispatchEvent(new MouseEvent('mouseup'));
     mouseover(card2);
     expect(card2.classList.contains('selected')).toBe(false);
+  });
+});
+
+// ── batch classify (set type/location, add unit/label) ────
+
+describe('batch classify', () => {
+  let api;
+  beforeEach(async () => {
+    resetSelectMode();
+    api = await import('@/api.js');
+    vi.mocked(api.getPhotos).mockResolvedValueOnce({photos: PHOTOS, total: PHOTOS.length});
+    await loadPhotos();
+    toggleSelectMode();
+    selectAll();
+    vi.mocked(api.batchUpdatePhotos).mockResolvedValue(
+      PHOTOS.map(p => ({...p, photo_type: 'overview'}))
+    );
+  });
+
+  afterEach(() => {
+    vi.mocked(api.batchUpdatePhotos).mockReset();
+    resetSelectMode();
+  });
+
+  it('batchSetType posts the selected ids with the chosen photo_type', async () => {
+    const sel = document.getElementById('batch-type-select');
+    sel.value = 'overview';
+    await batchSetType(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).toHaveBeenCalledWith({
+      ids: PHOTOS.map(p => p.id),
+      photo_type: 'overview',
+    });
+  });
+
+  it('batchSetType with the clear sentinel sends null', async () => {
+    const sel = document.getElementById('batch-type-select');
+    sel.value = '__none__';
+    await batchSetType(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).toHaveBeenCalledWith({
+      ids: PHOTOS.map(p => p.id),
+      photo_type: null,
+    });
+  });
+
+  it('batchSetLocation parses the id and clear sends null', async () => {
+    const sel = document.getElementById('batch-location-select');
+    sel.value = '5';
+    await batchSetLocation(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).toHaveBeenCalledWith({
+      ids: PHOTOS.map(p => p.id),
+      location_id: 5,
+    });
+    sel.value = '__none__';
+    await batchSetLocation(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).toHaveBeenLastCalledWith({
+      ids: PHOTOS.map(p => p.id),
+      location_id: null,
+    });
+  });
+
+  it('batchAddUnit posts add_unit_ids', async () => {
+    const sel = document.getElementById('batch-unit-select');
+    sel.value = '7';
+    await batchAddUnit(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).toHaveBeenCalledWith({
+      ids: PHOTOS.map(p => p.id),
+      add_unit_ids: [7],
+    });
+  });
+
+  it('batchAddLabel posts add_label_ids', async () => {
+    const sel = document.getElementById('batch-label-select');
+    sel.value = '9';
+    await batchAddLabel(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).toHaveBeenCalledWith({
+      ids: PHOTOS.map(p => p.id),
+      add_label_ids: [9],
+    });
+  });
+
+  it('splices the returned photos back into state.allPhotos', async () => {
+    const sel = document.getElementById('batch-type-select');
+    sel.value = 'overview';
+    await batchSetType(sel);
+    expect(state.allPhotos.every(p => p.photo_type === 'overview')).toBe(true);
+  });
+
+  it('resets the control and preserves the selection for chained actions', async () => {
+    const sel = document.getElementById('batch-type-select');
+    sel.value = 'overview';
+    await batchSetType(sel);
+    expect(sel.value).toBe('');
+    // selection survived — a follow-up action still targets both photos
+    sel.value = 'overview';
+    await batchSetType(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).toHaveBeenLastCalledWith({
+      ids: PHOTOS.map(p => p.id),
+      photo_type: 'overview',
+    });
+  });
+
+  it('does nothing on the placeholder option', async () => {
+    const sel = document.getElementById('batch-type-select');
+    sel.value = '';
+    await batchSetType(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when nothing is selected', async () => {
+    toggleSelectMode(); // off — clears selection
+    toggleSelectMode(); // on, empty
+    const sel = document.getElementById('batch-type-select');
+    sel.value = 'overview';
+    await batchSetType(sel);
+    expect(vi.mocked(api.batchUpdatePhotos)).not.toHaveBeenCalled();
+    expect(sel.value).toBe('');
   });
 });
