@@ -664,6 +664,13 @@ describe('drag-to-select', () => {
     expect(card.classList.contains('selected')).toBe(true);
   });
 
+  it('subsequent click after mousedown does not double-toggle', () => {
+    const card = document.querySelector('.photo-card[data-id="1"]');
+    mousedown(card);
+    card.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+    expect(card.classList.contains('selected')).toBe(true);
+  });
+
   it('mouseover while holding adds the hovered card', () => {
     const card1 = document.querySelector('.photo-card[data-id="1"]');
     const card2 = document.querySelector('.photo-card[data-id="2"]');

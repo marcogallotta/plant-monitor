@@ -399,7 +399,7 @@ document.getElementById('photo-grid').addEventListener('mousedown', function(e) 
   if (!card) return;
   e.preventDefault(); // stops native image drag from hijacking mouseover events
   _dragSelecting = true;
-  _dragMoved = false;
+  _dragMoved = true; // mousedown owns the toggle; suppress the subsequent click event
   const id = parseInt(card.dataset.id, 10);
   _dragToggleTo = !selectedIds.has(id);
   if (_dragToggleTo) { selectedIds.add(id); card.classList.add('selected'); }
