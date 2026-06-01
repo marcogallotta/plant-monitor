@@ -379,6 +379,18 @@ async def upload_manual_photo(
     else:
         parsed_at = datetime.now(timezone.utc)
 
+    if image.filename and original_size_bytes is not None:
+        existing = (
+            db.query(Photo)
+            .filter(Photo.original_filename == image.filename)
+            .filter(Photo.original_size_bytes == original_size_bytes)
+            .first()
+        )
+        if existing:
+            loaded = _get_photo_loaded(db, existing.id)
+            if loaded:
+                return _photo_out(loaded)
+
     image_bytes = await image.read()
     photo = save_photo(
         db,
