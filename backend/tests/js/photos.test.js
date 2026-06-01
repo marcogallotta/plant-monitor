@@ -6,7 +6,7 @@ vi.mock('@/api.js', () => ({
   deletePhoto: vi.fn().mockResolvedValue(undefined),
 }));
 
-let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash;
+let loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash, toggleSelectMode, selectAll, deleteSelected, downloadSelected;
 let state;
 
 const PHOTOS = [
@@ -28,6 +28,14 @@ beforeAll(async () => {
     <select id="filter-unit"><option value="">All</option></select>
     <!-- photo grid -->
     <div id="photo-grid"></div>
+    <!-- select mode -->
+    <button id="select-mode-btn"></button>
+    <div id="select-bar" class="hidden">
+      <span id="select-count"></span>
+      <button id="delete-selected-btn" disabled></button>
+      <button id="download-selected-btn" disabled></button>
+      <button id="copy-sheet-btn" disabled></button>
+    </div>
     <!-- compare/flicker -->
     <div id="slot-a-empty"></div>
     <img id="img-a" style="display:none" src="">
@@ -52,7 +60,7 @@ beforeAll(async () => {
     <span id="tl-fps"></span>
   `;
 
-  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash} =
+  ({loadPhotos, clearFilter, applyFilter, selectA, selectB, flickerAuto, stopAuto, flickerToggle, gridRotate, gridDelete, readFiltersFromHash, toggleSelectMode, selectAll, deleteSelected, downloadSelected} =
     await import('@/photos.js'));
   ({state} = await import('@/state.js'));
 });
@@ -458,5 +466,231 @@ describe('gridDelete', () => {
     const e = {stopPropagation: vi.fn()};
     await gridDelete(e, 20);
     expect(state.photoA).toBe(other);
+  });
+});
+
+// ── select-mode helpers ───────────────────────────────────
+
+// Ensures select mode is off and all card selections cleared before/after
+// each select-mode test, regardless of what the test did.
+function resetSelectMode() {
+  // toggleSelectMode() clears selectedIds AND removes .selected from cards.
+  // Only call when in select mode; if already off, module state is already clean
+  // (selectedIds can only be populated while selectMode is true).
+  if (document.getElementById('photo-grid').classList.contains('select-mode')) {
+    toggleSelectMode();
+  }
+}
+
+// ── toggleSelectMode ──────────────────────────────────────
+
+describe('toggleSelectMode', () => {
+  afterEach(resetSelectMode);
+
+  it('adds select-mode class to grid and removes hidden from select-bar', () => {
+    toggleSelectMode();
+    expect(document.getElementById('photo-grid').classList.contains('select-mode')).toBe(true);
+    expect(document.getElementById('select-bar').classList.contains('hidden')).toBe(false);
+  });
+
+  it('removes select-mode class when called a second time', () => {
+    toggleSelectMode();
+    toggleSelectMode();
+    expect(document.getElementById('photo-grid').classList.contains('select-mode')).toBe(false);
+    expect(document.getElementById('select-bar').classList.contains('hidden')).toBe(true);
+  });
+
+  it('clears existing selections when toggling off', async () => {
+    const api = await import('@/api.js');
+    vi.mocked(api.getPhotos).mockResolvedValueOnce({photos: PHOTOS, total: PHOTOS.length});
+    await loadPhotos();
+    toggleSelectMode();
+    // simulate selecting a card
+    const card = document.querySelector('.photo-card[data-id="1"]');
+    card.classList.add('selected');
+    toggleSelectMode(); // off
+    expect(document.querySelectorAll('.photo-card.selected')).toHaveLength(0);
+  });
+});
+
+// ── selectAll ─────────────────────────────────────────────
+
+describe('selectAll', () => {
+  beforeEach(async () => {
+    resetSelectMode();
+    const api = await import('@/api.js');
+    vi.mocked(api.getPhotos).mockResolvedValueOnce({photos: PHOTOS, total: PHOTOS.length});
+    await loadPhotos();
+    toggleSelectMode();
+  });
+
+  afterEach(resetSelectMode);
+
+  it('adds selected class to every card', () => {
+    selectAll();
+    expect(document.querySelectorAll('.photo-card.selected')).toHaveLength(PHOTOS.length);
+  });
+
+  it('updates the count in the select bar', () => {
+    selectAll();
+    expect(document.getElementById('select-count').textContent).toBe(`${PHOTOS.length} selected`);
+  });
+
+  it('enables the action buttons', () => {
+    selectAll();
+    expect(document.getElementById('delete-selected-btn').disabled).toBe(false);
+    expect(document.getElementById('download-selected-btn').disabled).toBe(false);
+  });
+
+  it('does nothing when not in select mode', () => {
+    toggleSelectMode(); // back off
+    selectAll();
+    expect(document.querySelectorAll('.photo-card.selected')).toHaveLength(0);
+  });
+});
+
+// ── deleteSelected ────────────────────────────────────────
+
+describe('deleteSelected', () => {
+  beforeEach(async () => {
+    resetSelectMode();
+    const api = await import('@/api.js');
+    vi.mocked(api.getPhotos).mockResolvedValueOnce({photos: PHOTOS, total: PHOTOS.length});
+    await loadPhotos();
+    state.totalPhotos = PHOTOS.length;
+    toggleSelectMode();
+    selectAll();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.deletePhoto).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetSelectMode();
+  });
+
+  it('removes deleted photos from state.allPhotos', async () => {
+    await deleteSelected();
+    expect(state.allPhotos).toHaveLength(0);
+  });
+
+  it('exits select mode after deletion', async () => {
+    await deleteSelected();
+    expect(document.getElementById('photo-grid').classList.contains('select-mode')).toBe(false);
+  });
+
+  it('does nothing when confirm is cancelled', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const api = await import('@/api.js');
+    await deleteSelected();
+    expect(vi.mocked(api.deletePhoto)).not.toHaveBeenCalled();
+  });
+});
+
+// ── downloadSelected ──────────────────────────────────────
+
+describe('downloadSelected', () => {
+  beforeEach(async () => {
+    resetSelectMode();
+    const api = await import('@/api.js');
+    vi.mocked(api.getPhotos).mockResolvedValueOnce({photos: PHOTOS, total: PHOTOS.length});
+    await loadPhotos();
+    toggleSelectMode();
+    selectAll();
+  });
+
+  afterEach(resetSelectMode);
+
+  it('creates an anchor pointing at /photos/export with all selected ids', () => {
+    const clicks = [];
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation(tag => {
+      const el = origCreate(tag);
+      if (tag === 'a') vi.spyOn(el, 'click').mockImplementation(() => clicks.push(el));
+      return el;
+    });
+    downloadSelected();
+    expect(clicks).toHaveLength(1);
+    const ids = PHOTOS.map(p => p.id).sort((a, b) => a - b).join(',');
+    expect(clicks[0].href).toContain(`/photos/export?ids=`);
+    expect(clicks[0].href).toContain(`ids=${ids}`);
+    expect(clicks[0].download).toBe('photos.zip');
+    vi.restoreAllMocks();
+  });
+
+  it('does nothing when nothing is selected', () => {
+    toggleSelectMode(); // clears selection
+    toggleSelectMode(); // back on
+    const clicks = [];
+    const origCreate = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation(tag => {
+      const el = origCreate(tag);
+      if (tag === 'a') vi.spyOn(el, 'click').mockImplementation(() => clicks.push(el));
+      return el;
+    });
+    downloadSelected();
+    expect(clicks).toHaveLength(0);
+    vi.restoreAllMocks();
+  });
+});
+
+// ── drag-to-select ────────────────────────────────────────
+
+describe('drag-to-select', () => {
+  beforeEach(async () => {
+    resetSelectMode();
+    document.dispatchEvent(new MouseEvent('mouseup')); // terminate any active drag-selection state
+    const api = await import('@/api.js');
+    vi.mocked(api.getPhotos).mockResolvedValueOnce({photos: PHOTOS, total: PHOTOS.length});
+    await loadPhotos();
+    toggleSelectMode();
+  });
+
+  afterEach(() => {
+    document.dispatchEvent(new MouseEvent('mouseup'));
+    resetSelectMode();
+  });
+
+  function mousedown(card) {
+    card.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+  }
+  function mouseover(card) {
+    card.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+  }
+
+  it('mousedown on a card selects it', () => {
+    const card = document.querySelector('.photo-card[data-id="1"]');
+    mousedown(card);
+    expect(card.classList.contains('selected')).toBe(true);
+  });
+
+  it('mouseover while holding adds the hovered card', () => {
+    const card1 = document.querySelector('.photo-card[data-id="1"]');
+    const card2 = document.querySelector('.photo-card[data-id="2"]');
+    mousedown(card1);
+    mouseover(card2);
+    expect(card2.classList.contains('selected')).toBe(true);
+  });
+
+  it('dragging over an already-selected card deselects it', () => {
+    const card1 = document.querySelector('.photo-card[data-id="1"]');
+    const card2 = document.querySelector('.photo-card[data-id="2"]');
+    // pre-select card2
+    mousedown(card2);
+    document.dispatchEvent(new MouseEvent('mouseup'));
+    // now drag-deselect by starting on card2
+    mousedown(card2);
+    mouseover(card1);
+    expect(card2.classList.contains('selected')).toBe(false);
+    expect(card1.classList.contains('selected')).toBe(false);
+  });
+
+  it('mouseup stops drag — further mouseover has no effect', () => {
+    const card1 = document.querySelector('.photo-card[data-id="1"]');
+    const card2 = document.querySelector('.photo-card[data-id="2"]');
+    mousedown(card1);
+    document.dispatchEvent(new MouseEvent('mouseup'));
+    mouseover(card2);
+    expect(card2.classList.contains('selected')).toBe(false);
   });
 });
