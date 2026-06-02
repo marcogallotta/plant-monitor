@@ -119,3 +119,31 @@ curl -s localhost:8001/camera-import/scan | head   # expect candidates, not empt
 
 On future reboots the unit runs before docker, so this is durable; the stale
 container is the only leftover.
+
+---
+
+## Issue 3 — `CAMERA_IMPORT_HMAC_SECRET` unset → file IDs invalidated on reload
+
+### Root cause
+
+`camera_import.py:35-36` falls back to a per-process random secret when the env
+var is unset:
+
+```py
+_hmac_secret_env = os.environ.get("CAMERA_IMPORT_HMAC_SECRET", "")
+_HMAC_SECRET = _hmac_secret_env.encode() if _hmac_secret_env else os.urandom(32)
+```
+
+It is **not set** in `.env` or `docker-compose.yml`. The opaque file IDs handed to
+the browser (`_make_file_id`, line 144) are HMAC'd with this secret. The dev
+backend runs `uvicorn --reload`, so **every code edit restarts the worker with a
+new random secret** — every file ID from the previous scan becomes invalid.
+Symptom: after an edit (or any worker restart), thumbnails 404 and "Import
+selected" fails with `not_found_or_expired` until the user re-scans.
+
+### Fix
+
+Set a fixed secret so IDs survive restarts:
+- add `CAMERA_IMPORT_HMAC_SECRET` to `.env` (and pass it through in
+  `docker-compose.yml` env, like the other vars at `docker-compose.yml:20-28`).
+- generate once, e.g. `python -c "import secrets; print(secrets.token_hex(32))"`.
