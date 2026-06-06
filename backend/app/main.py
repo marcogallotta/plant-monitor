@@ -61,6 +61,12 @@ app.include_router(suggestions_router)
 async def basic_auth_middleware(request: Request, call_next):
     if request.url.path.startswith("/assistant"):
         return await call_next(request)
+    # Pi camera ingest: dedicated bearer token, scoped to photo upload only.
+    ingest_token = os.environ.get("INGEST_API_TOKEN", "")
+    if ingest_token and request.method == "POST" and request.url.path == "/photos":
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer ") and auth[7:] == ingest_token:
+            return await call_next(request)
     password = os.environ.get("DASHBOARD_PASSWORD", "")
     if not password:
         return await call_next(request)

@@ -1,8 +1,9 @@
 [Unit]
-Description=Plant monitoring - capture photo every 30 minutes
+Description=Plant monitoring - capture photo on boot and hourly
 
 [Timer]
-OnCalendar=*:0/30
+OnBootSec=30s
+OnCalendar=hourly
 Persistent=true
 
 [Install]

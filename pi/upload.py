@@ -6,7 +6,9 @@ from typing import Callable
 PostFn = Callable[[str, str, bytes, bytes], bool]
 
 
-def _httpx_post(url: str, stem: str, image_bytes: bytes, meta_bytes: bytes) -> bool:
+def _httpx_post(
+    url: str, stem: str, image_bytes: bytes, meta_bytes: bytes, token: str | None = None
+) -> bool:
     import httpx
     try:
         response = httpx.post(
@@ -15,6 +17,7 @@ def _httpx_post(url: str, stem: str, image_bytes: bytes, meta_bytes: bytes) -> b
                 "image": (f"{stem}.jpg", image_bytes, "image/jpeg"),
                 "metadata": (f"{stem}.json", meta_bytes, "application/json"),
             },
+            headers={"Authorization": f"Bearer {token}"} if token else {},
             timeout=30,
         )
         return response.status_code == 200
@@ -78,4 +81,6 @@ if __name__ == "__main__":
     config = json.loads(Path("config.json").read_text())
     capture_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("capture")
     uploaded_dir = capture_dir.parent / "uploaded"
-    run_upload(capture_dir, uploaded_dir, config["backend_url"])
+    token = config.get("api_token")
+    post_fn = (lambda u, s, i, m: _httpx_post(u, s, i, m, token=token)) if token else None
+    run_upload(capture_dir, uploaded_dir, config["backend_url"], post_fn=post_fn)
