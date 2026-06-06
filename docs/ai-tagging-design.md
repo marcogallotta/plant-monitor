@@ -5,12 +5,48 @@ a live run. The old grid/batch-size approach is superseded — see Appendix B._
 
 ---
 
+## Current focus (2026-06-06)
+
+**Operating model.** Two layers that feed each other:
+- **Overhead Pi** = the cheap, continuous layer — identity anchor (via the layout map),
+  presence, coverage, and "*something changed in region X*" localization. It does **not** need
+  to see pests or fine harvest detail (a known −20g dill harvest was invisible from overhead —
+  see Phase 2).
+- **Closeups (phone + camera)** = the value layer — where pests, wilt, and harvest-readiness
+  are actually visible, *and the user already captures these in volume*. The overhead map +
+  capture timing give each closeup its plant identity cheaply (closed-set + temporal anchor),
+  so a steady closeup stream becomes labelled data largely for free (caveats: confusables/
+  context-less shots still need the review tail; effect is strongest forward-looking).
+
+**Highest-leverage lever: frictionless phone sync.** The throttle on the valuable closeup data
+is *upload friction*, not model capability — a boring auto-sync pipe (watched album / background
+uploader) probably moves the goal more than anything on the vision side. Not yet built.
+
+We're following the **build-order flip** (Pi-first): build the recurring loop now; the Phase-1
+phone backfill of the ~901 historical photos is **paused** (cheaper + more accurate once the Pi
+corpus exists). Active work, in priority order:
+
+1. **Phone sync (top lever, not built)** — make closeup upload effortless so the value-layer
+   data flows. A phone upload path exists (`source=phone`); the gap is automation.
+2. **Layout map — done.** Lives in **[balcony-layout.md](balcony-layout.md)** (the live,
+   human-verified registry). The container table further down is historical context only.
+3. **Harvest ground truth via Asana** — read *Plants → Plant Records* task comments →
+   `harvested` events (idempotent on the Asana comment gid). No vision required.
+4. **Imaging investigation** — does higher resolution / a closeup make harvest-scale change
+   detectable, or is visual harvest-diffing just unreliable here? (Drift ~5°, not the blocker;
+   frame registration is nice-to-have.)
+5. **Region tagging** — `photo_notes` + a `growing_unit_id` FK (mechanism decided, not built).
+
+Everything below this section is reference and full design detail.
+
+---
+
 ## How to use this doc (read first)
 
 1. **"Current plan" is authoritative** — what to do today. Where it conflicts with the
    Appendices, this wins.
-2. **Verify plant/container state against the live DB** (`GET /assistant/growing-units`),
-   not prose. The DB needs cleanup (see "Closed set").
+2. **Verify plant/container state against the live DB** (`GET /assistant/growing-units`) and
+   the live layout in [balcony-layout.md](balcony-layout.md), not prose.
 3. **Appendix A** = confirmed few-shot examples (reference material). **Appendix B** =
    dated evidence log of how we got here. Evidence, not instructions.
 
@@ -20,13 +56,13 @@ a live run. The old grid/batch-size approach is superseded — see Appendix B._
 
 Two phases. Identity comes from **priors**; vision **confirms and reads condition**.
 
-- **Phase 1 — backfill (now).** Classify the ~901 unclassified historical phone photos via
+- **Phase 1 — backfill (paused; see Current focus).** Classify the ~901 unclassified historical phone photos via
   the **Anthropic Batch API**, **Sonnet @ 1024px**, **individual images** (not a grid),
   **container-first** matching + a **SEEDLINGS** fallback, with a compact prior-laden cached
   prompt. Flag confusables/low-confidence → second **Opus** batch → agreement gate → humans
   review only the disagreements. **Output: a classified archive + a container/composition
   registry.** Cost ≈ **$25**.
-- **Phase 2 — Pi monitoring (when the Pi is up).** Fixed-camera overhead shots → a
+- **Phase 2 — Pi monitoring (active; the Pi is up).** Fixed-camera overhead shots → a
   **self-maintaining layout map** (diff each frame against the last known-good to detect and
   localize what moved) → **region tagging + harvestability estimation**. This is the
   recurring payoff; the Phase-1 registry seeds it.
@@ -98,11 +134,10 @@ Don't rebuild any of that. The grid is dead.
 ## Closed set (authoritative)
 
 **Distinctive (a confident single label is OK):** Dill, Parsley, Rocket, Rosemary, Sage,
-Sorrel, French tarragon, Fenugreek, Lemongrass (when mature).
+Sorrel, French tarragon, Lemongrass (when mature).
 
 **Confusable / variety groups (`options` only — never a confident single pick):**
-- Mints: **Peppermint / Moroccan mint / Spearmint** (spearmint is real — a short-lived
-  supermarket buy)
+- Mints: **Peppermint / Moroccan mint** (Spearmint is dead as of 2026-06-06 — retired)
 - Allium clumps: **Chives / Garlic chives / Welsh onion**
 - Apiaceae seedlings: **Parsley / Cilantro**
 - Basil: **Genovese basil / Thai basil**. Note there are **two distinct, real Thai basils** —
@@ -114,11 +149,14 @@ Sorrel, French tarragon, Fenugreek, Lemongrass (when mature).
 - Small woody: **Thyme / Lemon thyme** (not visually separable; options unless container known)
 
 **DB cleanup (done 2026-05-31):** merged the generic **Basil** unit into **Genovese basil**
-(no plain "basil"). **Kept as real:** `Spearmint` (short-lived supermarket buy), and **both**
-Thai basils — `Thai basil` (seed-grown) and `Thai basil vendita` (a distinct cultivar). The
-two Thai basils are a permanent binary on review. Several real plants still have no unit
-(cilantro, sage, plain thyme, chives, fenugreek, the chilli varieties) — these get created on
-accept, not pre-seeded.
+(no plain "basil"). **Kept as real:** **both** Thai basils — `Thai basil` (seed-grown) and
+`Thai basil vendita` (a distinct cultivar); the two are a permanent binary on review.
+
+**Update 2026-06-06 (from the balcony walk-down — see [balcony-layout.md](balcony-layout.md)):**
+`Spearmint` is **dead** (retire it) and **Fenugreek no longer exists** — drop both from all
+priors. Units created from the walk-down: **Sage (37), Thyme (38), Chives (39), Cilantro (40),
+Cilantro root (41)**. The remaining real plants without a unit (the chilli varieties) get
+created on accept, not pre-seeded.
 
 ---
 
@@ -126,6 +164,11 @@ accept, not pre-seeded.
 
 The durable asset. Largely fixed historically; **may change later** — the registry must be
 re-registerable, and Phase 2 detects change by diffing frames.
+
+> **Current ground truth lives in [balcony-layout.md](balcony-layout.md)** (human-verified from
+> the Pi overview, 2026-06-06). The table below is the historical phone-era registry and is
+> partly stale (Fenugreek gone, Spearmint dead, basil/mint placements changed) — prefer
+> `balcony-layout.md` for the live layout; keep this table only as Phase-1 backfill context.
 
 | Container | Contents |
 |---|---|
@@ -135,7 +178,6 @@ re-registerable, and Phase 2 detects change by diffing frames.
 | Trough | Moroccan mint (solo) |
 | Small trough | Welsh onion (seedlings) |
 | Small trough | cilantro (solo) |
-| Small trough | fenugreek (solo) |
 | Small trough | thyme + lemon thyme |
 | Round pots | **one plant each** — peppermint, rosemary, sage, sorrel, rau ram, lemongrass, French tarragon, garlic chives, etc. |
 | Trays | tiny seedlings (basil / chilli / parsley / cilantro by date) |
@@ -210,8 +252,8 @@ every photo shows plants from the KNOWN LIST. MATCH to the list — do not ident
 in general, and do not free-guess outside it.
 
 KNOWN PLANTS (only valid labels):
-  Distinctive: dill, parsley, rocket, rosemary, sage, sorrel, French tarragon, fenugreek, lemongrass
-  Confusable groups (use options): peppermint/Moroccan mint/spearmint · chives/garlic chives/Welsh onion ·
+  Distinctive: dill, parsley, rocket, rosemary, sage, sorrel, French tarragon, lemongrass
+  Confusable groups (use options): peppermint/Moroccan mint · chives/garlic chives/Welsh onion ·
     parsley/cilantro · genovese basil/Thai basil · bird's-eye/Hangjiao-H7/Hangjiao-H4 chilli ·
     lemongrass/rau ram · sorrel/rau ram · thyme/lemon thyme
   (Two real Thai basils — "Thai basil" and "Thai basil vendita". Label "Thai basil"; always
@@ -222,7 +264,7 @@ CONTAINER MAP (HINTS, not facts — pots move and troughs get replanted):
   trough: 2 genovese basil + 1 Thai basil
   trough: rocket + cilantro
   trough: Moroccan mint (solo)
-  small trough: Welsh onion (seedlings) | cilantro (solo) | fenugreek (solo) | thyme + lemon thyme
+  small trough: Welsh onion (seedlings) | cilantro (solo) | thyme + lemon thyme
   round pots: one plant each (peppermint, rosemary, sage, sorrel, rau ram, lemongrass, French tarragon, garlic chives…)
   trays: tiny seedlings
   → If a trough's visible composition matches a known one, prefer that grouping. If it does
@@ -268,6 +310,15 @@ No prose outside the array.
 > Build only once real Pi capture behaviour exists. This is the recurring payoff; the
 > Phase-1 registry seeds it.
 
+**Region-tagging mechanism (decided 2026-06-06):** reuse `photo_notes`, which already stores a
+normalised rectangle (`x, y, x2, y2`, 0–1, range-checked) and ships the full draw/edit UI
+(shift+drag region notes, `pendingNote`, `visualToStored()` rotation handling). Add a nullable
+`growing_unit_id` FK to `photo_notes` (and make `note_text` nullable) — a region note pointing
+at a unit *is* a region tag. This avoids a new `photo_regions` table. A human-verified set of
+such notes on one reference frame is both the validation overlay and the reusable layout
+template; per-region crops (reuse the rotation-baked crop from `/photos/export`) build the
+per-unit dataset. AI-suggested regions continue to live in `photo_ai_suggestions`.
+
 The Pi gives a **fixed overhead frame**. That doesn't make the layout static (things shuffle)
 — it makes **change cheap to detect and localize**:
 
@@ -277,6 +328,20 @@ The Pi gives a **fixed overhead frame**. That doesn't make the layout static (th
 - So layout maintenance flips from "periodically re-register everything" (a chore that won't
   get done) to **self-maintaining via diff**.
 
+**Reality check (2026-06-06): a known −20g dill harvest was NOT visually detectable.** Tested
+against ground truth — a real **−20g dill harvest** between the `17:00Z` and `18:00Z` frames
+(≈19:00–20:00 local) — Claude could not see the change. Initial guess blamed mount drift, but
+on re-check the drift is **minor and one-directional** (the mount is a temporary wind-nudged
+rig, but the scene is clearly the same arrangement frame-to-frame) — so **drift is not the
+cause**. The likely real limiter is **resolution + the overhead angle + dill's wispy,
+semi-transparent foliage**: from above a feathery plant has no clean silhouette whose mass is
+readable, so even a sizable removal doesn't produce a resolvable change. 20g of dill is a lot
+of volume (should be the easy case), so the failure points at the imaging, not the harvest
+size. **Open question:** does higher resolution / a less oblique crop / a closeup make
+harvest-scale change detectable, or is fine visual harvest-diffing simply not reliable here?
+Until that's answered, harvest ground truth comes from **explicit labels** (below), not vision.
+Frame registration is still worth doing for clean diffs, but it is **not** the proven blocker.
+
 On top of that runs the actual goal:
 
 - **Region tagging + harvestability estimate per region.** Identity is free from the map, so
@@ -284,6 +349,16 @@ On top of that runs the actual goal:
   how much?* Needs **per-species harvest criteria** + the **growth track** (size/coverage over
   time from the consistent framing). This is the "how's it doing" axis extended to "is it
   pickable" — the live, recurring value that justifies Phase 1's registry work.
+- **Harvest ground truth = a human-in-the-loop log, not vision (decided 2026-06-06).** The user
+  cooks with ChatGPT, which already knows the amounts and writes them to **Asana**: project
+  *Plants* → section **Plant Records** → one task per plant → harvest grams as **task comments**
+  (e.g. "20g harvested around 19:00" on the Dill task). A sync reads those comments → matches
+  the task name to a growing unit (same closed set; Asana "Basil" → Genovese, chillis not on
+  the balcony) → creates `harvested` **events**, grams in notes, **idempotent on the Asana
+  comment gid** so re-reads don't double-count. **Comment times are local (CEST, UTC+2); photo
+  filenames are UTC** — translate when correlating a harvest to a frame. These approximate
+  labels are the real harvestability signal while the mount/vision can't measure change, and
+  they become the per-species expected-yield data that "ready" thresholds get defined against.
 
 ### Pi as a ground-truth generator (the build-order flip)
 
@@ -420,7 +495,12 @@ PATCH /assistant/capture-queue/{id}    → captured | dismissed
 - **Photo mix of the 901** — mostly whole-trough shots, mixed (overviews + closeups +
   partials), or wide multi-trough overviews? Affects how cleanly container-matching works
   (the prompt handles all cases via per-region output; this only changes difficulty).
-- **Harvestability criteria** — per-species "ready" thresholds need defining for Phase 2.
+- **Harvestability criteria** — per-species "ready" thresholds still need defining. Harvest
+  *amounts* now arrive as ground truth via the Asana → `harvested`-events loop (see Phase 2);
+  the open part is the per-species coverage/size threshold that flags "ready".
+- **Is harvest-scale change visually detectable at all?** A known −20g dill harvest was
+  invisible in the overhead frames (drift ~5°, so not the cause). Test higher resolution /
+  closeups before assuming visual harvest-diffing is viable.
 - Auto-generate `capture_requests` on a schedule, or manually after each import?
 - Mobile-friendly review UI, or desktop-only for now?
 
@@ -492,3 +572,18 @@ Budget reframe: the 256px constraint was the **Max quota**, not dollars — Batc
 agreement gate); vision confirms + reads condition. **Container-first** tagging for troughs,
 plant-level for pots, **SEEDLINGS** ladder for trays. Phase 2 (Pi): fixed-frame **change-diff**
 layout map + **region tagging + harvestability** — the recurring payoff.
+
+### 2026-06-06 — Pi is up; Phase-2 groundwork, harvest loop, imaging limit
+First real Pi overhead captures (hourly). Did a human-guided **balcony walk-down** → a
+verified pot-position map, now in [balcony-layout.md](balcony-layout.md) (supersedes this doc's
+historical container table). DB updated from it: **Spearmint dead, Fenugreek gone**; created
+units **Sage(37), Thyme(38), Chives(39), Cilantro(40), Cilantro root(41)**. Decided **region
+tagging = `photo_notes` + `growing_unit_id` FK** (reuse the existing rectangle UI), not a new
+table. **Harvest ground-truth loop confirmed working**: ChatGPT (cooking) writes grams as
+**comments on per-plant tasks** in Asana *Plants → Plant Records*; read end-to-end via the API
+(found "20g harvested around 19:00" on the Dill task). **Imaging limit found:** that same known
+−20g dill harvest was **not** visually detectable between the 17:00Z/18:00Z frames; first
+blamed mount drift, but drift is only **~5°** (one-directional) — so the limiter is
+resolution/overhead-angle/wispy foliage, not the mount. Conclusion: harvest truth from labels
+(Asana), not vision, until higher-res/closeups are tested. Note: Pi filenames are **UTC**, user
+speaks **local (CEST/UTC+2)** — translate when correlating harvests to frames.
