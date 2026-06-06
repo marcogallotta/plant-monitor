@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { getPhotos, updatePhoto, deletePhoto, batchUpdatePhotos } from './api.js';
-import { setStatus, formatDate, orientedUrl } from './utils.js';
+import { setStatus, formatDate, orientedUrl, thumbnailUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
 
 const FILTER_IDS = ['start', 'end', 'filter-source', 'filter-photo-type', 'filter-location'];
@@ -105,10 +105,9 @@ function buildCard(p, i) {
     .map(id => { const u = state.allUnits.find(u => u.id === id); return u ? u.name : null; })
     .filter(Boolean).join(', ');
   const caption = unitNames ? ts + ' · ' + unitNames : ts;
-  // Grid thumbnails use the rotation-baked variant (not CSS rotation) so dragging a
-  // thumbnail into a browser tab opens it in the correct orientation.
+  // Grid thumbnails use a resized variant (400px) with rotation baked in.
   card.innerHTML =
-    '<img src="' + orientedUrl(p) + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
+    '<img src="' + thumbnailUrl(p) + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
     '<div class="card-ab">' +
       '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
       '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
@@ -337,14 +336,14 @@ export async function gridRotate(e, photoId, delta) {
   let img = null;
   if (card) {
     img = card.querySelector('img');
-    if (img) img.src = orientedUrl(photo);
+    if (img) img.src = thumbnailUrl(photo);
   }
   try {
     await updatePhoto(photoId, {rotation: newRot});
   } catch(err) {
     console.warn('gridRotate failed', err);
     photo.rotation = oldRot;
-    if (img) img.src = orientedUrl(photo);
+    if (img) img.src = thumbnailUrl(photo);
   }
 }
 

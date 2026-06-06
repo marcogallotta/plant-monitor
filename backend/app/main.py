@@ -96,6 +96,12 @@ def assistant_openapi_public(request: Request):
     return JSONResponse({"openapi": full["openapi"], "info": full["info"], "servers": [{"url": public_url}], "paths": paths, "components": full.get("components", {})})
 
 PHOTOS_DIR = Path("data/photos")
+THUMBS_DIR = Path("data/thumbs")
+
+
+def _invalidate_thumb_cache(filename: str) -> None:
+    for p in THUMBS_DIR.rglob(f"*_{filename}"):
+        p.unlink(missing_ok=True)
 _STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
@@ -368,6 +374,8 @@ def classify_photo(photo_id: int, body: PhotoClassify, db: Session = Depends(get
     if "rotation" in body.model_fields_set:
         if body.rotation is None:
             raise HTTPException(status_code=422, detail="rotation cannot be null")
+        if photo.rotation != body.rotation:
+            _invalidate_thumb_cache(photo.filename)
         photo.rotation = body.rotation
     if body.growing_unit_ids is not None:
         _check_growing_units_exist(body.growing_unit_ids, db)
@@ -454,8 +462,10 @@ def delete_photo(photo_id: int, db: Session = Depends(get_db)):
     db.query(EventPhoto).filter_by(photo_id=photo_id).delete()
     storage_path = Path(photo.storage_path) if photo.storage_path else None
     metadata_path = Path(photo.metadata_path) if photo.metadata_path else None
+    filename = photo.filename
     db.delete(photo)
     db.commit()
+    _invalidate_thumb_cache(filename)
     for path in filter(None, [storage_path, metadata_path]):
         try:
             path.unlink(missing_ok=True)
@@ -735,6 +745,42 @@ def export_photos(ids: str, db: Session = Depends(get_db)):
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=photos.zip"},
     )
+
+
+@app.get("/photos/{filename}/thumbnail")
+def photo_thumbnail(filename: str, size: int = Query(400, ge=1, le=1600), oriented: bool = False, db: Session = Depends(get_db)):
+    if not _SAFE_FILENAME_RE.match(filename):
+        raise HTTPException(status_code=422, detail="invalid filename format")
+    photo = db.query(Photo).filter_by(filename=filename).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    file_path = Path(photo.storage_path).resolve()
+    try:
+        file_path.relative_to(PHOTOS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="photo not found")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="photo file not found on disk")
+
+    rot = photo.rotation if oriented else 0
+    cache_path = THUMBS_DIR / f"{size}" / f"{rot}_{filename}"
+    if cache_path.exists():
+        return FileResponse(cache_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000"})
+
+    try:
+        with Image.open(file_path) as im:
+            transpose = _ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
+            if transpose:
+                im = im.transpose(transpose)
+            im = im.convert("RGB")
+            im.thumbnail((size, size))
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cache_path.with_suffix(f".{os.getpid()}.tmp")
+            im.save(tmp, format="JPEG", quality=80)
+            tmp.rename(cache_path)
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(status_code=422, detail="could not decode image") from exc
+    return FileResponse(cache_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000"})
 
 
 @app.get("/photos/{filename}")

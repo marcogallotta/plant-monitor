@@ -3,7 +3,10 @@ import { updatePhoto, createEvent } from './api.js';
 import { renderLabelSection } from './labels.js';
 import { resetZoom } from './zoom.js';
 import { noteCancel, loadNotes } from './notes.js';
-import { setStatus, formatDate, orientedUrl } from './utils.js';
+import { setStatus, formatDate, orientedUrl, mediumUrl, thumbnailUrl } from './utils.js';
+
+const _isLocal = window.location.hostname === 'localhost';
+
 import { loadPhotoSensorContext } from './sensors.js';
 
 export async function rotatePhoto(delta) {
@@ -16,7 +19,7 @@ export async function rotatePhoto(delta) {
     const card = document.querySelector('.photo-card[data-id="' + photo.id + '"]');
     if (card) {
       var img = card.querySelector('img');
-      if (img) img.src = orientedUrl(photo);
+      if (img) img.src = thumbnailUrl(photo);
     }
   }
   try {
@@ -50,7 +53,7 @@ function _showPhoto(p) {
   resetZoom();
   noteCancel();
   state.currentPhotoId = p.id;
-  document.getElementById('modal-img').src = p.url;
+  document.getElementById('modal-img').src = _isLocal ? p.url : mediumUrl(p);
   document.getElementById('modal-caption').textContent =
     p.filename ? formatDate(p.captured_at) + ' — ' + p.filename : formatDate(p.captured_at);
   showIdentityPanel(p);

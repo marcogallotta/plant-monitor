@@ -140,7 +140,7 @@ describe('renderGrid (via loadPhotos)', () => {
     });
     await loadPhotos();
     const img = document.querySelector('#photo-grid .photo-card[data-id="7"] img');
-    expect(img.getAttribute('src')).toBe('/photos/g.jpg?oriented=1&v=90');
+    expect(img.getAttribute('src')).toBe('/photos/g.jpg/thumbnail?size=400&oriented=1&v=90');
     expect(img.style.transform).toBe('');
   });
 });
@@ -361,7 +361,7 @@ describe('gridRotate', () => {
     const e = {stopPropagation: vi.fn()};
     await gridRotate(e, 10, 90);
     const img = document.querySelector('.photo-card[data-id="10"] img');
-    expect(img.getAttribute('src')).toBe('/photos/x.jpg?oriented=1&v=90');
+    expect(img.getAttribute('src')).toBe('/photos/x.jpg/thumbnail?size=400&oriented=1&v=90');
   });
 
   it('uses v=0 in the oriented url when rotation reaches 0', async () => {
@@ -369,7 +369,7 @@ describe('gridRotate', () => {
     const e = {stopPropagation: vi.fn()};
     await gridRotate(e, 10, 90);
     const img = document.querySelector('.photo-card[data-id="10"] img');
-    expect(img.getAttribute('src')).toBe('/photos/x.jpg?oriented=1&v=0');
+    expect(img.getAttribute('src')).toBe('/photos/x.jpg/thumbnail?size=400&oriented=1&v=0');
   });
 
   it('calls updatePhoto with the new rotation', async () => {
@@ -393,7 +393,7 @@ describe('gridRotate', () => {
     const e = {stopPropagation: vi.fn()};
     await gridRotate(e, 10, 90);
     const img = document.querySelector('.photo-card[data-id="10"] img');
-    expect(img.getAttribute('src')).toBe('/photos/x.jpg?oriented=1&v=0');
+    expect(img.getAttribute('src')).toBe('/photos/x.jpg/thumbnail?size=400&oriented=1&v=0');
   });
 });
 

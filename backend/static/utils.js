@@ -19,6 +19,14 @@ export function orientedUrl(photo) {
   return photo.url + sep + 'oriented=1&v=' + (photo.rotation || 0);
 }
 
+export function thumbnailUrl(photo) {
+  return photo.url + '/thumbnail?size=400&oriented=1&v=' + (photo.rotation || 0);
+}
+
+export function mediumUrl(photo) {
+  return photo.url + '/thumbnail?size=800&v=' + (photo.rotation || 0);
+}
+
 export function populateSelect(id, items, blankLabel) {
   const sel = document.getElementById(id);
   if (!sel.multiple) {
