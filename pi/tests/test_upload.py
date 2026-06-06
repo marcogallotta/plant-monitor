@@ -84,6 +84,25 @@ def test_failure_does_not_create_uploaded(dirs):
     assert not (uploaded / f"{STEM}.jpg").exists()
 
 
+# --- failure count (return value) ---
+
+def test_returns_zero_on_success(dirs):
+    capture, uploaded = dirs
+    _write_pair(capture)
+    assert run_upload(capture, uploaded, "http://backend", post_fn=_ok_post) == 0
+
+
+def test_returns_failure_count(dirs):
+    capture, uploaded = dirs
+    _write_pair(capture, stem="2026-05-26T103000Z")
+    _write_pair(capture, stem="2026-05-26T110000Z")
+
+    def post_fn(url, stem, image_bytes, meta_bytes):
+        return stem == "2026-05-26T110000Z"
+
+    assert run_upload(capture, uploaded, "http://backend", post_fn=post_fn) == 1
+
+
 # --- multiple files ---
 
 def test_all_files_attempted(dirs):

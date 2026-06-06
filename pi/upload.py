@@ -9,6 +9,7 @@ PostFn = Callable[[str, str, bytes, bytes], bool]
 def _httpx_post(
     url: str, stem: str, image_bytes: bytes, meta_bytes: bytes, token: str | None = None
 ) -> bool:
+    import sys
     import httpx
     try:
         response = httpx.post(
@@ -20,9 +21,19 @@ def _httpx_post(
             headers={"Authorization": f"Bearer {token}"} if token else {},
             timeout=30,
         )
-        return response.status_code == 200
-    except Exception:
+    except Exception as e:
+        # Transient: network down, DNS, timeout. Retried next cycle.
+        print(f"upload {stem}: request failed: {type(e).__name__}: {e}", file=sys.stderr)
         return False
+    if response.status_code != 200:
+        # 4xx (e.g. 401 bad ingest token, 422 bad payload) won't self-heal on
+        # retry — surface the status and body so the journal shows the cause.
+        print(
+            f"upload {stem}: HTTP {response.status_code}: {response.text[:200]}",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def run_upload(
@@ -30,10 +41,12 @@ def run_upload(
     uploaded_dir: Path,
     backend_url: str,
     post_fn: PostFn | None = None,
-) -> None:
+) -> int:
+    """Upload all pending capture pairs. Returns the number that failed."""
     if post_fn is None:
         post_fn = _httpx_post
 
+    failures = 0
     for jpg in sorted(capture_dir.glob("*.jpg")):
         meta = jpg.with_suffix(".json")
         if not meta.exists():
@@ -58,6 +71,7 @@ def run_upload(
 
         success = post_fn(backend_url, jpg.stem, image_bytes, meta_bytes)
         if not success:
+            failures += 1
             continue
 
         tmp_jpg = dest_jpg.with_suffix(".jpg.tmp")
@@ -74,6 +88,8 @@ def run_upload(
             tmp_meta.unlink(missing_ok=True)
             raise
 
+    return failures
+
 
 if __name__ == "__main__":
     import sys
@@ -83,4 +99,8 @@ if __name__ == "__main__":
     uploaded_dir = capture_dir.parent / "uploaded"
     token = config.get("api_token")
     post_fn = (lambda u, s, i, m: _httpx_post(u, s, i, m, token=token)) if token else None
-    run_upload(capture_dir, uploaded_dir, config["backend_url"], post_fn=post_fn)
+    failures = run_upload(capture_dir, uploaded_dir, config["backend_url"], post_fn=post_fn)
+    if failures:
+        # Non-zero exit so systemd marks plant-upload.service failed and the
+        # failure is visible in `systemctl status` / `journalctl`.
+        sys.exit(1)
