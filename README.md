@@ -22,8 +22,18 @@ FastAPI backend + Postgres (laptop)
 
 ## Running locally
 
+The dev stack is managed by a systemd user service. One-time setup:
+
 ```sh
-make up
+make install
+loginctl enable-linger $USER   # start at boot, survive logout
+```
+
+After that, use Make as normal:
+
+```sh
+make up    # systemctl --user start plant-monitoring
+make down  # systemctl --user stop plant-monitoring
 ```
 
 Backend is available at `http://localhost:8001` (override via `BACKEND_PORT` in `.env`).

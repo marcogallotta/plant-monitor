@@ -1,4 +1,4 @@
-.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions submit-tagging-batch ingest-tagging-batch agreement-gate triage-plant compare-ab-runs up down build verify-up verify-down verify-reset tunnel
+.PHONY: test test-backend test-pi test-js e2e-install test-e2e migrate seed ingest-suggestions submit-tagging-batch ingest-tagging-batch agreement-gate triage-plant compare-ab-runs install up down build verify-up verify-down verify-reset tunnel
 
 TEST_COMPOSE   := docker compose -p plant-monitoring-test   -f docker-compose.test.yml
 VERIFY_COMPOSE := docker compose -p plant-monitoring-verify -f docker-compose.verify.yml
@@ -71,11 +71,17 @@ ingest-suggestions:
 	@test -n "$(FILE)" || (echo "Usage: make ingest-suggestions FILE=path/to/suggestions.json" && exit 1)
 	docker compose run --rm -v $(CURDIR)/$(FILE):/tmp/suggestions.json backend python scripts/ingest_suggestions.py /tmp/suggestions.json
 
+install:
+	mkdir -p ~/.config/systemd/user
+	cp etc/systemd/user/plant-monitoring.service ~/.config/systemd/user/
+	systemctl --user daemon-reload
+	systemctl --user enable plant-monitoring
+
 up:
-	docker compose up -d
+	systemctl --user start plant-monitoring
 
 down:
-	docker compose down
+	systemctl --user stop plant-monitoring
 
 build:
 	docker compose build
