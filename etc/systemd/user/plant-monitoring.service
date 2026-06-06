@@ -1,13 +1,11 @@
 [Unit]
 Description=Plant Monitoring
-Requires=docker.socket
-After=docker.socket
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/home/marco/plant-monitoring
-ExecStart=docker compose --env-file .env up -d --build --wait
+ExecStart=docker compose --env-file .env up -d --build
 ExecStop=docker compose --env-file .env down
 
 [Install]
