@@ -61,6 +61,10 @@ app.include_router(suggestions_router)
 async def basic_auth_middleware(request: Request, call_next):
     if request.url.path.startswith("/assistant"):
         return await call_next(request)
+    # Health check: unauthenticated so external monitors can poll it. Leaks
+    # only a capture timestamp, no photo data.
+    if request.url.path.startswith("/health/"):
+        return await call_next(request)
     # Pi camera ingest: dedicated bearer token, scoped to photo upload only.
     ingest_token = os.environ.get("INGEST_API_TOKEN", "")
     if ingest_token and request.method == "POST" and request.url.path == "/photos":
@@ -105,6 +109,46 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     return HTMLResponse((_STATIC_DIR / "index.html").read_text())
+
+
+# Dead-man's switch for the Pi capture/upload chain: a Pi photo should arrive
+# every hour. If the newest source='pi' photo is older than the threshold,
+# something in the chain (Pi, camera, network, upload, token) is broken.
+# Returns 503 when stale so a dumb HTTP monitor can alert on status code alone.
+_CAPTURE_STALE_MINUTES = int(os.environ.get("CAPTURE_STALE_MINUTES", "90"))
+
+
+@app.get("/health/live")
+def health_live():
+    """Liveness: the app is up. Says nothing about the ingest chain."""
+    return {"status": "ok"}
+
+
+@app.get("/health/captures")
+def health_captures(response: Response, db: Session = Depends(get_db)):
+    last = db.query(func.max(Photo.captured_at)).filter(Photo.source == "pi").scalar()
+    now = datetime.now(timezone.utc)
+    if last is None:
+        age_minutes = None
+        stale = True
+    else:
+        # captured_at is timestamptz, so it comes back tz-aware; the guard is
+        # purely defensive. Compare on raw seconds so the threshold is exact
+        # (age_minutes is only rounded for display).
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        age_seconds = (now - last).total_seconds()
+        age_minutes = round(age_seconds / 60)
+        stale = age_seconds > _CAPTURE_STALE_MINUTES * 60
+    if stale:
+        response.status_code = 503
+    return {
+        "status": "stale" if stale else "ok",
+        "last_capture_at": last.isoformat().replace("+00:00", "Z") if last else None,
+        "age_minutes": age_minutes,
+        "threshold_minutes": _CAPTURE_STALE_MINUTES,
+        "now": now.isoformat().replace("+00:00", "Z"),
+    }
 
 _STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}Z$")
 _SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.jpg$")
