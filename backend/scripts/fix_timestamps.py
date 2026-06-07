@@ -42,13 +42,16 @@ def read_exif_captured_at(path: Path):
         offset_raw = tag_map.get("OffsetTimeOriginal") or tag_map.get("OffsetTime")
 
         from datetime import datetime, timedelta, timezone as tz
-        dt = datetime.strptime(dto_raw.strip(), "%Y:%m:%d %H:%M:%S")
+        # Pixel/Google EXIF strings carry a trailing NUL byte that str.strip()
+        # leaves in place, so drop it explicitly before parsing.
+        dt = datetime.strptime(dto_raw.replace("\x00", "").strip(), "%Y:%m:%d %H:%M:%S")
 
         if not offset_raw:
             # DateTimeOriginal is local wall-clock time with no UTC offset.
             # Assuming UTC would corrupt photos taken outside UTC, so refuse.
             return "no_offset"
 
+        offset_raw = offset_raw.replace("\x00", "").strip()
         sign = 1 if offset_raw[0] != "-" else -1
         parts = offset_raw.strip("+-").split(":")
         hours = int(parts[0])
