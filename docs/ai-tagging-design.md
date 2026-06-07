@@ -508,6 +508,34 @@ so the lead time is enough. Caveats / open problems:
   watering — low transpiration demand. So posture-based water-stress alerting is **biased toward exposed
   pots**; shaded ones won't telegraph and need the soil read or manual checks.
 
+### Where this is really going: a per-plant WATER-BALANCE estimator + closed-loop irrigation
+
+The single-image under-vs-over question is the wrong frame. The right frame is a **per-plant water-balance
+estimate over time**, fusing signals already (or soon) available:
+- **Camera:** daily wilt/turgor curve + soil-darkening (water-stress *outcome* signal).
+- **Sensors (already ingested):** temperature + humidity at the plant's actual position — the balcony has
+  **two micro-climate spots**, and readings are already queryable per-photo (`GET /sensors/photos/{id}`,
+  `±60 min`; see internals "Sensor proxy"). This gives **evaporative demand** at the plant.
+- **Forecast (user already receives it elsewhere):** forward demand / incoming rain → ingest it.
+- **Watering events:** today inferred from soil-darkening; the user waters **~08:00–09:00 daily** (a strong
+  temporal prior to confirm against).
+
+Fused over **days**, under-vs-over becomes tractable where a single droop is not: *daily midday wilt that
+recovers after the morning water + hot/dry/no-rain* → **under** (dose < demand); *wilt that does NOT recover
+after watering + soil staying wet + cool/humid* → **over** / roots. The diagnosis lives in the cross-source
+correlation, not the pixels. Still surface as guidance + an attention flag, not an autonomous "do X".
+
+**The unlock = an auto-pump (user is considering one).** It converts watering from a noisy *inferred* event
+into **known ground truth: exact time + exact per-plant volume.** That dissolves the gating soil-read unknown
+and turns the whole thing into a **control loop**: known input (dose) + known conditions (sensors + forecast)
+→ camera measures the **output** (did wilt resolve / turgor recover) → **learn each plant's demand curve and
+dose against the forecast.** Confidence in the detection is the precondition the user named for committing to
+auto-pump.
+
+**Why it matters beyond the balcony:** this is the prototype for a planned **~100 m² garden next year**, where
+automated irrigation is the crucial scaling lever — manual watering doesn't scale; a **sense → dose →
+measure-response → adjust** loop does. The balcony water-balance work is that loop in miniature.
+
 The Pi gives a **fixed overhead frame**. That doesn't make the layout static (things shuffle)
 — it makes **change cheap to detect and localize**:
 
