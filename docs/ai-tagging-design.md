@@ -551,6 +551,22 @@ wind_gusts_10m, shortwave_radiation, cloud_cover`. These are **exactly the refer
 (camera)** × a crop factor. `shortwave_radiation` + `cloud_cover` are the **forecast pair** to the camera's
 observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot clear day.
 
+**Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
+probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
+`GET /sensors/{id}/readings`, ~every 3 h). Four channels: **`moisture_pct`, `light_lux`, `temperature_c`,
+`conductivity_us_cm`** (EC/fertility). This is the **hard ground truth** for the two things the camera can only
+*infer*:
+- **`moisture_pct` = the real "I watered" signal + dry-down curve + under/over level.** Observed 2026-06-07:
+  25→25→28→29→29→**33**→33 across the day — a clear watering step, where soil-darkening only guesses.
+- **`light_lux` = ground-truth insolation at that pot** (e.g. ~54k lux dawn peak, low/diffuse midday) to
+  calibrate the camera's per-region luminance→sun-hours read.
+
+**The leverage: one sensor bootstraps the whole camera model.** You don't need a probe per pot — learn the
+**camera→moisture** (soil-darkening) and **camera→insolation** (per-region luminance) mappings *on the Cilantro
+pot, where there's truth*, validate against the Flower Care, then **transfer the calibrated vision read to the
+sensorless pots.** A single ~$15 sensor turns the gating "is wet/dry soil legible?" unknown into a supervised
+calibration problem. (`conductivity` is a bonus nutrient/feeding signal.)
+
 **Why it matters beyond the balcony:** this is the prototype for a planned **~100 m² garden next year**, where
 automated irrigation is the crucial scaling lever — manual watering doesn't scale; a **sense → dose →
 measure-response → adjust** loop does. The balcony water-balance work is that loop in miniature.
