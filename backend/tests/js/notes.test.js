@@ -126,6 +126,93 @@ describe('renderPins', () => {
   });
 });
 
+// ── region drag (reposition) ──────────────────────────────
+
+describe('region note drag', () => {
+  // 100×100 image so a pixel == a 0.01 stored-coord step; identity
+  // visualToStored (set in beforeAll) means px/100 maps straight to stored x/y.
+  beforeEach(() => {
+    document.getElementById('modal-img').getBoundingClientRect =
+      () => ({left: 0, top: 0, width: 100, height: 100});
+  });
+
+  function dragRect(rect, from, to) {
+    rect.dispatchEvent(new MouseEvent('mousedown',
+      {button: 0, clientX: from.x, clientY: from.y, bubbles: true, cancelable: true}));
+    document.dispatchEvent(new MouseEvent('mousemove',
+      {clientX: to.x, clientY: to.y, bubbles: true}));
+    document.dispatchEvent(new MouseEvent('mouseup',
+      {clientX: to.x, clientY: to.y, bubbles: true}));
+  }
+
+  it('translates all four corners by the drag delta', async () => {
+    const {updateNote} = await import('@/api.js');
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    // drag from (20,20) → (30,35): +0.10 x, +0.15 y
+    dragRect(document.querySelector('.note-rect'), {x: 20, y: 20}, {x: 30, y: 35});
+    await Promise.resolve();
+    expect(updateNote).toHaveBeenCalledTimes(1);
+    const [id, body] = updateNote.mock.calls[0];
+    expect(id).toBe(9);
+    expect(body.x).toBeCloseTo(0.2);
+    expect(body.y).toBeCloseTo(0.35);
+    expect(body.x2).toBeCloseTo(0.6);
+    expect(body.y2).toBeCloseTo(0.75);
+  });
+
+  it('clamps the translation so the rect cannot leave the image', async () => {
+    const {updateNote} = await import('@/api.js');
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    // drag far up-left past the edge: clamped to -0.1 x (minX0=0.1), -0.2 y
+    dragRect(document.querySelector('.note-rect'), {x: 30, y: 30}, {x: -50, y: -50});
+    await Promise.resolve();
+    const body = updateNote.mock.calls[0][1];
+    expect(body.x).toBeCloseTo(0);
+    expect(body.y).toBeCloseTo(0);
+    expect(body.x2).toBeCloseTo(0.4);
+    expect(body.y2).toBeCloseTo(0.4);
+  });
+
+  it('does not call updateNote for a click with no movement (opens edit form instead)', async () => {
+    const {updateNote} = await import('@/api.js');
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    const rect = document.querySelector('.note-rect');
+    rect.dispatchEvent(new MouseEvent('mousedown',
+      {button: 0, clientX: 20, clientY: 20, bubbles: true, cancelable: true}));
+    document.dispatchEvent(new MouseEvent('mouseup', {clientX: 20, clientY: 20, bubbles: true}));
+    rect.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    await Promise.resolve();
+    expect(updateNote).not.toHaveBeenCalled();
+    expect(state.pendingNote).toMatchObject({noteId: 9});
+  });
+
+  it('suppresses the click that follows a real drag (no edit form)', async () => {
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    const rect = document.querySelector('.note-rect');
+    dragRect(rect, {x: 20, y: 20}, {x: 40, y: 40});
+    rect.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    await Promise.resolve();
+    expect(state.pendingNote).toBeNull();
+  });
+
+  it('does not start a drag on shift+mousedown (left to zoom.js for new regions)', async () => {
+    const {updateNote} = await import('@/api.js');
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    const rect = document.querySelector('.note-rect');
+    rect.dispatchEvent(new MouseEvent('mousedown',
+      {button: 0, shiftKey: true, clientX: 20, clientY: 20, bubbles: true, cancelable: true}));
+    document.dispatchEvent(new MouseEvent('mousemove', {clientX: 40, clientY: 40, bubbles: true}));
+    document.dispatchEvent(new MouseEvent('mouseup', {clientX: 40, clientY: 40, bubbles: true}));
+    await Promise.resolve();
+    expect(updateNote).not.toHaveBeenCalled();
+  });
+});
+
 // ── openCreateForm ────────────────────────────────────────
 
 describe('openCreateForm', () => {
