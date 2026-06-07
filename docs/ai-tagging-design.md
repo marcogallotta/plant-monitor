@@ -46,7 +46,7 @@ trough, and Thai basil vendita.
    per pot on a reference frame, assign its unit. **Load-bearing**, because today proved vision
    *confidently swaps* confusables (lemongrass↔garlic chives) and *cannot* tell visually-
    identical varieties apart (the chillis — H4/H7/BE) — only position can. Everything sits on
-   this. Record per-pot distinguishing features + pot size (see balcony-layout.md).
+   this. Record per-pot distinguishing features + pot size (see plants-data.md).
 2. **Frictionless phone sync** — the data-volume lever; auto-upload closeups (`source=phone`
    path exists, automation is the gap). The region map makes the inflow identifiable.
 3. **Imaging investigation** — does resolution / a closeup make harvest-scale change detectable?
@@ -54,8 +54,10 @@ trough, and Thai basil vendita.
 
 - **Shelved:** the Asana harvest-log ingest — calibration comes cheaper from occasional human
   corrections + closeups than from an ongoing log; the cooking read needs only rough amounts.
-- **Done:** layout map → **[balcony-layout.md](balcony-layout.md)** (live registry; includes a
-  distinguishing-features section for confusables). Phase-1 phone backfill paused.
+- **Done:** layout captured as **region tags in the DB** (`photo_notes.growing_unit_id` on the
+  reference frame `2026-06-07T130010Z.jpg`) — the authoritative positions. Plant data
+  (status, pot/quantity, confusable features) lives in **[plants-data.md](plants-data.md)**.
+  Phase-1 phone backfill paused.
 
 Everything below this section is reference and full design detail.
 
@@ -65,8 +67,9 @@ Everything below this section is reference and full design detail.
 
 1. **"Current plan" is authoritative** — what to do today. Where it conflicts with the
    Appendices, this wins.
-2. **Verify plant/container state against the live DB** (`GET /assistant/growing-units`) and
-   the live layout in [balcony-layout.md](balcony-layout.md), not prose.
+2. **Verify plant/container state against the live DB** (`GET /assistant/growing-units`),
+   read positions from the **region tags on the reference frame** (DB), and plant data from
+   [plants-data.md](plants-data.md) — not prose.
 3. **Appendix A** = confirmed few-shot examples (reference material). **Appendix B** =
    dated evidence log of how we got here. Evidence, not instructions.
 
@@ -172,7 +175,7 @@ Sorrel, French tarragon, Lemongrass (when mature).
 (no plain "basil"). **Kept as real:** **both** Thai basils — `Thai basil` (seed-grown) and
 `Thai basil vendita` (a distinct cultivar); the two are a permanent binary on review.
 
-**Update 2026-06-06 (from the balcony walk-down — see [balcony-layout.md](balcony-layout.md)):**
+**Update 2026-06-06 (from the balcony walk-down — see [plants-data.md](plants-data.md)):**
 `Spearmint` is **dead** (retire it) and **Fenugreek no longer exists** — drop both from all
 priors. Units created from the walk-down: **Sage (37), Thyme (38), Chives (39), Cilantro (40),
 Cilantro root (41)**. The remaining real plants without a unit (the chilli varieties) get
@@ -185,10 +188,11 @@ created on accept, not pre-seeded.
 The durable asset. Largely fixed historically; **may change later** — the registry must be
 re-registerable, and Phase 2 detects change by diffing frames.
 
-> **Current ground truth lives in [balcony-layout.md](balcony-layout.md)** (human-verified from
-> the Pi overview, 2026-06-06). The table below is the historical phone-era registry and is
-> partly stale (Fenugreek gone, Spearmint dead, basil/mint placements changed) — prefer
-> `balcony-layout.md` for the live layout; keep this table only as Phase-1 backfill context.
+> **Current ground truth: the region tags** on the reference frame `2026-06-07T130010Z.jpg`
+> (DB, human-verified 2026-06-07) for positions, and **[plants-data.md](plants-data.md)** for
+> plant data. The table below is the historical phone-era registry and is partly stale
+> (Fenugreek gone, Spearmint dead, basil/mint placements changed) — keep it only as Phase-1
+> backfill context.
 
 | Container | Contents |
 |---|---|
@@ -597,7 +601,7 @@ layout map + **region tagging + harvestability** — the recurring payoff.
 
 ### 2026-06-06 — Pi is up; Phase-2 groundwork, harvest loop, imaging limit
 First real Pi overhead captures (hourly). Did a human-guided **balcony walk-down** → a
-verified pot-position map, now in [balcony-layout.md](balcony-layout.md) (supersedes this doc's
+verified pot-position map, now in [plants-data.md](plants-data.md) + DB region tags (supersedes this doc's
 historical container table). DB updated from it: **Spearmint dead, Fenugreek gone**; created
 units **Sage(37), Thyme(38), Chives(39), Cilantro(40), Cilantro root(41)**. Decided **region
 tagging = `photo_notes` + `growing_unit_id` FK** (reuse the existing rectangle UI), not a new
@@ -632,7 +636,7 @@ lemongrass; thin blades = garlic chives. Recovery came only from **hard priors**
 and leaf **width** — none of them the confident vision call. Rules banked: (1) on confusable
 groups, **high confidence is disqualifying**, not reassuring — defer to position/pot/scent and
 surface options; (2) **hard count constraints beat soft composition priors**; (3) record the
-**discriminating features** per group in the map (done in balcony-layout.md).
+**discriminating features** per group in the map (done in plants-data.md).
 
 **Chillis = the pure-position case.** Morning frame (07:00Z) shows them back by the door; the
 three pots are **H4→H7→BE left-to-right** (units 34/35/36) but **visually identical** — no
