@@ -111,6 +111,49 @@ test('shift-drag creates region note at expected visual position and persists af
   await assertRectAt(page, 0.2, 0.2, 0.7, 0.65);
 });
 
+test('region note tagged with a growing unit (no text) displays with the unit name', async ({ page, request }) => {
+  // Create the unit BEFORE loading the page so the boot-time GET /growing-units
+  // populates the #note-unit dropdown with it.
+  const unitName = 'E2E Lemongrass ' + Math.random().toString(36).slice(2, 7);
+  const unitResp = await request.post('/growing-units', { data: { name: unitName } });
+  expect(unitResp.status()).toBe(201);
+  const { id: unitId } = await unitResp.json();
+
+  const photoId = await uploadAndOpenModal(page, request, 'region-unit-test.jpg');
+  await expect(page.locator('#modal .note-rect')).toHaveCount(0);
+
+  const imgBox = await page.locator('#modal-img').boundingBox();
+  await shiftDrag(
+    page,
+    imgBox.x + imgBox.width  * 0.25, imgBox.y + imgBox.height * 0.25,
+    imgBox.x + imgBox.width  * 0.6,  imgBox.y + imgBox.height * 0.6,
+  );
+
+  await expect(page.locator('#note-panel-title')).toHaveText('New region note');
+  // No text — just pick the unit, exactly the failing user flow.
+  await page.selectOption('#note-unit', String(unitId));
+  await page.locator('#note-save').click();
+
+  // The box must appear and carry the unit name as its label.
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await expect(page.locator('#modal .note-rect .note-rect-label')).toHaveText(unitName);
+
+  // And it must survive a reload (persisted with growing_unit_id).
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
+  await page.reload();
+  await galleryReady;
+  await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
+  await expect(page.locator('#modal')).toBeVisible();
+  await page.waitForFunction(() => {
+    const img = document.getElementById('modal-img');
+    return img && img.complete && img.naturalWidth > 0;
+  });
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await expect(page.locator('#modal .note-rect .note-rect-label')).toHaveText(unitName);
+});
+
 test('shift-drag region note after zoom and pan lands at correct visual fraction', async ({ page, request }) => {
   await uploadAndOpenModal(page, request, 'zoom-region-test.jpg');
 
