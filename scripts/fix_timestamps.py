@@ -21,45 +21,11 @@ for _p in (REPO_ROOT / "backend", REPO_ROOT):
         break
 
 import argparse
-from PIL import Image
-from PIL.ExifTags import TAGS
 
-
-def read_exif_captured_at(path: Path):
-    """Return a timezone-aware datetime, "no_offset" if tz is absent, or None on failure."""
-    try:
-        img = Image.open(path)
-        exif = img._getexif()
-        if not exif:
-            return None
-
-        tag_map = {TAGS.get(k, k): v for k, v in exif.items()}
-
-        dto_raw = tag_map.get("DateTimeOriginal")
-        if not dto_raw:
-            return None
-
-        offset_raw = tag_map.get("OffsetTimeOriginal") or tag_map.get("OffsetTime")
-
-        from datetime import datetime, timedelta, timezone as tz
-        # Pixel/Google EXIF strings carry a trailing NUL byte that str.strip()
-        # leaves in place, so drop it explicitly before parsing.
-        dt = datetime.strptime(dto_raw.replace("\x00", "").strip(), "%Y:%m:%d %H:%M:%S")
-
-        if not offset_raw:
-            # DateTimeOriginal is local wall-clock time with no UTC offset.
-            # Assuming UTC would corrupt photos taken outside UTC, so refuse.
-            return "no_offset"
-
-        offset_raw = offset_raw.replace("\x00", "").strip()
-        sign = 1 if offset_raw[0] != "-" else -1
-        parts = offset_raw.strip("+-").split(":")
-        hours = int(parts[0])
-        mins = int(parts[1]) if len(parts) > 1 else 0
-        offset = tz(timedelta(hours=sign * hours, minutes=sign * mins))
-        return dt.replace(tzinfo=offset).astimezone(timezone.utc)
-    except Exception:
-        return None
+# Single source of truth for EXIF parsing — shared with the upload path so the
+# trailing-NUL handling can never diverge. Returns a datetime, the NO_OFFSET
+# sentinel, or None.
+from app.exif import NO_OFFSET, read_exif_captured_at
 
 
 def main():
@@ -91,7 +57,7 @@ def main():
             if exif_dt is None:
                 no_exif += 1
                 continue
-            if exif_dt == "no_offset":
+            if exif_dt is NO_OFFSET:
                 no_offset += 1
                 continue
 

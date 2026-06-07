@@ -1,10 +1,26 @@
 import json
+from datetime import date, datetime, timezone
+from io import BytesIO
+
+from PIL import Image
 
 
 def _upload(client, image_bytes=b"FAKEIMAGE", filename="IMG_001.jpg", **form_fields):
     return client.post("/manual-photos", data=form_fields, files={
         "image": (filename, image_bytes, "image/jpeg"),
     })
+
+
+def _jpeg_with_exif(dto="2026:05:08 07:30:00", offset="+02:00"):
+    img = Image.new("RGB", (8, 8), "green")
+    buf = BytesIO()
+    exif = Image.Exif()
+    ifd = exif.get_ifd(0x8769)
+    ifd[0x9003] = dto  # DateTimeOriginal
+    if offset is not None:
+        ifd[0x9011] = offset  # OffsetTimeOriginal
+    img.save(buf, "jpeg", exif=exif)
+    return buf.getvalue()
 
 
 # --- POST /manual-photos basic ---
@@ -167,6 +183,55 @@ def test_manual_upload_valid_rotations_accepted(client):
     for deg in (0, 90, 180, 270):
         r = _upload(client, rotation=deg)
         assert r.status_code == 201, f"rotation={deg} should be accepted"
+
+
+# --- EXIF capture-time authority ---
+
+def test_exif_with_offset_overrides_client_captured_at(client):
+    # Client sends a wrong captured_at (the lastModified-fallback bug); EXIF wins.
+    r = _upload(
+        client,
+        image_bytes=_jpeg_with_exif("2026:05:08 07:30:00", "+02:00"),
+        captured_at="2026-05-30T13:32:33Z",
+    )
+    assert r.status_code == 201
+    # 07:30:00 +02:00 == 05:30:00 UTC
+    assert r.json()["captured_at"].startswith("2026-05-08T05:30:00")
+
+
+def test_exif_with_offset_used_when_no_captured_at(client):
+    r = _upload(client, image_bytes=_jpeg_with_exif("2026:05:08 07:30:00", "+02:00"))
+    assert r.status_code == 201
+    assert r.json()["captured_at"].startswith("2026-05-08T05:30:00")
+
+
+def test_exif_without_offset_does_not_override_client(client):
+    # No UTC offset → ambiguous, so the client-supplied value is kept.
+    r = _upload(
+        client,
+        image_bytes=_jpeg_with_exif("2026:05:08 07:30:00", offset=None),
+        captured_at="2026-05-30T13:32:33Z",
+    )
+    assert r.status_code == 201
+    assert r.json()["captured_at"].startswith("2026-05-30T13:32:33")
+
+
+def test_no_exif_keeps_client_captured_at(client):
+    r = _upload(client, image_bytes=b"FAKEIMAGE", captured_at="2026-05-30T13:32:33Z")
+    assert r.status_code == 201
+    assert r.json()["captured_at"].startswith("2026-05-30T13:32:33")
+
+
+def test_exif_without_offset_and_no_captured_at_falls_back_to_now(client):
+    # Old camera: DateTimeOriginal but no offset, and the client sends nothing.
+    # We can't trust the ambiguous wall-clock time, so captured_at defaults to now.
+    before = datetime.now(timezone.utc)
+    r = _upload(client, image_bytes=_jpeg_with_exif("2026:05:08 07:30:00", offset=None))
+    assert r.status_code == 201
+    captured = datetime.fromisoformat(r.json()["captured_at"])
+    # Not the (ambiguous) EXIF day, and within a sane window of upload time.
+    assert captured.date() != date(2026, 5, 8)
+    assert abs((captured - before).total_seconds()) < 120
 
 
 # --- serve uploaded manual photo ---

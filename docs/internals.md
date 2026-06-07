@@ -85,6 +85,8 @@ The route is registered **before** `GET /photos/{filename}` so FastAPI does not 
 
 `POST /manual-photos` accepts a multipart upload from the dashboard. Only `image` (JPEG) is required; `captured_at`, `photo_type`, `location_id`, `growing_unit_ids`, `note_text`, `rotation`, `original_size_bytes`, and `source` are optional form fields. The filename is a random UUID hex — no timestamp stem requirement. `source` defaults to `"manual"` when not supplied; pass `"phone"` for phone uploads. `original_filename` records the browser filename. If `note_text` is supplied a `PhotoNote` with `x=0, y=0` is created in the same transaction.
 
+**EXIF is authoritative for `captured_at`.** After reading the image bytes the endpoint calls `read_exif_captured_at()` (`app/exif.py`); if the image carries `DateTimeOriginal` **with a UTC offset**, that instant overrides the client-supplied `captured_at`. The browser upload path falls back to `file.lastModified` (the device save time, not the capture time) when its own EXIF read fails, so trusting the server-side EXIF read closes that hole. EXIF with no offset is ambiguous and is *not* used — the client value is kept in that case. Images with no usable EXIF (or non-JPEG test bytes) leave the client value untouched.
+
 ### Photo source field
 
 `Photo.source` tracks where a photo originated. Known values:
@@ -346,7 +348,9 @@ make seed   # runs inside Docker, hits http://backend:8000
 
 `scripts/fix_timestamps.py` (and the container-path copy at `backend/scripts/fix_timestamps.py`) scans every photo, reads EXIF `DateTimeOriginal`, and corrects `captured_at` where it differs. It is a dry run by default; pass `--apply` to write changes.
 
-Photos whose EXIF carries **no UTC offset** are refused, not guessed — assuming a wall-clock time is UTC would corrupt timestamps for any photo actually taken in another timezone. Those are reported separately in the summary as "no tz offset" so they can be handled by hand.
+It shares the EXIF parsing with the upload path via `from app.exif import read_exif_captured_at` — there is **no** second copy of the parse logic. This matters: the original version had its own copy whose `.strip()` didn't remove the trailing NUL byte that Pixel/Google `DateTimeOriginal` strings carry, so `strptime` threw and every affected photo was silently bucketed as "No EXIF" and never fixed. `app/exif.py` strips the NUL; keep both callers on it.
+
+Photos whose EXIF carries **no UTC offset** are refused, not guessed — assuming a wall-clock time is UTC would corrupt timestamps for any photo actually taken in another timezone. `read_exif_captured_at()` returns the `NO_OFFSET` sentinel for these; the script reports them separately as "no tz offset" so they can be handled by hand.
 
 ---
 

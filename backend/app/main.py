@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from .camera_import import router as camera_import_router, save_photo, _check_growing_units_exist
 from .database import get_db
+from .exif import read_exif_captured_at
 logger = logging.getLogger(__name__)
 
 from .helpers import EVENT_LOAD_OPTIONS, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _photo_out
@@ -515,6 +516,17 @@ async def upload_manual_photo(
                 return _photo_out(loaded)
 
     image_bytes = await image.read()
+
+    # Prefer the capture instant baked into the image's EXIF over whatever the
+    # client derived. The browser upload path falls back to file.lastModified
+    # (the device save time, not the capture time) when its own EXIF read fails,
+    # so trusting EXIF here is the authoritative fix. Only override when EXIF
+    # carries a UTC offset — a bare wall-clock time is ambiguous and is left to
+    # the client value rather than guessed.
+    exif_at = read_exif_captured_at(image_bytes)
+    if isinstance(exif_at, datetime):
+        parsed_at = exif_at
+
     photo = save_photo(
         db,
         image_bytes,
