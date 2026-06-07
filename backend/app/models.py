@@ -178,7 +178,10 @@ class PhotoNote(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     photo_id: Mapped[int] = mapped_column(Integer, ForeignKey("photos.id"), nullable=False)
-    note_text: Mapped[str] = mapped_column(Text, nullable=False)
+    note_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    growing_unit_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("growing_units.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     x: Mapped[float] = mapped_column(Float, nullable=False)
     y: Mapped[float] = mapped_column(Float, nullable=False)
     x2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

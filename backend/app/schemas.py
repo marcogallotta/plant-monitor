@@ -97,7 +97,8 @@ class PhotoListOut(BaseModel):
 
 
 class NoteCreate(BaseModel):
-    note_text: str
+    note_text: Optional[str] = None
+    growing_unit_id: Optional[int] = None
     x: float
     y: float
     x2: Optional[float] = None
@@ -116,9 +117,16 @@ class NoteCreate(BaseModel):
             raise ValueError("x2 and y2 must both be provided or both omitted")
         return self
 
+    @model_validator(mode="after")
+    def text_or_unit_required(self) -> "NoteCreate":
+        if self.note_text is None and self.growing_unit_id is None:
+            raise ValueError("a note must have note_text, a growing_unit_id, or both")
+        return self
+
 
 class NoteUpdate(BaseModel):
     note_text: Optional[str] = None
+    growing_unit_id: Optional[int] = None
     x: Optional[float] = None
     y: Optional[float] = None
     x2: Optional[float] = None
@@ -141,7 +149,8 @@ class NoteUpdate(BaseModel):
 class NoteOut(BaseModel):
     id: int
     photo_id: int
-    note_text: str
+    note_text: Optional[str] = None
+    growing_unit_id: Optional[int] = None
     x: float
     y: float
     x2: Optional[float] = None

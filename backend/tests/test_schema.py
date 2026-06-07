@@ -31,7 +31,7 @@ def test_photo_notes_table_exists(engine):
 
 def test_photo_notes_columns(engine):
     cols = {c["name"] for c in inspect(engine).get_columns("photo_notes")}
-    assert cols == {"id", "photo_id", "note_text", "x", "y", "x2", "y2", "created_at", "updated_at"}
+    assert cols == {"id", "photo_id", "note_text", "growing_unit_id", "x", "y", "x2", "y2", "created_at", "updated_at"}
 
 
 def test_photo_notes_photo_id_fk(engine):
@@ -40,6 +40,20 @@ def test_photo_notes_photo_id_fk(engine):
         fk["referred_table"] == "photos" and "photo_id" in fk["constrained_columns"]
         for fk in fks
     )
+
+
+def test_photo_notes_growing_unit_fk(engine):
+    fks = inspect(engine).get_foreign_keys("photo_notes")
+    assert any(
+        fk["referred_table"] == "growing_units"
+        and "growing_unit_id" in fk["constrained_columns"]
+        for fk in fks
+    )
+
+
+def test_photo_notes_growing_unit_indexed(engine):
+    idxs = inspect(engine).get_indexes("photo_notes")
+    assert any(idx["column_names"] == ["growing_unit_id"] for idx in idxs)
 
 
 # --- photos new columns / indexes ---

@@ -541,7 +541,12 @@ async def upload_manual_photo(
 def create_note(photo_id: int, body: NoteCreate, db: Session = Depends(get_db)):
     if not db.query(Photo).filter_by(id=photo_id).first():
         raise HTTPException(status_code=404, detail="photo not found")
-    note = PhotoNote(photo_id=photo_id, note_text=body.note_text, x=body.x, y=body.y, x2=body.x2, y2=body.y2)
+    if body.growing_unit_id is not None and not db.query(GrowingUnit).filter_by(id=body.growing_unit_id).first():
+        raise HTTPException(status_code=404, detail="growing unit not found")
+    note = PhotoNote(
+        photo_id=photo_id, note_text=body.note_text, growing_unit_id=body.growing_unit_id,
+        x=body.x, y=body.y, x2=body.x2, y2=body.y2,
+    )
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -560,6 +565,9 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
     note = db.query(PhotoNote).filter_by(id=note_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="note not found")
+    if "growing_unit_id" in body.model_fields_set and body.growing_unit_id is not None:
+        if not db.query(GrowingUnit).filter_by(id=body.growing_unit_id).first():
+            raise HTTPException(status_code=404, detail="growing unit not found")
     _note_non_nullable = {"note_text", "x", "y"}
     updates = {}
     for field in body.model_fields_set:
@@ -571,6 +579,13 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
     proposed_y2 = updates.get("y2", note.y2)
     if (proposed_x2 is None) != (proposed_y2 is None):
         raise HTTPException(status_code=422, detail="x2 and y2 must both be set or both cleared")
+    proposed_text = updates.get("note_text", note.note_text)
+    proposed_unit = updates.get("growing_unit_id", note.growing_unit_id)
+    if proposed_text is None and proposed_unit is None:
+        raise HTTPException(
+            status_code=422,
+            detail="a note must have note_text, a growing_unit_id, or both",
+        )
     for field, value in updates.items():
         setattr(note, field, value)
     note.updated_at = datetime.now(timezone.utc)
