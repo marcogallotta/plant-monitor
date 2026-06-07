@@ -409,6 +409,10 @@
     <button class="modal-close" onclick="closeModal()">&#x2715;</button>
     <button class="modal-prev" id="modal-prev" onclick="modalPrev()" title="Previous photo">&#8249;</button>
     <button class="modal-next" id="modal-next" onclick="modalNext()" title="Next photo">&#8250;</button>
+    <div class="note-hint">
+      <strong>Click</strong> a spot to pin a note · Hold <kbd>Shift</kbd> and drag to tag a plant region
+      <span class="note-hint-sub">scroll to zoom · drag to pan · ← → to navigate</span>
+    </div>
     <div id="zoom-viewport">
       <div class="modal-img-wrap" id="modal-img-wrap" onclick="modalImgClick(event)">
         <img id="modal-img" src="" alt="">
@@ -477,7 +481,6 @@
     </div>
     <span id="modal-event-status" class="status-msg"></span>
     <div id="modal-sensor-context" class="modal-sensor-context"></div>
-    <div class="note-hint">← → navigate · scroll to zoom · drag to pan · click to pin · shift+drag to box</div>
     <div id="note-panel" class="note-panel hidden">
       <div id="note-panel-title" class="note-panel-title">New note</div>
       <textarea id="note-text" placeholder="Enter note…" rows="2"></textarea>
