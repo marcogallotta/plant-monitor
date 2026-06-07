@@ -52,8 +52,11 @@ trough, and Thai basil vendita.
    frames (see Phase 2 below). Two foundations are now built (2026-06-07): **frame registration**
    (`scripts/frame_registration.py` — aligns a new frame onto the reference so tags warp forward)
    and **sway suppression at capture** (`pi/capture.py` — each capture is a 10-frame burst collapsed
-   to a mean plate, ~60–69% less foliage-sway noise). The remaining gap is a **lighting-robust change
-   signal** on top of those cleaner plates (see Phase 2), then harvestability.
+   to a mean plate, ~60–69% less foliage-sway noise). The **lighting-robust change signal** is now
+   **method-found** (Finlayson illuminant-invariant, validated on a known harvest — see Phase 2), but
+   the verdict awaits a **harvest bracketed by plates** (current data is pre-plate/noisy; first plate is
+   `17:00Z`, after the last known harvest). **Next on this line:** rerun `scripts/harvest_eval.py` on
+   plate-bracketed harvest data, then diff/inherit auto-confirm + harvestability.
 2. **Frictionless phone sync** — the data-volume lever; auto-upload closeups (`source=phone`
    path exists, automation is the gap). The region map makes the inflow identifiable.
 3. **Imaging investigation** — does resolution / a closeup make harvest-scale change detectable?
@@ -79,6 +82,25 @@ Everything below this section is reference and full design detail.
    [plants-data.md](plants-data.md) — not prose.
 3. **Appendix A** = confirmed few-shot examples (reference material). **Appendix B** =
    dated evidence log of how we got here. Evidence, not instructions.
+
+## Pi node — operational facts (READ before any Pi-side work)
+
+The overhead Pi is the source of every plate. Working on capture/collapse means working on
+this device — these facts are NOT obvious from the repo:
+
+- **Access:** `pi@plantpi.local` (→ ~10.141.108.206), **key-only SSH**, user `pi`. Resolves from
+  the laptop only (the Pi itself has no mDNS). Code is **flattened** at `/home/pi/plant-monitoring/`
+  (`camera.py`/`capture.py` at the root, NOT under `pi/`).
+- **Hardware:** ~**416 MB RAM** (~245 MB free), 4 cores (Pi Zero 2 class). `numpy` + `PIL` are
+  installed; **`cv2` is NOT** (and the docker `pi` test image has neither — keep numpy/PIL imports
+  inside functions). `/tmp` may be **tmpfs (RAM)** — stage large temp files on the SD card, not `/tmp`.
+- **Why the burst collapse streams:** 10 full-res frames ≈ 358 MB of raw arrays — they do **not**
+  fit in RAM, and staging them to SD is real flash wear. So `pi/capture.py` uses a **streaming MEAN**
+  (accumulate one frame, discard it; no staging) instead of a median. This is the reason for the
+  mean-vs-median choice, not preference. See the burst-plate notes in Phase 2.
+- **Capture service:** runs as `pi`, hourly `plant-capture.timer`; `CAMERA=pi`, `BURST_FRAMES`
+  defaults to 10. To capture a one-off burst for experiments: `ssh pi@plantpi.local`, then run a
+  script with `CAMERA=pi` — never write raws to `/tmp` (tmpfs).
 
 ---
 
@@ -394,10 +416,42 @@ real Pi bursts (interleaved A/B = same scene, zero real change, so any residual 
   zero-mean sway; it cannot cancel the *directional* shifts of lighting or a real harvest (those would
   just blur), which is also why you can't substitute averaging adjacent **hourly** frames.
 
-**Still to build — the rest of the change signal.** On the cleaner (sway-suppressed) plates, the
-diff/inherit metric still needs a **lighting-robust** comparison (compare matched time-of-day plates,
-or normalize illumination) before it can auto-confirm identity or flag a harvest — and it ties back to
-the open "is harvest-scale change visually detectable at all?" question. Then: harvestability on top.
+**Lighting-robust change signal — investigated 2026-06-07 (the winner: Finlayson invariant).**
+Established empirically against a **known harvest** (Genovese basil ~50 g + Rocket ~50 g + Dill,
+picked 17:00–18:00 CEST = the `15:00Z`→`16:00Z` frames). Three approaches A/B'd
+(`scripts/lighting_experiment.py`, `finlayson_experiment.py`, `harvest_eval.py`):
+
+- **Raw grayscale absdiff (current `region_change`) — fails.** Dominated by illumination; the
+  harvested units ranked mid-pack (basil #16, rocket buried). It is lighting-sensitive *by design*.
+- **ExG vegetation-coverage (2g−r−b + threshold) — fails here.** Both per-frame Otsu *and* a fixed
+  threshold on normalised-rgb buried basil (#17→#8) and rocket. Root cause: the confound is illuminant
+  **colour** (direct sun ~5500K vs sky-lit shadow ~10000K shifts the R:G:B ratio), and normalised-rgb
+  removes **intensity**, not colour. Coverage also rose where plants caught *more* sun, masking the loss.
+- **Finlayson illuminant-invariant image — works.** 2-D log-chromaticity projected onto the
+  entropy-minimising invariant angle (θ, calibrated once, applied to both frames) is invariant to
+  illuminant colour+intensity — exactly the confound that broke the others. On the harvest pair, abs-diff
+  on the invariant (`rawINV`) ranked **rocket #1, basil #3, dill #6** of 22 (vs a no-harvest control floor
+  ~10), and `gradINV` ranked basil #1. **`rawINV` (reflectance) and `gradINV` (texture) are
+  complementary**: rawINV catches wispy dill (leaf→soil reflectance change, no texture), gradINV catches
+  dense basil (leaf-texture thinning) — combine them.
+
+**Two caveats the multi-pair eval exposed (`harvest_eval.py`):**
+1. **Rank is not a detector — baseline is.** Absolute diff scales with region size/texture (big leafy
+   regions are always loud), so the right signal is each region vs **its own** rolling baseline
+   (z-score / CUSUM over many pairs), which also absorbs weather (variance) and slow pot drift. Global
+   ranking leaks false positives (parsley, peppermint).
+2. **The verdict needs PLATE data and isn't settled yet.** The whole 2026-06-07 series is **single,
+   pre-plate frames** (burst-plate code deployed 18:41 CEST; first plate is `17:00Z`, *after* the known
+   harvest). Single-frame sway inflates the baseline floor (no-harvest peaks hit 54–60 rawINV), so the
+   per-region-baseline separation can't be trusted yet. The known basil/rocket harvest is stuck in the
+   noisy era with **no pre-harvest plate** to diff against.
+
+**Next:** capture a harvest **bracketed by plates** (now automatic — hourly `plant-capture.timer`, every
+frame a 10-frame mean plate), then rerun `harvest_eval.py` on those de-swayed frames to settle caveat 1.
+Pipeline is ready: **register → Finlayson invariant (fixed θ) → per-region rawINV+gradINV → z-score vs
+per-region rolling baseline**. Then harvestability on top. (Also still ties to the open "is harvest-scale
+change detectable at all?" — the −20 g evening dill remained floor-level even on the invariant, but a
+larger dill pick was detected, so it is a size/resolution floor, not a blanket "no".)
 
 The Pi gives a **fixed overhead frame**. That doesn't make the layout static (things shuffle)
 — it makes **change cheap to detect and localize**:
@@ -550,9 +604,11 @@ Operations the review UI needs against `photo_ai_suggestions`:
 - **`run_id`/`batch_id` columns** on `photo_ai_suggestions` (provenance) before scaling.
 - **Duplicate-ingest protection** — skip on `(run_id, photo_id, bbox, plant)` match.
 - **Session-propagation review actions** ("apply this plant to selected") — human-triggered only.
-- **Phase 2**: frame registration ✅ (the geometric half — done). Remaining: a sway/lighting-robust
-  **change** signal (raw absdiff is confounded by foliage sway), then diff/inherit auto-confirm +
-  harvestability.
+- **Phase 2**: frame registration ✅ + burst plates ✅ + lighting-robust signal **method found**
+  (Finlayson illuminant-invariant, see Phase 2; `scripts/lighting_experiment.py`,
+  `finlayson_experiment.py`, `harvest_eval.py`). Remaining: rerun `harvest_eval.py` on **plate-bracketed**
+  harvest data to settle the per-region-baseline separation (current data is pre-plate/noisy), then
+  diff/inherit auto-confirm + harvestability.
 
 ---
 
@@ -715,3 +771,22 @@ three pots are **H4→H7→BE left-to-right** (units 34/35/36) but **visually id
 vision path exists, identity is position-only. Together with the swap, this **promotes
 region-marking the Pi map to the #1 task** (see Current focus). Harvest-log ingest **shelved**;
 the product is the rough **cooking-availability read**, not gram-accurate logs.
+
+### 2026-06-07 (eve) — lighting-robust change signal: Finlayson invariant wins
+Tested against a **known harvest** (Genovese basil ~50 g + Rocket ~50 g + Dill, picked 17:00–18:00
+CEST = `15:00Z`→`16:00Z`). Walked three methods; see Phase 2 "Lighting-robust change signal" for the
+full write-up and the three scripts. Short version:
+- **Raw absdiff** and **ExG vegetation-coverage** both **failed** — harvested units buried mid-pack.
+  ExG failed even on normalised-rgb + fixed threshold because the confound is illuminant **colour**
+  (sun ~5500K vs sky-lit shadow ~10000K), and normalised-rgb only removes intensity.
+- **Finlayson illuminant-invariant image won:** `rawINV` ranked rocket #1 / basil #3 / dill #6 of 22
+  (no-harvest floor ~10); rawINV (reflectance) + gradINV (texture) are **complementary** (dill needs
+  rawINV, basil needs gradINV).
+- **Two caveats:** (1) rank≠detector — use a **per-region rolling baseline** (z-score/CUSUM), which also
+  absorbs weather and pot drift; (2) **not settled** — the entire series is **pre-plate single frames**
+  (plate code deployed 18:41 CEST; first plate `17:00Z`, *after* the harvest), so sway inflates the
+  floor (no-harvest peaks 54–60). **No pre-harvest plate exists** for this event.
+- **Pi confirmed capturing plates** from `17:00Z` on (`pi@plantpi.local`, hourly `plant-capture.timer`,
+  `BURST_FRAMES=10`, metadata `derived_plate:true`). Verdict awaits a **plate-bracketed** harvest, then
+  rerun `harvest_eval.py`. (The −20 g 06-06 evening dill stayed floor-level even on the invariant — a
+  size/resolution floor for wispy foliage, not a blanket "undetectable".)
