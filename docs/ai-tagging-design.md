@@ -5,37 +5,57 @@ a live run. The old grid/batch-size approach is superseded — see Appendix B._
 
 ---
 
-## Current focus (2026-06-06)
+## Current focus (2026-06-07)
 
-**Operating model.** Two layers that feed each other:
-- **Overhead Pi** = the cheap, continuous layer — identity anchor (via the layout map),
-  presence, coverage, and "*something changed in region X*" localization. It does **not** need
-  to see pests or fine harvest detail (a known −20g dill harvest was invisible from overhead —
-  see Phase 2).
-- **Closeups (phone + camera)** = the value layer — where pests, wilt, and harvest-readiness
-  are actually visible, *and the user already captures these in volume*. The overhead map +
-  capture timing give each closeup its plant identity cheaply (closed-set + temporal anchor),
-  so a steady closeup stream becomes labelled data largely for free (caveats: confusables/
-  context-less shots still need the review tail; effect is strongest forward-looking).
+**The product (clarified).** An on-demand *"what's cookable right now, and roughly how much"*
+read per plant, served to ChatGPT — identity + rough harvest amount + condition (e.g. "loads of
+rocket, ~50 g; Thai basil's flowering, use it now"). Rough *relative* amounts are fit for
+purpose; gram-accurate logging is not needed.
 
-**Highest-leverage lever: frictionless phone sync.** The throttle on the valuable closeup data
-is *upload friction*, not model capability — a boring auto-sync pipe (watched album / background
-uploader) probably moves the goal more than anything on the vision side. Not yet built.
+**Operating model — two layers that feed each other:**
+- **Overhead Pi** = cheap, continuous *index* — identity-by-position (via the map), presence,
+  and *gross* change ("region X changed", "rocket hasn't bolted"). It can't read fine detail or
+  tell look-alikes apart (a known −20 g dill harvest was invisible from overhead — see Phase 2).
+- **Closeups (phone + camera)** = the *value* layer — confident ID + scale + condition + harvest
+  read, where overhead gives green blobs. The map gives each closeup its identity by position;
+  closeups inherit identity ~free (caveats: confusables + context-less shots need the review
+  tail; effect is strongest forward-looking).
 
-We're following the **build-order flip** (Pi-first): build the recurring loop now; the Phase-1
-phone backfill of the ~901 historical photos is **paused** (cheaper + more accurate once the Pi
-corpus exists). Active work, in priority order:
+**Freshness is first-class.** Every reading carries a date, and decays at a rate set by the
+plant's growth speed and microclimate: fast movers (rocket, basil, dill) go stale in days; slow
+woody herbs (sage, rosemary, thyme) stay valid for weeks; shade-net plants decay slower than
+exposed ones. The overhead keeps dated closeups honest by confirming gross change (e.g. "not
+bolted").
 
-1. **Phone sync (top lever, not built)** — make closeup upload effortless so the value-layer
-   data flows. A phone upload path exists (`source=phone`); the gap is automation.
-2. **Layout map — done.** Lives in **[balcony-layout.md](balcony-layout.md)** (the live,
-   human-verified registry). The container table further down is historical context only.
-3. **Harvest ground truth via Asana** — read *Plants → Plant Records* task comments →
-   `harvested` events (idempotent on the Asana comment gid). No vision required.
-4. **Imaging investigation** — does higher resolution / a closeup make harvest-scale change
-   detectable, or is visual harvest-diffing just unreliable here? (Drift ~5°, not the blocker;
-   frame registration is nice-to-have.)
-5. **Region tagging** — `photo_notes` + a `growing_unit_id` FK (mechanism decided, not built).
+**Two-axis prior retrieval.** A photo plays two roles, selected differently:
+- **Identity / disambiguation** → use **high-quality reference** images (the `reference` label),
+  *age-agnostic*. "High quality" here = **clearly shows the discriminating features** (e.g. the
+  lemongrass reference `a377f5` shows the red culms), not merely in-focus.
+- **State / harvestability** → use the **most recent** images, quality permitting.
+- Prefer photos that are **both**. Retrieval: pull `reference`-labelled shots for the unit (ID)
+  + recent shots (state), then combine.
+
+Confirmed photo→unit links live in **`photo_growing_units`**; the **`reference`-labelled** subset
+is the curated prior set (supersedes Appendix A's bootstrap list). **Confirmed-only** — never
+guesses — so the corpus stays clean and **compounds** as better shots arrive. Seeded 2026-06-07
+with reference closeups for lemongrass, garlic chives, rocket, sage, sorrel, tarragon, the basil
+trough, and Thai basil vendita.
+
+**Active work, in priority order (reordered 2026-06-07):**
+1. **Region-marking the Pi map (now #1).** `photo_notes` + a `growing_unit_id` FK; draw a box
+   per pot on a reference frame, assign its unit. **Load-bearing**, because today proved vision
+   *confidently swaps* confusables (lemongrass↔garlic chives) and *cannot* tell visually-
+   identical varieties apart (the chillis — H4/H7/BE) — only position can. Everything sits on
+   this. Record per-pot distinguishing features + pot size (see balcony-layout.md).
+2. **Frictionless phone sync** — the data-volume lever; auto-upload closeups (`source=phone`
+   path exists, automation is the gap). The region map makes the inflow identifiable.
+3. **Imaging investigation** — does resolution / a closeup make harvest-scale change detectable?
+   (Drift ~5°, not the blocker.)
+
+- **Shelved:** the Asana harvest-log ingest — calibration comes cheaper from occasional human
+  corrections + closeups than from an ongoing log; the cooking read needs only rough amounts.
+- **Done:** layout map → **[balcony-layout.md](balcony-layout.md)** (live registry; includes a
+  distinguishing-features section for confusables). Phase-1 phone backfill paused.
 
 Everything below this section is reference and full design detail.
 
@@ -509,7 +529,9 @@ PATCH /assistant/capture-queue/{id}    → captured | dismissed
 ## Appendix A — confirmed few-shot example pool
 
 Ground-truthed across calibration rounds (2026-05-30). Reference material for the confusable
-classes; **bootstrap** — migrate to a live `photo_ai_suggestions` query when built. Filenames
+classes; **bootstrap** — now **superseded by a live query**: confirmed photo→unit links are in
+`photo_growing_units`, and the curated high-quality subset carries the **`reference`** label
+(see "Two-axis prior retrieval" in Current focus). Prefer that live set over this list. Filenames
 under `data/photos/`. Verify against the DB; pots move and plants die.
 
 **Single / dominant subject:**
@@ -587,3 +609,33 @@ blamed mount drift, but drift is only **~5°** (one-directional) — so the limi
 resolution/overhead-angle/wispy foliage, not the mount. Conclusion: harvest truth from labels
 (Asana), not vision, until higher-res/closeups are tested. Note: Pi filenames are **UTC**, user
 speaks **local (CEST/UTC+2)** — translate when correlating harvests to frames.
+
+### 2026-06-07 — closeups validated; confusable swap; region-marking promoted to #1
+Ran a live closeup-ID experiment. **Closeups work well:** correct IDs on tarragon (leggy),
+Thai basil vendita (**flowering** → "use it now"), rocket (big, not bolted), the 2-Genovese+1-
+Thai basil trough (by composition), and sage — each giving confident ID + a **scale anchor**
+(pot rim) + condition + a usable harvest number, where overhead gave only blobs. This is the
+case for the closeup value-layer.
+
+**Freshness/decay confirmed as a real variable.** A rocket closeup was 10 days old; reconciled
+via microclimate (under shade net → slow bolting) + overhead cross-check (not bolted) → baseline
+still valid. Sage barely decays (slow woody perennial); rocket/basil/dill decay fast. **Don't
+infer intent from context** — wrongly read a kitchen-counter shot as "about to harvest"; it was
+an *inspection* shot. **Mixed-trough limit:** can't measure an individual plant's growth inside
+a shared trough from overhead (the Thai basil was unmeasurable among its trough-mates).
+
+**The decisive failure — confusable swap.** Confidently called two grassy closeups "lemongrass"
+(then "both lemongrass" — impossible: only one exists), then split them by a *spurious* feature
+(cascade/length) and got them **exactly backwards**. Truth: fat/tall leaves + **bigger pot** =
+lemongrass; thin blades = garlic chives. Recovery came only from **hard priors**: the unit
+**count** ("one lemongrass"), the **sorrel landmark** (it sits *between* the two), **pot size**,
+and leaf **width** — none of them the confident vision call. Rules banked: (1) on confusable
+groups, **high confidence is disqualifying**, not reassuring — defer to position/pot/scent and
+surface options; (2) **hard count constraints beat soft composition priors**; (3) record the
+**discriminating features** per group in the map (done in balcony-layout.md).
+
+**Chillis = the pure-position case.** Morning frame (07:00Z) shows them back by the door; the
+three pots are **H4→H7→BE left-to-right** (units 34/35/36) but **visually identical** — no
+vision path exists, identity is position-only. Together with the swap, this **promotes
+region-marking the Pi map to the #1 task** (see Current focus). Harvest-log ingest **shelved**;
+the product is the rough **cooking-availability read**, not gram-accurate logs.
