@@ -367,13 +367,35 @@ inverse = ref→target to **inherit** a tag onto a new frame). Established empir
 - **Drift is minor, independently confirmed** — chained 0700→1300 is rot ≈ +0.3°, ~unit scale,
   translation that scales with resolution. Consistent with "drift is not the blocker".
 
-**Still to build — the change signal (the real gap).** Geometric alignment is solid; detecting *what
-changed* is not. Raw per-region absdiff is dominated by **foliage sway + lighting**, not geometric
-drift: even a 1-hour pair with near-zero drift shows ~50 mean-abs-diff in plant regions. So the
-current metric cannot separate a harvest/moved-pot from wind. A sway/lighting-robust signal is needed
-(blur/downsample to gross mass, green-coverage area, or a temporal sway baseline) before diff/inherit
-auto-confirms identity or flags change — and it ties back to the open "is harvest-scale change visually
-detectable at all?" question. Then: harvestability on top.
+**The change signal is confounded by two things — foliage sway + lighting.** Geometric alignment is
+solid; detecting *what changed* is not. Raw per-region absdiff is dominated by sway and lighting, not
+geometric drift: even a 1-hour aligned pair shows ~50 mean-abs-diff in plant regions, and within a
+single instant the leaves are in one random sway configuration. These are two distinct confounds
+attacked separately: **sway is now handled at capture (below); lighting is still open.**
+
+**Sway suppression at capture — burst-averaged plates (built 2026-06-07, `pi/capture.py`).** A single
+overhead frame catches one random sway state, so single-vs-single region diff is dominated by wind, not
+real change. Fix: each capture is now a **burst** collapsed to one per-pixel **plate**. Validated on
+real Pi bursts (interleaved A/B = same scene, zero real change, so any residual is pure sway):
+
+- Collapsing cut the per-region sway diff by **~60–69%**: single ≈ 16 → 10-frame plate ≈ 5.0.
+- **10 frames** is the knee (5-frame floor 7.6, 10-frame 5.0, 20-frame extrapolated ~3.7); diminishing
+  returns past 10, and frame count costs capture time + (for median) SD staging.
+- Production uses a **10-frame streaming MEAN**, not median. Median floored slightly lower (5.01 vs the
+  mean's 5.45, ~9%) but needs all frames in memory at once → on the 512 MB Pi that means staging ~358 MB
+  of raw arrays to the SD card per capture (real flash wear at any non-trivial cadence). The mean
+  **streams** (accumulate one frame, discard it), so nothing is staged — flash wear stays at the
+  single-frame baseline (~1.6 MB/capture) at any cadence. The 9% costs little for a rough harvest read.
+- The burst must span the sway **decorrelation window** (~30–50 s here; 5 *fast* frames wouldn't
+  decorrelate). The per-pixel variance across the burst is a free **sway map** (which regions to distrust).
+- This does **not** touch lighting — burst frames are seconds apart, same sun. Averaging cancels
+  zero-mean sway; it cannot cancel the *directional* shifts of lighting or a real harvest (those would
+  just blur), which is also why you can't substitute averaging adjacent **hourly** frames.
+
+**Still to build — the rest of the change signal.** On the cleaner (sway-suppressed) plates, the
+diff/inherit metric still needs a **lighting-robust** comparison (compare matched time-of-day plates,
+or normalize illumination) before it can auto-confirm identity or flag a harvest — and it ties back to
+the open "is harvest-scale change visually detectable at all?" question. Then: harvestability on top.
 
 The Pi gives a **fixed overhead frame**. That doesn't make the layout static (things shuffle)
 — it makes **change cheap to detect and localize**:
@@ -509,6 +531,11 @@ Operations the review UI needs against `photo_ai_suggestions`:
    (`scripts/test_frame_registration.py`; cv2 isn't in the backend image) with synthetic
    algorithmic tests + real-frame tests against committed downscaled fixtures
    (`scripts/testdata/frames/`). The geometric half of diff/inherit; see Phase 2.
+8. ✅ **Burst-averaged plates** (2026-06-07, `pi/capture.py`) — each capture is now a 10-frame
+   burst collapsed to a streaming-MEAN plate on the Pi, cutting per-region foliage sway ~60–69%
+   (validated on real bursts). Streams (no SD staging → baseline flash wear); numpy+PIL only.
+   `scripts/sway_experiment.py` is the isolated validation tool (synthetic + on-Pi capture +
+   analyze). Suppresses the *sway* half of the change-signal confound; lighting still open.
 
 **Outstanding (new plan):**
 - **Batch API submission + ingest** for Phase 1 (individual 1024px images, cached prior
