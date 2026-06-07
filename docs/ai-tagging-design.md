@@ -558,6 +558,14 @@ frame per capture — so luminance becomes meaningful; and/or (b) detect **sunli
 compare against a **smoothed sun-fraction**, not raw point lux. Until then the demand-side insolation term is
 an **open build, not a freebie** — correcting the over-claim in the line above.
 
+> **Step (a) is now BUILT (2026-06-07 eve).** `pi/camera.py` stashes the auto-chosen `ExposureTime`,
+> `AnalogueGain`, `DigitalGain`, `ColourGains`, `Lux` per frame; `pi/capture.py` writes a **`camera`** block
+> (last frame) + a **`burst_camera`** block (per-frame means across the plate, so "last frame representative"
+> is checkable, not assumed) into the capture JSON. **Auto-exposure stays ON** (an all-day cam can't fix it —
+> midday clips). Metadata failure can't break capture; `cv2`-free (numpy/PIL only). **Once redeployed to the
+> Pi**, every plate carries the data to retry the radiometric insolation read AND to check AWB drift on the
+> real frames. Still TODO: (b) spatial sun/shadow detection and (c) the smoothed-lux reference.
+
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
 `https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see

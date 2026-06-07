@@ -7,8 +7,34 @@ from pathlib import Path
 from camera import Camera
 
 
-def _capture_plate(camera: Camera, n: int) -> bytes:
+def _agg_burst(metas: list[dict]) -> dict | None:
+    """Aggregate per-frame camera metadata across a burst. Lets us check the
+    'last frame is representative' assumption: if the means diverge from the
+    single `camera` block, auto-exposure drifted across the burst."""
+    ms = [m for m in metas if m]
+    if not ms:
+        return None
+
+    def mean(key):
+        vals = [m[key] for m in ms if m.get(key) is not None]
+        return round(sum(vals) / len(vals), 4) if vals else None
+
+    agg = {
+        "frame_count_with_metadata": len(ms),
+        "exposure_us_mean": mean("exposure_us"),
+        "analogue_gain_mean": mean("analogue_gain"),
+        "digital_gain_mean": mean("digital_gain"),
+        "lux_mean": mean("lux"),
+    }
+    return {k: v for k, v in agg.items() if v is not None}
+
+
+def _capture_plate(camera: Camera, n: int) -> tuple[bytes, dict | None]:
     """Capture n frames and collapse them to a per-pixel MEAN plate.
+
+    Returns (plate_bytes, burst_camera_metadata): the second is the per-frame
+    exposure/gain/lux aggregated across the burst (None if the camera exposes no
+    metadata, e.g. FakeCamera).
 
     Averaging a short burst (same light, no real change) cancels foliage sway,
     which a single frame can't (see docs/ai-tagging-design.md). A MEAN is used
@@ -39,15 +65,20 @@ def _capture_plate(camera: Camera, n: int) -> bytes:
     acc = None
     first_bytes = None
     count = 0
+    metas: list[dict] = []
     for i in range(n):
         data = camera.capture()
+        m = getattr(camera, "last_metadata", None)
+        if m:
+            metas.append(m)
         if first_bytes is None:
             first_bytes = data
         try:
             arr = np.asarray(Image.open(io.BytesIO(data)).convert("RGB"), dtype=np.uint8)
         except Exception as e:
             if acc is None:
-                return first_bytes  # first frame not an image (FakeCamera) — skip collapse
+                # first frame not an image (FakeCamera) — skip collapse
+                return first_bytes, _agg_burst(metas)
             print(f"capture: frame {i} failed to decode ({e}); skipping", file=sys.stderr)
             continue
         if acc is None:
@@ -63,7 +94,8 @@ def _capture_plate(camera: Camera, n: int) -> bytes:
         del arr, data
 
     if acc is None or count == 0:
-        return first_bytes  # nothing decoded (all frames failed) — fall back
+        # nothing decoded (all frames failed) — fall back
+        return first_bytes, _agg_burst(metas)
 
     plate = np.empty(acc.shape, dtype=np.uint8)
     height = acc.shape[0]
@@ -73,7 +105,7 @@ def _capture_plate(camera: Camera, n: int) -> bytes:
 
     buf = io.BytesIO()
     Image.fromarray(plate).save(buf, format="JPEG", quality=90)
-    return buf.getvalue()
+    return buf.getvalue(), _agg_burst(metas)
 
 
 def run_capture(camera: Camera, output_dir: Path, now: datetime | None = None,
@@ -86,7 +118,10 @@ def run_capture(camera: Camera, output_dir: Path, now: datetime | None = None,
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    image_bytes = _capture_plate(camera, frames) if frames > 1 else camera.capture()
+    if frames > 1:
+        image_bytes, burst_camera = _capture_plate(camera, frames)
+    else:
+        image_bytes, burst_camera = camera.capture(), None
 
     image_path = output_dir / image_filename
     meta_path = output_dir / f"{stem}.json"
@@ -99,6 +134,17 @@ def run_capture(camera: Camera, output_dir: Path, now: datetime | None = None,
         if frames > 1:
             # Provenance: this is a derived plate, not a single raw camera JPEG.
             meta.update({"burst_frames": frames, "collapse": "mean", "derived_plate": True})
+        # Exposure/gain/AWB the camera chose, if it exposes them (PiCamera does,
+        # FakeCamera doesn't). Needed to make brightness radiometric for the
+        # insolation read; auto-exposure stays on. `camera` = the last frame's
+        # settings; `burst_camera` = per-frame means across the burst, so the
+        # "last frame is representative" assumption is checkable rather than
+        # assumed.
+        cam_meta = getattr(camera, "last_metadata", None)
+        if cam_meta:
+            meta["camera"] = cam_meta
+        if burst_camera:
+            meta["burst_camera"] = burst_camera
         meta_tmp.write_text(json.dumps(meta))
         image_tmp.rename(image_path)
         meta_tmp.rename(meta_path)

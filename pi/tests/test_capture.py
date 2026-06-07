@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from capture import run_capture
+from capture import run_capture, _agg_burst
 from camera import FakeCamera, PiCamera
 
 FIXED_TIME = datetime(2026, 5, 26, 10, 30, 0, tzinfo=timezone.utc)
@@ -100,3 +100,78 @@ def test_picamera_stops_and_closes_on_success():
     mock_cam.stop.assert_called_once()
     mock_cam.close.assert_called_once()
     assert result is not None
+
+
+# --- exposure/gain/AWB metadata logging ---
+
+class _MetaCamera(FakeCamera):
+    """A camera that exposes the auto algorithms' chosen settings (instance-level
+    so instances never share a mutable dict)."""
+    def __init__(self):
+        super().__init__()
+        self.last_metadata = {"exposure_us": 5000, "analogue_gain": 1.5,
+                              "colour_gains": [1.8, 1.6], "lux": 12000}
+
+
+def test_metadata_omits_camera_block_when_unavailable(output_dir):
+    # default FakeCamera has empty last_metadata -> no "camera" key
+    _capture(output_dir)
+    meta = json.loads((output_dir / f"{EXPECTED_STEM}.json").read_text())
+    assert "camera" not in meta
+    assert "burst_camera" not in meta
+
+
+def test_metadata_includes_camera_block_when_present(output_dir):
+    run_capture(camera=_MetaCamera(), output_dir=output_dir, now=FIXED_TIME)
+    meta = json.loads((output_dir / f"{EXPECTED_STEM}.json").read_text())
+    assert meta["camera"] == _MetaCamera().last_metadata
+
+
+def test_agg_burst_means_and_count():
+    # _agg_burst is pure (no numpy/PIL), unlike the collapse path it rides with.
+    agg = _agg_burst([
+        {"exposure_us": 4000, "analogue_gain": 1.0, "digital_gain": 1.0, "lux": 100},
+        {"exposure_us": 6000, "analogue_gain": 2.0, "digital_gain": 1.0, "lux": 300},
+        {},  # a frame with no metadata is ignored
+    ])
+    assert agg["frame_count_with_metadata"] == 2
+    assert agg["exposure_us_mean"] == 5000
+    assert agg["analogue_gain_mean"] == 1.5
+    assert agg["digital_gain_mean"] == 1.0
+    assert agg["lux_mean"] == 200
+
+
+def test_agg_burst_none_when_no_metadata():
+    assert _agg_burst([]) is None
+    assert _agg_burst([{}, {}]) is None
+
+
+def test_burst_camera_block_written(output_dir, monkeypatch):
+    # Stub the collapse (it needs numpy/PIL, absent in the pi test image) so we
+    # exercise only the run_capture wiring of the burst aggregate.
+    import capture
+    cam = _MetaCamera()  # provides the single `camera` block
+    monkeypatch.setattr(
+        capture, "_capture_plate",
+        lambda camera, n: (b"PLATE", {"frame_count_with_metadata": n,
+                                      "exposure_us_mean": 5000}))
+    run_capture(camera=cam, output_dir=output_dir, now=FIXED_TIME, frames=10)
+    meta = json.loads((output_dir / f"{EXPECTED_STEM}.json").read_text())
+    assert meta["burst_camera"] == {"frame_count_with_metadata": 10, "exposure_us_mean": 5000}
+    assert meta["camera"] == _MetaCamera().last_metadata  # last-frame block still present
+
+
+def test_picamera_records_exposure_metadata():
+    modules, mock_cam = _pi_mocks()
+    mock_cam.capture_metadata.return_value = {
+        "ExposureTime": 5000, "AnalogueGain": 1.5, "DigitalGain": 1.02,
+        "ColourGains": [1.8, 1.6], "Lux": 12000.0,
+    }
+    with patch.dict(sys.modules, modules):
+        cam = PiCamera()
+        cam.capture()
+    assert cam.last_metadata["exposure_us"] == 5000
+    assert cam.last_metadata["analogue_gain"] == 1.5
+    assert cam.last_metadata["digital_gain"] == 1.02
+    assert cam.last_metadata["colour_gains"] == [1.8, 1.6]
+    assert cam.last_metadata["lux"] == 12000.0
