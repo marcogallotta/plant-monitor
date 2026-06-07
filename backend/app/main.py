@@ -1,4 +1,3 @@
-import base64
 import json
 import logging
 import os
@@ -11,9 +10,13 @@ from typing import List, Optional
 
 from PIL import Image, UnidentifiedImageError
 
+import secrets
+from urllib.parse import quote
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -59,32 +62,80 @@ app.include_router(suggestions_router)
 
 
 @app.middleware("http")
-async def basic_auth_middleware(request: Request, call_next):
-    if request.url.path.startswith("/assistant"):
-        return await call_next(request)
-    # Health check: unauthenticated so external monitors can poll it. Leaks
-    # only a capture timestamp, no photo data.
-    if request.url.path.startswith("/health/"):
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # Assistant API has its own bearer auth; health checks are public so
+    # external monitors can poll them (they leak only a capture timestamp).
+    if path.startswith("/assistant") or path.startswith("/health/"):
         return await call_next(request)
     # Pi camera ingest: dedicated bearer token, scoped to photo upload only.
     ingest_token = os.environ.get("INGEST_API_TOKEN", "")
-    if ingest_token and request.method == "POST" and request.url.path == "/photos":
+    if ingest_token and request.method == "POST" and path == "/photos":
         auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer ") and auth[7:] == ingest_token:
+        if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], ingest_token):
             return await call_next(request)
     password = os.environ.get("DASHBOARD_PASSWORD", "")
     if not password:
         return await call_next(request)
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Basic "):
-        try:
-            _, pwd = base64.b64decode(auth[6:]).decode().split(":", 1)
-            if pwd == password:
-                return await call_next(request)
-        except Exception:
-            pass
-    port = request.url.port or 80
-    return Response(status_code=401, headers={"WWW-Authenticate": f'Basic realm="Plant Monitoring :{port}"'})
+    # The login page and its form submission must be reachable unauthenticated.
+    if path in ("/login", "/logout"):
+        return await call_next(request)
+    if request.session.get("authed"):
+        return await call_next(request)
+    # Unauthenticated. Browsers navigating get redirected to the login page;
+    # API/fetch callers get a plain 401 (no WWW-Authenticate -> no native popup).
+    if request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
+        return RedirectResponse(url=f"/login?next={quote(path)}", status_code=303)
+    return JSONResponse({"detail": "authentication required"}, status_code=401)
+
+
+# Session signing key. A missing key with auth enabled is a real
+# misconfiguration: every restart would mint a new random key and silently
+# invalidate all logins. Fail loudly in that case; only fall back to an
+# ephemeral key when auth is off entirely (dev / tests with no password).
+_session_secret = os.environ.get("SESSION_SECRET")
+if not _session_secret:
+    if os.environ.get("DASHBOARD_PASSWORD"):
+        raise RuntimeError(
+            "SESSION_SECRET must be set when DASHBOARD_PASSWORD is set "
+            "(otherwise every restart logs everyone out). Generate one with: "
+            "python -c 'import secrets; print(secrets.token_hex(32))'"
+        )
+    logger.warning("SESSION_SECRET not set; using an ephemeral key (sessions reset on restart)")
+    _session_secret = secrets.token_hex(32)
+
+# Outermost middleware (added last -> runs first), so request.session is
+# populated before auth_middleware reads it.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_session_secret,
+    max_age=30 * 24 * 3600,
+    same_site="lax",
+    https_only=os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
+)
+
+
+@app.get("/login", response_class=HTMLResponse, include_in_schema=False)
+def login_page():
+    return HTMLResponse((_STATIC_DIR / "login.html").read_text())
+
+
+@app.post("/login", include_in_schema=False)
+async def login_submit(request: Request, password: str = Form(...), next: str = Form("/")):
+    expected = os.environ.get("DASHBOARD_PASSWORD", "")
+    if expected and secrets.compare_digest(password, expected):
+        request.session["authed"] = True
+        # Only allow local redirects (block "//host" protocol-relative URLs).
+        dest = next if next.startswith("/") and not next.startswith("//") else "/"
+        return RedirectResponse(url=dest, status_code=303)
+    return RedirectResponse(url="/login?error=1", status_code=303)
+
+
+@app.post("/logout", include_in_schema=False)
+def logout(request: Request):
+    # POST-only so a third-party page can't log users out via <img src=...>.
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
 
 
 @app.get("/assistant-openapi.json", include_in_schema=False)
