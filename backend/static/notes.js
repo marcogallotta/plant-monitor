@@ -14,6 +14,33 @@ function unitName(id) {
   return u ? u.name : null;
 }
 
+function eventToStored(e) {  // pointer event -> stored-space (rotation/zoom-correct) coordinate
+  const r = document.getElementById('modal-img').getBoundingClientRect();
+  return _visualToStored((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+}
+
+// Drag a region note to reposition it; clamps so it can't leave the image.
+function startRectDrag(note, el, e) {
+  const s = eventToStored(e);
+  const mnx = Math.min(note.x, note.x2), mny = Math.min(note.y, note.y2);
+  const mxx = Math.max(note.x, note.x2), mxy = Math.max(note.y, note.y2);
+  let dx = 0, dy = 0, moved = false;
+  function move(ev) {
+    const c = eventToStored(ev);
+    dx = Math.max(-mnx, Math.min(1 - mxx, c.x - s.x)); dy = Math.max(-mny, Math.min(1 - mxy, c.y - s.y));
+    if (Math.abs(dx) > 0.005 || Math.abs(dy) > 0.005) moved = true;
+    el.style.left = (mnx + dx) * 100 + '%'; el.style.top = (mny + dy) * 100 + '%';
+  }
+  async function up() {
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+    if (!moved) return;
+    el._suppressClick = true;
+    try { await updateNote(note.id, {x: note.x + dx, y: note.y + dy, x2: note.x2 + dx, y2: note.y2 + dy}); } catch (err) { setStatus('Note move failed: ' + err.message); }
+    loadNotes();
+  }
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+}
+
 export async function loadNotes() {
   if (!state.currentPhotoId) return;
   try {
@@ -46,6 +73,10 @@ export function renderPins() {
       label.className = 'note-rect-label';
       label.textContent = uname || (i + 1);
       el.appendChild(label);
+      el.addEventListener('mousedown', function(e) {       // shift-drag stays with zoom.js (new region)
+        if (e.button !== 0 || e.shiftKey) return;
+        e.stopPropagation(); e.preventDefault(); startRectDrag(note, el, e);
+      });
     } else {
       el.className = 'note-pin' + (isSelected(note) ? ' selected' : '');
       el.style.left = (note.x * 100) + '%';
@@ -53,7 +84,7 @@ export function renderPins() {
       el.textContent = i + 1;
     }
     el.title = [note.note_text, uname && ('Unit: ' + uname)].filter(Boolean).join('\n');
-    el.addEventListener('click', function(e) { e.stopPropagation(); openEditForm(note); });
+    el.addEventListener('click', function(e) { e.stopPropagation(); if (el._suppressClick) { el._suppressClick = false; return; } openEditForm(note); });
     container.appendChild(el);
   });
 }

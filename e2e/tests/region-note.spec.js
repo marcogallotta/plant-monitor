@@ -111,6 +111,56 @@ test('shift-drag creates region note at expected visual position and persists af
   await assertRectAt(page, 0.2, 0.2, 0.7, 0.65);
 });
 
+test('dragging an existing region note repositions it and persists after reload', async ({ page, request }) => {
+  const photoId = await uploadAndOpenModal(page, request, 'region-move-test.jpg');
+
+  // Create a region note at 0.2,0.2 → 0.5,0.5
+  const imgBox = await page.locator('#modal-img').boundingBox();
+  await shiftDrag(
+    page,
+    imgBox.x + imgBox.width  * 0.2, imgBox.y + imgBox.height * 0.2,
+    imgBox.x + imgBox.width  * 0.5, imgBox.y + imgBox.height * 0.5,
+  );
+  await page.locator('#note-text').fill('movable region');
+  await page.locator('#note-save').click();
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await assertRectAt(page, 0.2, 0.2, 0.5, 0.5);
+
+  // Plain-drag (no shift) the rect by +0.2 in x and +0.15 in y, starting from
+  // inside the rect (its centre ≈ 0.35, 0.35). Wait for the PUT and the GET that
+  // loadNotes() fires afterwards, so the pins have re-rendered before measuring.
+  const moveResp = page.waitForResponse(
+    r => /\/notes\/\d+$/.test(r.url()) && r.request().method() === 'PUT',
+  );
+  const notesReloaded = page.waitForResponse(
+    r => /\/photos\/\d+\/notes$/.test(r.url()) && r.request().method() === 'GET',
+  );
+  await page.mouse.move(imgBox.x + imgBox.width * 0.35, imgBox.y + imgBox.height * 0.35);
+  await page.mouse.down();
+  await page.mouse.move(imgBox.x + imgBox.width * 0.55, imgBox.y + imgBox.height * 0.50, { steps: 5 });
+  await page.mouse.up();
+  await moveResp;
+  await notesReloaded;
+
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await assertRectAt(page, 0.4, 0.35, 0.7, 0.65);
+
+  // Persists across reload
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
+  await page.reload();
+  await galleryReady;
+  await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
+  await expect(page.locator('#modal')).toBeVisible();
+  await page.waitForFunction(() => {
+    const img = document.getElementById('modal-img');
+    return img && img.complete && img.naturalWidth > 0;
+  });
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await assertRectAt(page, 0.4, 0.35, 0.7, 0.65);
+});
+
 test('shift-drag region note after zoom and pan lands at correct visual fraction', async ({ page, request }) => {
   await uploadAndOpenModal(page, request, 'zoom-region-test.jpg');
 

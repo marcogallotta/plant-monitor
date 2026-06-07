@@ -188,7 +188,7 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .note-pin:hover    { background: #f94; }
 .note-pin.selected { background: #48f; border-color: #8cf; }
 
-.note-rect          { position: absolute; border: 2px solid #e83; background: rgba(238,136,51,0.08); cursor: pointer; pointer-events: all; z-index: 2; box-sizing: border-box; }
+.note-rect          { position: absolute; border: 2px solid #e83; background: rgba(238,136,51,0.08); cursor: move; pointer-events: all; z-index: 2; box-sizing: border-box; }
 .note-rect:hover    { background: rgba(238,136,51,0.2); }
 .note-rect.selected { border: 2px dashed #48f; background: rgba(68,136,255,0.12); }
 .note-rect-label    { position: absolute; top: 2px; left: 4px; font-size: 0.6rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8); pointer-events: none; }
