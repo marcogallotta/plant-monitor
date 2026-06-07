@@ -453,6 +453,61 @@ per-region rolling baseline**. Then harvestability on top. (Also still ties to t
 change detectable at all?" — the −20 g evening dill remained floor-level even on the invariant, but a
 larger dill pick was detected, so it is a size/resolution floor, not a blanket "no".)
 
+### Governing principle (2026-06-07): model the per-region TIME SERIES, don't diff pairs
+
+The decisive reframe, confirmed on real frames (basil + rocket, 2026-06-07): **a single before/after
+pair is the wrong primitive.** A 50 g harvest is near-invisible cold in one noisy pair, but **obvious in
+the sequence** — "flat, flat, flat, **step**, stays down". So the detector should track, **per region, a
+feature value per frame** (rawINV/gradINV on the Finlayson invariant) → a **time series** → and run
+**change-point / step detection** on it, not pairwise absdiff. Both confounds dissolve when you do this:
+
+- **Sway** → averaged out at capture (burst → mean plate).
+- **Lighting** → it is **predictable, not random**: it cycles **diurnally** and roughly repeats
+  day-over-day. So model each region's **expected diurnal curve** (its normal value at each time-of-day)
+  and treat **weather as a variance band** around that curve. An event is a **departure from the region's
+  own curve**, *not* a difference from another frame. You don't fight lighting per-pair — you **predict**
+  it over time and flag deviations. (This is why "compare matched time-of-day plates" was on the right
+  track but too brittle: a learned diurnal baseline subsumes it and survives cloudy-vs-sunny.)
+
+Net: **register → invariant feature per frame → per-region diurnal baseline → flag persistent departures.**
+`harvest_eval.py` currently diffs consecutive *pairs* then baselines — the next iteration should track the
+series directly. Build against the plate data (see Next).
+
+### The wilt confound + water-stress monitoring (2026-06-07) — a HUGE potential win, and a trap
+
+**Watching the same basil that "harvested" — it had only WILTED.** Midday (14:00 CEST) the exposed basil
+slumped (leaves fold/droop downward, losing turgor in peak sun) and **self-recovered by ~18:00–19:00 CEST**
+as the sun came off it. From overhead a wilt **looks exactly like a harvest** — both cut the projected green
+canopy a naive diff sees — so a single-frame "less canopy = harvested" rule would mislabel **every midday
+wilt** as a pick. This is the sharpest false-positive generator found so far.
+
+**The time-series separates them (same principle as above):**
+- **Harvest** = a step that **holds** (rocket: full at 17:00 → thinned at 18:00, stays thinned). Permanent;
+  it also **reveals background** (soil / cut stems / pot rim / shade-net).
+- **Wilt** = a dip that **returns** (basil: slumped at 14:00 → turgid by evening). Transient; the green
+  **reorients** (leaves still there, tilted) rather than disappearing. Often **diurnal** (worst at heat peak).
+
+Confirmed live on 2026-06-07: basil = dip-that-recovers, rocket = step-that-holds, same camera same day.
+
+**Why this is a HUGE win if it works:** detecting wilt early is a **water-stress alert** — "go check/water
+the basil" — caught hourly, before you'd notice. For fast exposed movers the wilt is recoverable same-day,
+so the lead time is enough. Caveats / open problems:
+- **Under- vs over-watering is NOT separable from the droop shape** (over-watering wilts too, via rotting
+  roots). Don't try to auto-classify and tell the user what to do — the actions are **opposite** and a wrong
+  call is fatal (watering a drowning plant). Surface it as an **attention flag**; the human diagnoses with a
+  finger in the soil (10 s, the one thing vision can't do).
+- The cues that *would* disambiguate are **soil-surface colour** (dry/pale vs dark/wet — directly imaged,
+  but lighting-confounded and canopy-occluded) and the **wilt's recovery dynamics** (diurnal/recovers =
+  under; persistent/yellowing = over). The over-watering *timely* signal is the unreliable soil one; its
+  reliable signal (wilt) is **too late** (root rot already advanced). Under-watering is comfortably catchable.
+- **No manual watering log** (user won't keep one — busy work, same call as the shelved harvest log).
+  Watering can instead be **inferred from the camera**: a watering event = **abrupt soil-darkening** (+ a
+  turgor rebound after). Needs the wet/dry soil read to be legible — **the one gating experiment** (wet soil
+  is a reflectance/chroma/gloss change, not just "darker", so it *may* survive the invariant; untested).
+- **Shaded plants hide thirst.** Rocket (under shade net) barely wilted at the same midday despite the same
+  watering — low transpiration demand. So posture-based water-stress alerting is **biased toward exposed
+  pots**; shaded ones won't telegraph and need the soil read or manual checks.
+
 The Pi gives a **fixed overhead frame**. That doesn't make the layout static (things shuffle)
 — it makes **change cheap to detect and localize**:
 
