@@ -213,6 +213,61 @@ describe('region note drag', () => {
   });
 });
 
+// ── region resize (corner handles) ────────────────────────
+
+describe('region note corner resize', () => {
+  beforeEach(() => {
+    document.getElementById('modal-img').getBoundingClientRect =
+      () => ({left: 0, top: 0, width: 100, height: 100});
+  });
+
+  function dragHandle(corner, to) {
+    const h = document.querySelector('.note-rect .rh-' + corner);
+    h.dispatchEvent(new MouseEvent('mousedown', {button: 0, bubbles: true, cancelable: true}));
+    document.dispatchEvent(new MouseEvent('mousemove', {clientX: to.x, clientY: to.y, bubbles: true}));
+    document.dispatchEvent(new MouseEvent('mouseup', {clientX: to.x, clientY: to.y, bubbles: true}));
+  }
+
+  it('renders four corner handles on a region note', () => {
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    expect(document.querySelectorAll('.note-rect .rh')).toHaveLength(4);
+  });
+
+  it('dragging the bottom-right handle moves only x2/y2', async () => {
+    const {updateNote} = await import('@/api.js');
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    dragHandle('br', {x: 70, y: 80});
+    await Promise.resolve();
+    const body = updateNote.mock.calls[0][1];
+    expect(body.x).toBeCloseTo(0.1);  expect(body.y).toBeCloseTo(0.2);
+    expect(body.x2).toBeCloseTo(0.7); expect(body.y2).toBeCloseTo(0.8);
+  });
+
+  it('dragging the top-left handle moves only x/y', async () => {
+    const {updateNote} = await import('@/api.js');
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    dragHandle('tl', {x: 5, y: 5});
+    await Promise.resolve();
+    const body = updateNote.mock.calls[0][1];
+    expect(body.x).toBeCloseTo(0.05); expect(body.y).toBeCloseTo(0.05);
+    expect(body.x2).toBeCloseTo(0.5); expect(body.y2).toBeCloseTo(0.6);
+  });
+
+  it('clamps to a minimum size instead of collapsing or flipping', async () => {
+    const {updateNote} = await import('@/api.js');
+    state.currentNotes = [{id: 9, note_text: 'area', x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    dragHandle('br', {x: 5, y: 5});  // drag bottom-right past top-left
+    await Promise.resolve();
+    const body = updateNote.mock.calls[0][1];
+    expect(body.x2).toBeCloseTo(0.12); // bx1 + MIN
+    expect(body.y2).toBeCloseTo(0.22); // by1 + MIN
+  });
+});
+
 // ── openCreateForm ────────────────────────────────────────
 
 describe('openCreateForm', () => {
