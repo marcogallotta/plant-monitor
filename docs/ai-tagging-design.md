@@ -536,9 +536,27 @@ auto-pump.
 *confound* change-detection are the *signal* for sun exposure: the same per-region diurnal lighting baseline
 is a per-region, per-hour **insolation map** (sunlit = bright + hard shadow edge; shaded = dark/diffuse;
 mean luminance per region per frame). This is the term that makes evaporative **demand per-plant** — it is
-*why* the exposed basil wilted at noon and the netted rocket didn't, now quantifiable ("basil got ~5
-direct-sun hours, rocket ~1") instead of "rocket's shaded". One modelling effort (the diurnal baseline),
-two payoffs: it **subtracts** lighting from the change signal AND **reads out** insolation for the water model.
+*why* the exposed basil wilted at noon and the netted rocket didn't. One modelling effort (the diurnal
+baseline), two payoffs in principle: it **subtracts** lighting from the change signal AND **reads out**
+insolation for the water model.
+
+**TESTED 2026-06-07 (eve) — the NAIVE version is FALSIFIED (`scripts/insolation_experiment.py`).** Correlated
+the Cilantro region's **mean 8-bit luminance** across the day's frames against the Flower Care ground-truth
+`light_lux`: **Spearman = −0.43** (anti-correlated, not +1). Mean region brightness does **not** measure
+insolation. Three causes, the first decisive:
+1. **The camera auto-exposes.** A sunlit scene is stopped down, so a brighter-lit region does *not* read
+   brighter in 8-bit — it can read the *same or darker*. Absolute luminance is not radiometric.
+2. **No EXIF to correct it.** Saved frames carry **zero** exposure metadata (the burst-mean plate is
+   re-encoded from a numpy array, stripping it), so auto-exposure can't be divided back out post-hoc.
+3. **The lux reference is a dappled-shade point sensor** swinging ×128 hour-to-hour (612→78 489) — too
+   spiky to validate against at hourly cadence regardless.
+
+**So insolation-from-camera is not free, but not dead.** What it would take: (a) **log `ExposureTime` +
+`AnalogueGain` into capture metadata** (picamera2 exposes them) — or grab one fixed-exposure "radiometric"
+frame per capture — so luminance becomes meaningful; and/or (b) detect **sunlit-vs-shadow by spatial pattern**
+(hard shadow edges, local contrast, specular), robust to auto-exposure, instead of mean brightness; and (c)
+compare against a **smoothed sun-fraction**, not raw point lux. Until then the demand-side insolation term is
+an **open build, not a freebie** — correcting the over-claim in the line above.
 
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
