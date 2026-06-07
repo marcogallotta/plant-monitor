@@ -42,11 +42,14 @@ with reference closeups for lemongrass, garlic chives, rocket, sage, sorrel, tar
 trough, and Thai basil vendita.
 
 **Active work, in priority order (reordered 2026-06-07):**
-1. **Region-marking the Pi map (now #1).** `photo_notes` + a `growing_unit_id` FK; draw a box
-   per pot on a reference frame, assign its unit. **Load-bearing**, because today proved vision
-   *confidently swaps* confusables (lemongrass↔garlic chives) and *cannot* tell visually-
-   identical varieties apart (the chillis — H4/H7/BE) — only position can. Everything sits on
-   this. Record per-pot distinguishing features + pot size (see plants-data.md).
+1. ✅ **Region-marking the Pi map (was #1, done 2026-06-07).** `photo_notes` + a `growing_unit_id`
+   FK and the region-tag UI are built (migration `0013`; draw + unit dropdown + name-on-box),
+   and the reference frame `2026-06-07T130010Z.jpg` is fully tagged (25 units). This was
+   load-bearing because vision *confidently swaps* confusables (lemongrass↔garlic chives) and
+   *cannot* tell visually-identical varieties apart (the chillis — H4/H7/BE) — only position can.
+   Per-pot distinguishing features + pot size live in plants-data.md.
+   **Next on this line:** the Phase-2 diff/inherit step that carries these tags forward to later
+   frames (see Phase 2 below) — not yet built.
 2. **Frictionless phone sync** — the data-volume lever; auto-upload closeups (`source=phone`
    path exists, automation is the gap). The region map makes the inflow identifiable.
 3. **Imaging investigation** — does resolution / a closeup make harvest-scale change detectable?
@@ -329,19 +332,24 @@ No prose outside the array.
 
 ---
 
-## Phase 2 — Pi monitoring (future): region tagging + harvestability
+## Phase 2 — Pi monitoring: region tagging (done) + diff/inherit & harvestability (future)
 
-> Build only once real Pi capture behaviour exists. This is the recurring payoff; the
-> Phase-1 registry seeds it.
+> Region tagging is built and the first reference frame is tagged. The recurring payoff —
+> diff/inherit + harvestability — is still to build; the Phase-1 registry seeds it.
 
-**Region-tagging mechanism (decided 2026-06-06):** reuse `photo_notes`, which already stores a
+**Region-tagging mechanism (built 2026-06-07):** reuses `photo_notes`, which already stores a
 normalised rectangle (`x, y, x2, y2`, 0–1, range-checked) and ships the full draw/edit UI
-(shift+drag region notes, `pendingNote`, `visualToStored()` rotation handling). Add a nullable
-`growing_unit_id` FK to `photo_notes` (and make `note_text` nullable) — a region note pointing
-at a unit *is* a region tag. This avoids a new `photo_regions` table. A human-verified set of
-such notes on one reference frame is both the validation overlay and the reusable layout
-template; per-region crops (reuse the rotation-baked crop from `/photos/export`) build the
-per-unit dataset. AI-suggested regions continue to live in `photo_ai_suggestions`.
+(shift+drag region notes, `pendingNote`, `visualToStored()` rotation handling). A nullable
+`growing_unit_id` FK was added to `photo_notes` (and `note_text` made nullable) — a region note
+pointing at a unit *is* a region tag. This avoided a new `photo_regions` table. The reference
+frame `2026-06-07T130010Z.jpg` now carries a human-verified set of these tags (25 units): it is
+both the validation overlay and the reusable layout template. Per-region crops (reuse the
+rotation-baked crop from `/photos/export`) build the per-unit dataset. AI-suggested regions
+continue to live in `photo_ai_suggestions`.
+
+**Still to build on this:** the **diff/inherit** step — carry the reference frame's tags forward
+to later frames automatically (unchanged regions inherit identity for free; a changed region is
+localized and re-confirmed), plus harvestability. See below.
 
 The Pi gives a **fixed overhead frame**. That doesn't make the layout static (things shuffle)
 — it makes **change cheap to detect and localize**:
@@ -465,7 +473,11 @@ Operations the review UI needs against `photo_ai_suggestions`:
 3. ✅ `GET /suggestions` (list pending) and `PATCH /suggestions/{id}` (accept/reject/deleted;
    accept writes through, creates unit/label as needed).
 4. ✅ Review tab — region overlays, keyboard nav, inline edit, `suggested_options` choice buttons.
-5. ⚠️ `scripts/prepare_tagging_run.py` — built, but its **256px contact-sheet grid is
+5. ✅ **Region tagging** (2026-06-07) — `photo_notes.growing_unit_id` FK + nullable `note_text`
+   (migration `0013`); region-tag UI (shift-drag a box → growing-unit dropdown → unit name
+   renders on the box; a note can be unit-only, text-only, or both). Reference frame
+   `2026-06-07T130010Z.jpg` tagged with all 25 units. E2E + unit coverage added.
+6. ⚠️ `scripts/prepare_tagging_run.py` — built, but its **256px contact-sheet grid is
    superseded** (see Appendix B). Reuse only its session-grouping; switch transport to
    per-image Batch API.
 
