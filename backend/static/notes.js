@@ -41,6 +41,32 @@ function startRectDrag(note, el, e) {
   document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
 }
 
+// Resize a region note by dragging a corner; the opposite corner stays anchored.
+// h.left/h.top say which displayed edges the corner controls. Clamps to a min
+// size so the box can't collapse or flip.
+function startCornerResize(note, el, h, e) {
+  const MIN = 0.02;
+  const bx1 = Math.min(note.x, note.x2), by1 = Math.min(note.y, note.y2);
+  const bx2 = Math.max(note.x, note.x2), by2 = Math.max(note.y, note.y2);
+  let nx1 = bx1, ny1 = by1, nx2 = bx2, ny2 = by2, moved = false;
+  function move(ev) {
+    const c = eventToStored(ev);
+    if (h.left) nx1 = Math.min(c.x, bx2 - MIN); else nx2 = Math.max(c.x, bx1 + MIN);
+    if (h.top)  ny1 = Math.min(c.y, by2 - MIN); else ny2 = Math.max(c.y, by1 + MIN);
+    moved = true;
+    el.style.left = nx1 * 100 + '%'; el.style.top = ny1 * 100 + '%';
+    el.style.width = (nx2 - nx1) * 100 + '%'; el.style.height = (ny2 - ny1) * 100 + '%';
+  }
+  async function up() {
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+    if (!moved) return;
+    el._suppressClick = true;
+    try { await updateNote(note.id, {x: nx1, y: ny1, x2: nx2, y2: ny2}); } catch (err) { setStatus('Note resize failed: ' + err.message); }
+    loadNotes();
+  }
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+}
+
 export async function loadNotes() {
   if (!state.currentPhotoId) return;
   try {
@@ -65,6 +91,7 @@ export function renderPins() {
       el.style.width  = ((x2 - x1) * 100) + '%';
       el.style.height = ((y2 - y1) * 100) + '%';
       if (isSelected(note)) {
+        el.classList.add('selected');
         el.style.border = '3px dashed #ff0';
         el.style.background = 'rgba(255,255,0,0.25)';
         el.style.zIndex = '10';
@@ -76,6 +103,15 @@ export function renderPins() {
       el.addEventListener('mousedown', function(e) {       // shift-drag stays with zoom.js (new region)
         if (e.button !== 0 || e.shiftKey) return;
         e.stopPropagation(); e.preventDefault(); startRectDrag(note, el, e);
+      });
+      [['tl', true, true], ['tr', false, true], ['bl', true, false], ['br', false, false]].forEach(function(h) {
+        const g = document.createElement('div');
+        g.className = 'rh rh-' + h[0];
+        g.addEventListener('mousedown', function(e) {       // resize beats body-move (stopPropagation)
+          if (e.button !== 0 || e.shiftKey) return;
+          e.stopPropagation(); e.preventDefault(); startCornerResize(note, el, {left: h[1], top: h[2]}, e);
+        });
+        el.appendChild(g);
       });
     } else {
       el.className = 'note-pin' + (isSelected(note) ? ' selected' : '');

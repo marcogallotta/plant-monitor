@@ -204,6 +204,56 @@ test('dragging an existing region note repositions it and persists after reload'
   await assertRectAt(page, 0.4, 0.35, 0.7, 0.65);
 });
 
+test('resizing a region note by a corner handle persists after reload', async ({ page, request }) => {
+  const photoId = await uploadAndOpenModal(page, request, 'region-resize-test.jpg');
+
+  // Create a region note at 0.2,0.2 → 0.5,0.5
+  const imgBox = await page.locator('#modal-img').boundingBox();
+  await shiftDrag(
+    page,
+    imgBox.x + imgBox.width  * 0.2, imgBox.y + imgBox.height * 0.2,
+    imgBox.x + imgBox.width  * 0.5, imgBox.y + imgBox.height * 0.5,
+  );
+  await page.locator('#note-text').fill('resizable region');
+  await page.locator('#note-save').click();
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await assertRectAt(page, 0.2, 0.2, 0.5, 0.5);
+
+  // Hover to reveal the handles, then drag the bottom-right corner to 0.75,0.8.
+  await page.locator('#modal .note-rect').hover();
+  const moveResp = page.waitForResponse(
+    r => /\/notes\/\d+$/.test(r.url()) && r.request().method() === 'PUT',
+  );
+  const notesReloaded = page.waitForResponse(
+    r => /\/photos\/\d+\/notes$/.test(r.url()) && r.request().method() === 'GET',
+  );
+  const hBox = await page.locator('#modal .note-rect .rh-br').boundingBox();
+  await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(imgBox.x + imgBox.width * 0.75, imgBox.y + imgBox.height * 0.8, { steps: 5 });
+  await page.mouse.up();
+  await moveResp;
+  await notesReloaded;
+
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await assertRectAt(page, 0.2, 0.2, 0.75, 0.8);
+
+  // Persists across reload
+  const galleryReady = page.waitForResponse(
+    r => /\/photos(\?|$)/.test(r.url()) && r.request().method() === 'GET',
+  );
+  await page.reload();
+  await galleryReady;
+  await page.locator(`.photo-card[data-id="${photoId}"] img`).click();
+  await expect(page.locator('#modal')).toBeVisible();
+  await page.waitForFunction(() => {
+    const img = document.getElementById('modal-img');
+    return img && img.complete && img.naturalWidth > 0;
+  });
+  await expect(page.locator('#modal .note-rect')).toHaveCount(1);
+  await assertRectAt(page, 0.2, 0.2, 0.75, 0.8);
+});
+
 test('shift-drag region note after zoom and pan lands at correct visual fraction', async ({ page, request }) => {
   await uploadAndOpenModal(page, request, 'zoom-region-test.jpg');
 

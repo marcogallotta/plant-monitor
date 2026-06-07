@@ -192,6 +192,12 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .note-rect:hover    { background: rgba(238,136,51,0.2); }
 .note-rect.selected { border: 2px dashed #48f; background: rgba(68,136,255,0.12); }
 .note-rect-label    { position: absolute; top: 2px; left: 4px; font-size: 0.6rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8); pointer-events: none; }
+.note-rect .rh      { position: absolute; width: 10px; height: 10px; background: #e83; border: 1px solid #fff; box-sizing: border-box; display: none; z-index: 3; }
+.note-rect:hover .rh, .note-rect.selected .rh { display: block; }
+.rh-tl { left: -5px; top: -5px; cursor: nwse-resize; }
+.rh-tr { right: -5px; top: -5px; cursor: nesw-resize; }
+.rh-bl { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.rh-br { right: -5px; bottom: -5px; cursor: nwse-resize; }
 
 #rect-preview { position: absolute; border: 2px dashed #ff0; background: rgba(255,255,0,0.08); pointer-events: none; display: none; box-sizing: border-box; z-index: 10; }
 
