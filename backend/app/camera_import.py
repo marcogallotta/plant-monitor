@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .database import get_db
@@ -60,10 +61,22 @@ def save_photo(
     growing_unit_ids: Optional[list[int]] = None,
     note_text: Optional[str] = None,
     rotation: int = 0,
-) -> Photo:
-    """Write image bytes to disk and create a Photo DB row. Commits the transaction."""
+) -> tuple[Photo, bool]:
+    """Write image bytes to disk and create a Photo DB row. Commits the transaction.
+
+    Returns ``(photo, created)``. Identity is by content: if a row with the same
+    SHA-256 of the image bytes already exists, no file is written and the
+    existing row is returned with ``created=False`` (idempotent). This makes
+    byte-identical re-uploads — e.g. the same phone photo shared under a
+    different filename — collapse onto one row regardless of name or size.
+    """
     if rotation not in VALID_ROTATIONS:
         raise ValueError(f"rotation must be 0, 90, 180, or 270; got {rotation}")
+
+    content_hash = hashlib.sha256(image_bytes).hexdigest()
+    existing = db.query(Photo).filter_by(content_hash=content_hash).first()
+    if existing is not None:
+        return existing, False
 
     stem = uuid.uuid4().hex
     filename = f"{stem}.jpg"
@@ -86,6 +99,7 @@ def save_photo(
         photo_type=photo_type,
         original_filename=original_filename,
         original_size_bytes=original_size_bytes,
+        content_hash=content_hash,
         location_id=location_id,
         rotation=rotation,
     )
@@ -100,13 +114,22 @@ def save_photo(
             db.add(PhotoNote(photo_id=photo.id, note_text=note_text, x=0.0, y=0.0))
 
         db.commit()
+    except IntegrityError:
+        # Lost a race against a concurrent identical upload — the unique index
+        # rejected our row. Drop our file and return the winner.
+        db.rollback()
+        image_path.unlink(missing_ok=True)
+        winner = db.query(Photo).filter_by(content_hash=content_hash).first()
+        if winner is not None:
+            return winner, False
+        raise
     except Exception:
         db.rollback()
         image_path.unlink(missing_ok=True)
         raise
 
     db.refresh(photo)
-    return photo
+    return photo, True
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +466,7 @@ def import_photos(body: ImportRequest, db: Session = Depends(get_db)):
         captured_at = datetime.fromtimestamp(entry["mtime_ns"] / 1e9, tz=timezone.utc)
 
         try:
-            photo = save_photo(
+            photo, was_created = save_photo(
                 db,
                 jpeg_bytes,
                 original_filename,
@@ -456,6 +479,15 @@ def import_photos(body: ImportRequest, db: Session = Depends(get_db)):
                 note_text=body.note_text,
                 rotation=body.rotations.get(file_id, 0),
             )
+            if not was_created:
+                # Byte-identical to a photo already on disk (different filename
+                # than the name/size pre-check above caught).
+                skipped.append({
+                    "file_id": file_id,
+                    "reason": "already_imported",
+                    "original_filename": original_filename,
+                })
+                continue
             created.append({
                 "file_id": file_id,
                 "photo_id": photo.id,

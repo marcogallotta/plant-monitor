@@ -21,7 +21,7 @@ test('manual upload via dashboard: photo appears in grid', async ({ page }) => {
   await page.locator('#upload-image').setInputFiles({
     name: `dashboard-upload-${Date.now()}.jpg`,
     mimeType: 'image/jpeg',
-    buffer: FIXTURE_JPG,
+    buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]),
   });
   await page.locator('#upload-form button').click();
 

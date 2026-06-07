@@ -10,7 +10,7 @@ const FIXTURE_JPG = readFileSync(
 test('grid images use /thumbnail URLs, not full-size', async ({ page, request }) => {
   const resp = await request.post('/manual-photos', {
     multipart: {
-      image: { name: 'thumbnail-test.jpg', mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+      image: { name: 'thumbnail-test.jpg', mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
     },
   });
   expect(resp.status()).toBe(201);
@@ -35,7 +35,7 @@ test('grid images use /thumbnail URLs, not full-size', async ({ page, request })
 test('thumbnail endpoint returns a smaller image than the original', async ({ request }) => {
   const resp = await request.post('/manual-photos', {
     multipart: {
-      image: { name: 'thumbnail-size-test.jpg', mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+      image: { name: 'thumbnail-size-test.jpg', mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
     },
   });
   expect(resp.status()).toBe(201);
@@ -55,7 +55,7 @@ test('thumbnail endpoint returns a smaller image than the original', async ({ re
 test('modal uses medium-size URL on non-localhost', async ({ page, request }) => {
   const resp = await request.post('/manual-photos', {
     multipart: {
-      image: { name: 'modal-thumb-test.jpg', mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+      image: { name: 'modal-thumb-test.jpg', mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
     },
   });
   expect(resp.status()).toBe(201);

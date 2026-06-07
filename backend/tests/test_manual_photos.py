@@ -234,6 +234,58 @@ def test_exif_without_offset_and_no_captured_at_falls_back_to_now(client):
     assert abs((captured - before).total_seconds()) < 120
 
 
+# --- content-hash dedup ---
+
+def test_identical_bytes_different_filename_dedups(client, db_session):
+    from app.models import Photo
+    img = b"IDENTICAL-BYTES-PAYLOAD"
+    r1 = _upload(client, image_bytes=img, filename="1000116036.jpg")
+    r2 = _upload(client, image_bytes=img, filename="image-1779889062712.jpg")
+    assert r1.status_code == 201 and r2.status_code == 201
+    # Same row returned both times; only one DB row and one file on disk.
+    assert r1.json()["id"] == r2.json()["id"]
+    assert db_session.query(Photo).count() == 1
+
+
+def test_identical_bytes_writes_single_file(client, isolated_photos_dir):
+    img = b"IDENTICAL-BYTES-PAYLOAD"
+    _upload(client, image_bytes=img, filename="a.jpg")
+    _upload(client, image_bytes=img, filename="b.jpg")
+    assert len(list(isolated_photos_dir.glob("*.jpg"))) == 1
+
+
+def test_different_bytes_are_not_deduped(client, db_session):
+    from app.models import Photo
+    _upload(client, image_bytes=b"PHOTO-ONE", filename="a.jpg")
+    _upload(client, image_bytes=b"PHOTO-TWO", filename="b.jpg")
+    assert db_session.query(Photo).count() == 2
+
+
+def test_dedup_keeps_first_rows_metadata(client):
+    # The duplicate upload does not overwrite the original's classification.
+    img = b"IDENTICAL-BYTES-PAYLOAD"
+    r1 = _upload(client, image_bytes=img, photo_type="health_check")
+    r2 = _upload(client, image_bytes=img)  # no photo_type
+    assert r2.json()["id"] == r1.json()["id"]
+    assert r2.json()["photo_type"] == "health_check"
+
+
+def test_dedup_is_first_upload_wins_for_all_fields(client):
+    # Semantics: the first upload's location/rotation/captured_at survive; a
+    # later byte-identical upload with different values does not change them.
+    loc = client.post("/locations", json={"name": "Balcony"}).json()
+    img = b"IDENTICAL-BYTES-PAYLOAD-2"
+    r1 = _upload(client, image_bytes=img, location_id=loc["id"], rotation=90,
+                 captured_at="2026-05-08T05:30:00Z")
+    r2 = _upload(client, image_bytes=img, rotation=270,
+                 captured_at="2026-05-30T13:32:33Z")
+    body = r2.json()
+    assert body["id"] == r1.json()["id"]
+    assert body["location_id"] == loc["id"]
+    assert body["rotation"] == 90
+    assert body["captured_at"].startswith("2026-05-08T05:30:00")
+
+
 # --- serve uploaded manual photo ---
 
 def test_manual_upload_photo_is_servable(client, isolated_photos_dir):

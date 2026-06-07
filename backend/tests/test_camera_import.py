@@ -353,6 +353,62 @@ def test_import_duplicate_is_skipped(patched_scan, client):
     assert data["created"] == [] and data["failed"] == []
 
 
+def test_import_identical_bytes_different_filename_is_skipped(patched_scan, client, db_session):
+    from app.models import Photo
+    content = b"\xff\xd8\xff\xe0" + b"X" * 40 + b"\xff\xd9"
+    # Two files, identical bytes, different names — the name+size pre-check would
+    # miss the second, but the content hash catches it.
+    _write(patched_scan, "IMG_001.JPG", content)
+    _write(patched_scan, "IMG_999.JPG", content)
+    candidates = _do_scan(client)
+    by_name = {c["filename"]: c["id"] for c in candidates}
+
+    r1 = client.post("/camera-import/import", json={"file_ids": [by_name["IMG_001.JPG"]]})
+    assert len(r1.json()["created"]) == 1
+
+    r2 = client.post("/camera-import/import", json={"file_ids": [by_name["IMG_999.JPG"]]})
+    data = r2.json()
+    assert data["created"] == []
+    assert len(data["skipped"]) == 1
+    assert data["skipped"][0]["reason"] == "already_imported"
+    assert db_session.query(Photo).count() == 1
+
+
+def test_save_photo_recovers_from_unique_index_race(db_session, isolated_photos_dir, monkeypatch):
+    # Two concurrent identical uploads: both pre-checks miss, both insert, the
+    # second loses on the unique index. save_photo must catch the IntegrityError,
+    # clean up its file, and return the winning row.
+    from datetime import datetime, timezone
+    from sqlalchemy.orm import Query
+    from app.camera_import import save_photo
+    from app.models import Photo
+
+    img = b"RACE-PAYLOAD"
+    captured = datetime(2026, 5, 8, tzinfo=timezone.utc)
+    winner, created = save_photo(db_session, img, "winner.jpg", len(img), captured, "manual")
+    assert created is True
+
+    # Force only the next existence lookup (the loser's pre-check) to miss, so we
+    # reach the INSERT that the unique index rejects.
+    real_first = Query.first
+    state = {"skip_once": True}
+
+    def first(self):
+        if state["skip_once"]:
+            state["skip_once"] = False
+            return None
+        return real_first(self)
+
+    monkeypatch.setattr(Query, "first", first)
+
+    loser, created2 = save_photo(db_session, img, "loser.jpg", len(img), captured, "manual")
+    assert created2 is False
+    assert loser.id == winner.id
+    assert db_session.query(Photo).count() == 1
+    # No orphan file left behind by the loser.
+    assert len(list(isolated_photos_dir.glob("*.jpg"))) == 1
+
+
 def test_import_stale_file_id_returns_failed(client):
     r = client.post("/camera-import/import", json={"file_ids": ["deadbeefdeadbeefdeadbeef12345678"]})
     assert r.status_code == 200

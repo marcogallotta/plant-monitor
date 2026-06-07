@@ -13,7 +13,7 @@ const FIXTURE_JPG = readFileSync(
 test('rotating a grid photo re-points its thumbnail at the oriented URL', async ({ page, request }) => {
   const resp = await request.post('/manual-photos', {
     multipart: {
-      image: { name: 'grid-oriented.jpg', mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+      image: { name: 'grid-oriented.jpg', mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
     },
   });
   expect(resp.status()).toBe(201);

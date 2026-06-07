@@ -4,9 +4,11 @@ rather than testing individual endpoints in isolation.
 """
 
 
-def _manual_upload(client, **fields):
+def _manual_upload(client, filename="IMG_001.jpg", **fields):
+    # Unique bytes per filename: content-hash dedup collapses byte-identical
+    # uploads, so distinct test photos must have distinct bytes.
     return client.post("/manual-photos", data=fields, files={
-        "image": ("IMG_001.jpg", b"FAKEIMAGE", "image/jpeg"),
+        "image": (filename, b"FAKEIMAGE-" + filename.encode(), "image/jpeg"),
     })
 
 
@@ -116,9 +118,7 @@ def test_filter_by_location_returns_only_matching_photos(client):
     loc_b = client.post("/locations", json={"name": "Windowsill"}).json()
 
     photo_a = _manual_upload(client, location_id=loc_a["id"]).json()
-    photo_b = client.post("/manual-photos", data={"location_id": loc_b["id"]}, files={
-        "image": ("IMG_002.jpg", b"FAKEIMAGE", "image/jpeg"),
-    }).json()
+    photo_b = _manual_upload(client, filename="IMG_002.jpg", location_id=loc_b["id"]).json()
 
     results = client.get(f"/photos?location_id={loc_a['id']}").json()["photos"]
     ids = {p["id"] for p in results}
@@ -131,9 +131,7 @@ def test_filter_by_growing_unit_returns_only_matching_photos(client):
     u2 = client.post("/growing-units", json={"name": "Basil B"}).json()
 
     photo_a = _manual_upload(client).json()
-    photo_b = client.post("/manual-photos", data={}, files={
-        "image": ("IMG_002.jpg", b"FAKEIMAGE", "image/jpeg"),
-    }).json()
+    photo_b = _manual_upload(client, filename="IMG_002.jpg").json()
 
     client.put(f"/photos/{photo_a['id']}", json={"growing_unit_ids": [u1["id"]]})
     client.put(f"/photos/{photo_b['id']}", json={"growing_unit_ids": [u2["id"]]})
@@ -162,7 +160,7 @@ def _setup_rich_fixtures(client):
     def upload(name):
         r = client.post("/manual-photos",
                         data={"location_id": loc["id"]},
-                        files={"image": (name, b"FAKEIMAGE", "image/jpeg")})
+                        files={"image": (name, b"FAKEIMAGE-" + name.encode(), "image/jpeg")})
         assert r.status_code == 201
         return r.json()
 

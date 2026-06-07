@@ -41,6 +41,10 @@ class Photo(Base):
     __table_args__ = (
         UniqueConstraint("filename", name="photos_filename_uniq"),
         Index("photos_captured_at_idx", "captured_at"),
+        # Unique so byte-identical re-uploads can't create a second row. NULLs
+        # are distinct in Postgres, so Pi rows (which don't set a hash) never
+        # collide with each other.
+        Index("photos_content_hash_unique_idx", "content_hash", unique=True),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -52,6 +56,7 @@ class Photo(Base):
     photo_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     original_filename: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     original_size_bytes: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    content_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     location_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("locations.id"), nullable=True)
     rotation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

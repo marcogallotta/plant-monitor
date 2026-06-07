@@ -19,8 +19,8 @@ test('phone upload: shows Choose photos, uploads appear in grid', async ({ page 
 
   // Set two files on the hidden phone input
   await page.locator('#sd-phone-input').setInputFiles([
-    { name: `phone-upload-${Date.now()}-1.jpg`, mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
-    { name: `phone-upload-${Date.now()}-2.jpg`, mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+    { name: `phone-upload-${Date.now()}-1.jpg`, mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
+    { name: `phone-upload-${Date.now()}-2.jpg`, mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
   ]);
 
   // Thumbs should appear and both be auto-selected

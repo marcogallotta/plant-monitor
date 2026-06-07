@@ -12,7 +12,7 @@ const FIXTURE_JPG = readFileSync(
 async function uploadPhoto(request) {
   const resp = await request.post('/manual-photos', {
     multipart: {
-      image: { name: 'review-test.jpg', mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+      image: { name: 'review-test.jpg', mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
     },
   });
   expect(resp.status()).toBe(201);

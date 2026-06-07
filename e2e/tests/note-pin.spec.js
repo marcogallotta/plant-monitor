@@ -10,7 +10,7 @@ const FIXTURE_JPG = readFileSync(
 test('note pin round-trip: placed at known fraction, persists after reload', async ({ page, request }) => {
   const resp = await request.post('/manual-photos', {
     multipart: {
-      image: { name: 'pin-test.jpg', mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+      image: { name: 'pin-test.jpg', mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
     },
   });
   expect(resp.status()).toBe(201);

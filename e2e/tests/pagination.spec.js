@@ -20,7 +20,7 @@ test('grid paginates: load more button appears and loads remaining photos', asyn
   for (let i = 0; i < 3; i++) {
     const resp = await request.post('/manual-photos', {
       multipart: {
-        image: { name: `pagination-test-${i}.jpg`, mimeType: 'image/jpeg', buffer: FIXTURE_JPG },
+        image: { name: `pagination-test-${i}.jpg`, mimeType: 'image/jpeg', buffer: Buffer.concat([FIXTURE_JPG, Buffer.from(String(Math.random()))]) },
         captured_at: `${date}T12:00:00Z`,
       },
     });

@@ -503,18 +503,6 @@ async def upload_manual_photo(
     else:
         parsed_at = datetime.now(timezone.utc)
 
-    if image.filename and original_size_bytes is not None:
-        existing = (
-            db.query(Photo)
-            .filter(Photo.original_filename == image.filename)
-            .filter(Photo.original_size_bytes == original_size_bytes)
-            .first()
-        )
-        if existing:
-            loaded = _get_photo_loaded(db, existing.id)
-            if loaded:
-                return _photo_out(loaded)
-
     image_bytes = await image.read()
 
     # Prefer the capture instant baked into the image's EXIF over whatever the
@@ -527,7 +515,10 @@ async def upload_manual_photo(
     if isinstance(exif_at, datetime):
         parsed_at = exif_at
 
-    photo = save_photo(
+    # Dedup is by content inside save_photo: a byte-identical re-upload (e.g. the
+    # same phone photo shared under a different filename) returns the existing
+    # row instead of creating a duplicate.
+    photo, _created = save_photo(
         db,
         image_bytes,
         image.filename,

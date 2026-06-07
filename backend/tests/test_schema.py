@@ -10,7 +10,8 @@ def test_photos_columns(engine):
     cols = {c["name"] for c in inspect(engine).get_columns("photos")}
     assert cols == {
         "id", "filename", "captured_at", "storage_path", "metadata_path", "created_at",
-        "source", "photo_type", "original_filename", "original_size_bytes", "location_id", "rotation",
+        "source", "photo_type", "original_filename", "original_size_bytes", "content_hash",
+        "location_id", "rotation",
     }
 
 
@@ -56,6 +57,14 @@ def test_photos_photo_type_indexed(engine):
 def test_photos_location_id_indexed(engine):
     idxs = inspect(engine).get_indexes("photos")
     assert any("location_id" in idx["column_names"] for idx in idxs)
+
+
+def test_photos_content_hash_unique_index(engine):
+    idxs = inspect(engine).get_indexes("photos")
+    assert any(
+        idx["column_names"] == ["content_hash"] and idx["unique"]
+        for idx in idxs
+    )
 
 
 def test_photos_location_id_fk(engine):
