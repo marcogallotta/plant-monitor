@@ -53,6 +53,7 @@ async function loadDropdownData() {
   populateSelect('id-units-select',     state.allUnits,     null);
   populateSelect('new-event-location',  state.allLocations, '— none —');
   populateSelect('new-event-units',     state.allUnits,     null);
+  populateSelect('note-unit',           state.allUnits,     '— no unit —');
   populateBatchSelects();
 }
 

@@ -100,6 +100,18 @@ def test_update_note_unknown_unit_returns_404(client, db_session):
     assert resp.status_code == 404
 
 
+def test_update_note_clear_text_keeps_unit(client, db_session):
+    """Emptying the text of a text+unit note is allowed (converts it to a pure
+    unit-tag); the unit remains."""
+    photo, unit = _photo(db_session), _unit(db_session)
+    note = client.post(f"/photos/{photo.id}/notes", json={
+        "note_text": "old comment", "x": 0.5, "y": 0.5, "growing_unit_id": unit.id}).json()
+    resp = client.put(f"/notes/{note['id']}", json={"note_text": None})
+    assert resp.status_code == 200
+    assert resp.json()["note_text"] is None
+    assert resp.json()["growing_unit_id"] == unit.id
+
+
 def test_update_note_clearing_last_unit_rejected(client, db_session):
     """A unit-only note (no text) cannot have its unit cleared — that would
     leave an empty note with neither text nor unit."""

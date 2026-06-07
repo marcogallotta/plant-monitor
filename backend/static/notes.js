@@ -8,6 +8,12 @@ export function initNotes(visualToStored) {
   _visualToStored = visualToStored;
 }
 
+function unitName(id) {
+  if (id == null) return null;
+  const u = (state.allUnits || []).find(function(u) { return u.id === id; });
+  return u ? u.name : null;
+}
+
 export async function loadNotes() {
   if (!state.currentPhotoId) return;
   try {
@@ -22,6 +28,7 @@ export function renderPins() {
   const isSelected = function(note) { return state.pendingNote && state.pendingNote.noteId === note.id; };
   state.currentNotes.forEach(function(note, i) {
     const el = document.createElement('div');
+    const uname = unitName(note.growing_unit_id);
     if (note.x2 != null && note.y2 != null) {
       const x1 = Math.min(note.x, note.x2), y1 = Math.min(note.y, note.y2);
       const x2 = Math.max(note.x, note.x2), y2 = Math.max(note.y, note.y2);
@@ -37,7 +44,7 @@ export function renderPins() {
       }
       const label = document.createElement('span');
       label.className = 'note-rect-label';
-      label.textContent = i + 1;
+      label.textContent = uname || (i + 1);
       el.appendChild(label);
     } else {
       el.className = 'note-pin' + (isSelected(note) ? ' selected' : '');
@@ -45,7 +52,7 @@ export function renderPins() {
       el.style.top  = (note.y * 100) + '%';
       el.textContent = i + 1;
     }
-    el.title = note.note_text;
+    el.title = [note.note_text, uname && ('Unit: ' + uname)].filter(Boolean).join('\n');
     el.addEventListener('click', function(e) { e.stopPropagation(); openEditForm(note); });
     container.appendChild(el);
   });
@@ -69,6 +76,7 @@ export function openCreateForm(x, y, x2, y2) {
   var isRect = x2 != null && y2 != null;
   document.getElementById('note-panel-title').textContent = isRect ? 'New region note' : 'New note';
   document.getElementById('note-text').value = '';
+  document.getElementById('note-unit').value = '';
   document.getElementById('note-delete').style.display = 'none';
   document.getElementById('note-panel').classList.remove('hidden');
   document.getElementById('note-text').focus();
@@ -78,7 +86,8 @@ export function openCreateForm(x, y, x2, y2) {
 function openEditForm(note) {
   state.pendingNote = {noteId: note.id, x: note.x, y: note.y, x2: note.x2, y2: note.y2};
   document.getElementById('note-panel-title').textContent = 'Edit note';
-  document.getElementById('note-text').value = note.note_text;
+  document.getElementById('note-text').value = note.note_text || '';
+  document.getElementById('note-unit').value = note.growing_unit_id != null ? String(note.growing_unit_id) : '';
   document.getElementById('note-delete').style.display = 'inline-block';
   document.getElementById('note-panel').classList.remove('hidden');
   document.getElementById('note-text').focus();
@@ -88,17 +97,26 @@ function openEditForm(note) {
 export async function noteSave() {
   if (!state.pendingNote || !state.currentPhotoId) return;
   const text = document.getElementById('note-text').value.trim();
-  if (!text) return;
+  const unitRaw = document.getElementById('note-unit').value;
+  const unitId = unitRaw ? Number(unitRaw) : null;
+  if (!text && unitId == null) { setStatus('Add a note or pick a growing unit'); return; }
   try {
     const coords = {x: state.pendingNote.x, y: state.pendingNote.y};
     if (state.pendingNote.x2 != null && state.pendingNote.y2 != null) {
       coords.x2 = state.pendingNote.x2;
       coords.y2 = state.pendingNote.y2;
     }
+    // growing_unit_id is always sent (null clears it). On edit, note_text is
+    // also always sent so emptying the field actually clears it (null); the
+    // "text or unit required" rule still blocks clearing both. On create there
+    // is no existing text, so an empty field is simply omitted.
+    const body = Object.assign({growing_unit_id: unitId}, coords);
     if (state.pendingNote.noteId) {
-      await updateNote(state.pendingNote.noteId, Object.assign({note_text: text}, coords));
+      body.note_text = text || null;
+      await updateNote(state.pendingNote.noteId, body);
     } else {
-      await createNote(state.currentPhotoId, Object.assign({note_text: text}, coords));
+      if (text) body.note_text = text;
+      await createNote(state.currentPhotoId, body);
     }
   } catch (e) { setStatus('Note save failed: ' + e.message); return; }
   noteCancel();
@@ -118,6 +136,7 @@ export function noteCancel() {
   state.pendingNote = null;
   document.getElementById('note-panel').classList.add('hidden');
   document.getElementById('note-text').value = '';
+  document.getElementById('note-unit').value = '';
   document.getElementById('rect-preview').style.display = 'none';
   renderPins();
 }

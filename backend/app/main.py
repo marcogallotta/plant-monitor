@@ -619,7 +619,10 @@ def update_note(note_id: int, body: NoteUpdate, db: Session = Depends(get_db)):
     if "growing_unit_id" in body.model_fields_set and body.growing_unit_id is not None:
         if not db.query(GrowingUnit).filter_by(id=body.growing_unit_id).first():
             raise HTTPException(status_code=404, detail="growing unit not found")
-    _note_non_nullable = {"note_text", "x", "y"}
+    # note_text is intentionally absent: it may be cleared to null (e.g. when
+    # converting a text note to a pure unit-tag), as long as the proposed-state
+    # check below still leaves the note with text, a unit, or both.
+    _note_non_nullable = {"x", "y"}
     updates = {}
     for field in body.model_fields_set:
         value = getattr(body, field)

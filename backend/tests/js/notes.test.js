@@ -18,6 +18,7 @@ beforeAll(async () => {
     <div id="note-panel" class="hidden">
       <div id="note-panel-title"></div>
       <input id="note-text" value="">
+      <select id="note-unit"><option value="">— no unit —</option></select>
       <button id="note-delete" style="display:none"></button>
     </div>
     <div id="rect-preview" style="display:none"></div>
@@ -41,9 +42,20 @@ beforeEach(async () => {
   vi.mocked(api.deleteNote).mockResolvedValue(undefined);
   vi.mocked(api.getNotes).mockResolvedValue([]);
   document.getElementById('note-text').value = '';
+  document.getElementById('note-unit').innerHTML = '<option value="">— no unit —</option>';
   document.getElementById('note-panel').classList.add('hidden');
   document.getElementById('note-delete').style.display = 'none';
+  state.allUnits = [];
 });
+
+// helper: add a growing-unit <option> so a value can be selected in jsdom
+function addUnitOption(id, name) {
+  state.allUnits.push({id, name});
+  const opt = document.createElement('option');
+  opt.value = String(id);
+  opt.textContent = name;
+  document.getElementById('note-unit').appendChild(opt);
+}
 
 // ── renderPins ────────────────────────────────────────────
 
@@ -98,6 +110,19 @@ describe('renderPins', () => {
     state.currentNotes = [];
     renderPins();
     expect(document.querySelectorAll('.note-pin')).toHaveLength(0);
+  });
+
+  it('labels a region note with its growing unit name', () => {
+    state.allUnits = [{id: 5, name: 'Lemongrass'}];
+    state.currentNotes = [{id: 2, note_text: null, growing_unit_id: 5, x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    expect(document.querySelector('.note-rect-label').textContent).toBe('Lemongrass');
+  });
+
+  it('falls back to the index number when a region note has no unit', () => {
+    state.currentNotes = [{id: 2, note_text: 'area', growing_unit_id: null, x: 0.1, y: 0.2, x2: 0.5, y2: 0.6}];
+    renderPins();
+    expect(document.querySelector('.note-rect-label').textContent).toBe('1');
   });
 });
 
@@ -154,12 +179,32 @@ describe('noteSave', () => {
     expect(createNote).not.toHaveBeenCalled();
   });
 
-  it('does nothing when note text is empty', async () => {
+  it('does nothing when both note text and unit are empty', async () => {
     const {createNote} = await import('@/api.js');
     state.pendingNote = {x: 0.5, y: 0.5, x2: null, y2: null};
     document.getElementById('note-text').value = '   ';
     await noteSave();
     expect(createNote).not.toHaveBeenCalled();
+  });
+
+  it('creates a unit-only note (no text) when a unit is selected', async () => {
+    const {createNote} = await import('@/api.js');
+    addUnitOption(5, 'Lemongrass');
+    state.pendingNote = {x: 0.1, y: 0.2, x2: 0.5, y2: 0.6};
+    document.getElementById('note-text').value = '';
+    document.getElementById('note-unit').value = '5';
+    await noteSave();
+    const body = createNote.mock.calls[0][1];
+    expect(body.growing_unit_id).toBe(5);
+    expect(body).not.toHaveProperty('note_text');
+  });
+
+  it('sends growing_unit_id: null when no unit is selected', async () => {
+    const {createNote} = await import('@/api.js');
+    state.pendingNote = {x: 0.3, y: 0.4, x2: null, y2: null};
+    document.getElementById('note-text').value = 'just text';
+    await noteSave();
+    expect(createNote.mock.calls[0][1].growing_unit_id).toBeNull();
   });
 
   it('calls createNote when there is no noteId', async () => {
@@ -198,6 +243,16 @@ describe('noteSave', () => {
     document.getElementById('note-text').value = 'edit';
     await noteSave();
     expect(updateNote).toHaveBeenCalledWith(7, expect.objectContaining({note_text: 'edit'}));
+  });
+
+  it('clears text on edit by sending note_text: null when a unit remains', async () => {
+    const {updateNote} = await import('@/api.js');
+    addUnitOption(5, 'Lemongrass');
+    state.pendingNote = {noteId: 7, x: 0.3, y: 0.4, x2: null, y2: null};
+    document.getElementById('note-text').value = '';
+    document.getElementById('note-unit').value = '5';
+    await noteSave();
+    expect(updateNote.mock.calls[0][1].note_text).toBeNull();
   });
 });
 

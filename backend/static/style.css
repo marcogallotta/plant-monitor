@@ -199,6 +199,7 @@ button.active { background: #1a3a1a; border-color: #4a8; color: #8f8; }
 .note-panel.hidden { display: none; }
 .note-panel-title  { color: #888; font-size: 0.75rem; }
 .note-panel textarea { width: 100%; }
+.note-panel select { width: 100%; }
 .note-panel-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .note-panel-actions button.danger       { background: #3a1a1a; border-color: #844; color: #f88; }
 .note-panel-actions button.danger:hover { background: #4a2222; }
