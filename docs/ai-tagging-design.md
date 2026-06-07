@@ -49,7 +49,9 @@ trough, and Thai basil vendita.
    *cannot* tell visually-identical varieties apart (the chillis — H4/H7/BE) — only position can.
    Per-pot distinguishing features + pot size live in plants-data.md.
    **Next on this line:** the Phase-2 diff/inherit step that carries these tags forward to later
-   frames (see Phase 2 below) — not yet built.
+   frames (see Phase 2 below). **Frame registration — the geometric foundation — is now built**
+   (`scripts/frame_registration.py`, 2026-06-07): a new frame is aligned onto the reference so the
+   tags can be warped forward. The remaining gap is a reliable **change** signal (see Phase 2).
 2. **Frictionless phone sync** — the data-volume lever; auto-upload closeups (`source=phone`
    path exists, automation is the gap). The region map makes the inflow identifiable.
 3. **Imaging investigation** — does resolution / a closeup make harvest-scale change detectable?
@@ -347,9 +349,31 @@ both the validation overlay and the reusable layout template. Per-region crops (
 rotation-baked crop from `/photos/export`) build the per-unit dataset. AI-suggested regions
 continue to live in `photo_ai_suggestions`.
 
-**Still to build on this:** the **diff/inherit** step — carry the reference frame's tags forward
-to later frames automatically (unchanged regions inherit identity for free; a changed region is
-localized and re-confirmed), plus harvestability. See below.
+**Frame registration (built 2026-06-07, `scripts/frame_registration.py`).** The geometric half of
+diff/inherit. ORB features + RANSAC **partial-affine** (rigid: rotation + translation + uniform
+scale — the fixed structure dominates, plants are rejected as outliers) align a frame onto the
+canonical reference; `warp_region()` then projects the 25 tags (forward = target→ref for diffing;
+inverse = ref→target to **inherit** a tag onto a new frame). Established empirically:
+
+- **CLAHE light-normalisation before ORB is required** — local contrast equalisation lets matching
+  survive shadow movement (e.g. 0800→1300 went unusable→solid). It is for *matching only*; it makes
+  the photometric diff *worse* (amplifies shadow texture), so the change metric uses raw gray.
+- **Chain through hourly hops; don't register across a big time gap directly.** A 3–4h shadow shift
+  breaks ORB (the 0900→1300 direct attempt collapses to ~6 inliers / garbage transform); one-hour
+  hops never do, and the small rigid transforms compose cleanly. `register_to_reference()` walks the
+  chain (skip-retry bridges a weak hop) — this rescues every pair that fails direct.
+- **Inlier count alone is not a trust gate.** A 303-inlier *direct* fit aligned the static top strip
+  *worse* (54.8) than the chained fit (49.5); gate on inliers **and** a plausible rigid transform.
+- **Drift is minor, independently confirmed** — chained 0700→1300 is rot ≈ +0.3°, ~unit scale,
+  translation that scales with resolution. Consistent with "drift is not the blocker".
+
+**Still to build — the change signal (the real gap).** Geometric alignment is solid; detecting *what
+changed* is not. Raw per-region absdiff is dominated by **foliage sway + lighting**, not geometric
+drift: even a 1-hour pair with near-zero drift shows ~50 mean-abs-diff in plant regions. So the
+current metric cannot separate a harvest/moved-pot from wind. A sway/lighting-robust signal is needed
+(blur/downsample to gross mass, green-coverage area, or a temporal sway baseline) before diff/inherit
+auto-confirms identity or flags change — and it ties back to the open "is harvest-scale change visually
+detectable at all?" question. Then: harvestability on top.
 
 The Pi gives a **fixed overhead frame**. That doesn't make the layout static (things shuffle)
 — it makes **change cheap to detect and localize**:
@@ -480,6 +504,11 @@ Operations the review UI needs against `photo_ai_suggestions`:
 6. ⚠️ `scripts/prepare_tagging_run.py` — built, but its **256px contact-sheet grid is
    superseded** (see Appendix B). Reuse only its session-grouping; switch transport to
    per-image Batch API.
+7. ✅ **Frame registration** (2026-06-07, `scripts/frame_registration.py`) — CLAHE + chained-hop
+   ORB alignment, `warp_region()` tag inheritance, per-region diff. Tested standalone
+   (`scripts/test_frame_registration.py`; cv2 isn't in the backend image) with synthetic
+   algorithmic tests + real-frame tests against committed downscaled fixtures
+   (`scripts/testdata/frames/`). The geometric half of diff/inherit; see Phase 2.
 
 **Outstanding (new plan):**
 - **Batch API submission + ingest** for Phase 1 (individual 1024px images, cached prior
@@ -492,7 +521,9 @@ Operations the review UI needs against `photo_ai_suggestions`:
 - **`run_id`/`batch_id` columns** on `photo_ai_suggestions` (provenance) before scaling.
 - **Duplicate-ingest protection** — skip on `(run_id, photo_id, bbox, plant)` match.
 - **Session-propagation review actions** ("apply this plant to selected") — human-triggered only.
-- **Phase 2**: layout-map + change-diff; region tagging + harvestability. Build when Pi exists.
+- **Phase 2**: frame registration ✅ (the geometric half — done). Remaining: a sway/lighting-robust
+  **change** signal (raw absdiff is confounded by foliage sway), then diff/inherit auto-confirm +
+  harvestability.
 
 ---
 
