@@ -532,6 +532,25 @@ and turns the whole thing into a **control loop**: known input (dose) + known co
 dose against the forecast.** Confidence in the detection is the precondition the user named for committing to
 auto-pump.
 
+**Insolation is a FIFTH input, free from the camera (lighting-as-signal duality).** The moving shadows that
+*confound* change-detection are the *signal* for sun exposure: the same per-region diurnal lighting baseline
+is a per-region, per-hour **insolation map** (sunlit = bright + hard shadow edge; shaded = dark/diffuse;
+mean luminance per region per frame). This is the term that makes evaporative **demand per-plant** — it is
+*why* the exposed basil wilted at noon and the netted rocket didn't, now quantifiable ("basil got ~5
+direct-sun hours, rocket ~1") instead of "rocket's shaded". One modelling effort (the diurnal baseline),
+two payoffs: it **subtracts** lighting from the change signal AND **reads out** insolation for the water model.
+
+**Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
+archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
+`https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see
+internals "Sensor proxy"), so ingest = another proxy/join, not a new integration. Hourly vars:
+`temperature_2m, relative_humidity_2m, dew_point_2m, rain, showers, snowfall, wind_speed_10m,
+wind_gusts_10m, shortwave_radiation, cloud_cover`. These are **exactly the reference-evapotranspiration
+(ET₀ / Penman-Monteith) inputs** (temp, humidity, dew point, wind, solar radiation) — so per-plant water
+*demand* is the **standard irrigation-scheduling computation**: ET₀ from forecast × per-plant **sun-hours
+(camera)** × a crop factor. `shortwave_radiation` + `cloud_cover` are the **forecast pair** to the camera's
+observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot clear day.
+
 **Why it matters beyond the balcony:** this is the prototype for a planned **~100 m² garden next year**, where
 automated irrigation is the crucial scaling lever — manual watering doesn't scale; a **sense → dose →
 measure-response → adjust** loop does. The balcony water-balance work is that loop in miniature.
