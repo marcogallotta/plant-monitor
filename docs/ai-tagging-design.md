@@ -49,9 +49,11 @@ trough, and Thai basil vendita.
    *cannot* tell visually-identical varieties apart (the chillis — H4/H7/BE) — only position can.
    Per-pot distinguishing features + pot size live in plants-data.md.
    **Next on this line:** the Phase-2 diff/inherit step that carries these tags forward to later
-   frames (see Phase 2 below). **Frame registration — the geometric foundation — is now built**
-   (`scripts/frame_registration.py`, 2026-06-07): a new frame is aligned onto the reference so the
-   tags can be warped forward. The remaining gap is a reliable **change** signal (see Phase 2).
+   frames (see Phase 2 below). Two foundations are now built (2026-06-07): **frame registration**
+   (`scripts/frame_registration.py` — aligns a new frame onto the reference so tags warp forward)
+   and **sway suppression at capture** (`pi/capture.py` — each capture is a 10-frame burst collapsed
+   to a mean plate, ~60–69% less foliage-sway noise). The remaining gap is a **lighting-robust change
+   signal** on top of those cleaner plates (see Phase 2), then harvestability.
 2. **Frictionless phone sync** — the data-volume lever; auto-upload closeups (`source=phone`
    path exists, automation is the gap). The region map makes the inflow identifiable.
 3. **Imaging investigation** — does resolution / a closeup make harvest-scale change detectable?
