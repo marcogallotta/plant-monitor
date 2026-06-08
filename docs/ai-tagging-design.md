@@ -634,6 +634,22 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 > trace the same arc, and `picamLux ≈ Flower-Care lux` in the clean morning regime, so it's corroborated, not
 > tautological.
 
+> **PER-REGION sun/shade detection WORKS via a sky-exposed REFERENCE surface (2026-06-08,
+> `scripts/sun_shade.py` — PROTOTYPE).** The hard part was *per-region* sun/shade (which pot is in sun right
+> now), not the global arc. Key insight: it's a **reference** problem. The cross-region average fails (it's
+> contaminated by the shaded plants themselves); a **fixed sky-exposed surface not shaded by the plants**
+> works — here the **glass canopy roof above the lemongrass**. Method: per region, `log(region_brightness /
+> roof_brightness)` (cancels global light + auto-exposure) → per-region detrend (cancels albedo) → **+ = SUN,
+> − = SHADE**. **VALIDATED against human sun/shade labels** (all local time): 09:00 chillis shade −0.63/−0.71;
+> **10:00 chillis SUN +0.34/+0.44** — the dark-seedling sun-arrival that brightness-diff AND a colour-temp cue
+> both *missed*; 10:00 Moroccan shade −0.03; road flips −0.22→+0.28 at 11:00 (matching "road sunny 11–15").
+> Misses: parsley (partial sun), and the "car-spot" (a **moving car**, not a surface). This **reverses the
+> "dark seedlings are hopeless / pause" call** — it was the reference, not the signal. **Caveats:** the
+> reference must be sky-exposed & plant-unshaded; the per-region sun-map **drifts seasonally** (sun geometry)
+> so it must be re-run through the year — which is exactly why **auto-detecting** beats hand-mapping once, and
+> why it scales to the 100 m² garden. **Next:** per-region **sun-hours** profile (full-day arc + a few clear
+> days) = the per-plant demand term; combine with the validated global arc (above).
+
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
 `https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see
