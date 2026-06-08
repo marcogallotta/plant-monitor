@@ -549,6 +549,31 @@ midday wilt automatically.
 
 ### Where this is really going: a per-plant WATER-BALANCE estimator + closed-loop irrigation
 
+> **THE PRIMARY PRODUCT (refocused 2026-06-08 eve).** Per nursery.md, **irrigation is the highest-leverage piece of
+> the whole stack** — watering is the one cost that scales *linearly* with plant count and does NOT compress with
+> skill, so automating it is what makes the planned ~100 m² (2026) → 300–500 m² solo garden feasible (scale on
+> infrastructure, not hands). Unlike the cooking-read, it **does not depend on the vision/condition reads that keep
+> failing.** Vision/tagging is the *supporting* layer (right identity → right Kc).
+>
+> **Scaling constraint (Marco): cameras may NOT scale broadly across many zones.** So the demand model can't rely on
+> a camera per zone. But a fixed bed's sun exposure is **geometry-driven and slow** → a *measure-once-reuse* static
+> per-zone sun-map (solar geometry + a one-time shade survey, refreshed seasonally; camera as a calibration
+> instrument, not infrastructure). The scalable stack = **sparse soil probes + micro-climate sensors + free forecast
+> + static sun-maps + valves + the balance model**; cameras optional/few.
+>
+> **CRACK #1 + #1b — VALIDATED that demand drives soil drydown (`scripts/soil_drydown.py`, 2026-06-08).** Tested on
+> the one instrumented pot (Cilantro Flower Care, 14 days / 12 drydown segments between waterings): does measured
+> moisture loss track demand? **Yes.** Drydown rate vs proxy (Spearman): air temp **+0.49**, **VPD +0.71** (the
+> winner — pot temp + ambient RH, hourly & pot-local), daily ET₀ **+0.52** (hurt by daily resolution + not
+> pot-local). Magnitude is even clearer: a cool spell (20 °C) dried at **1.8 %/day** vs **24–34 %/day** on hot days
+> (~15×). First **depletion model**: `drydown ≈ 13.5·VPD − 10.5 %moisture/day` (R²=0.39; monotonic but noisy/non-
+> linear). **So `k` = a per-zone depletion coefficient (%/day per kPa VPD): calibrate it with a probe, then DRIVE
+> every unprobed zone's drydown from sensor VPD — the sparse-sensing scale path.** Honest gaps before precision
+> dosing: pot-local RH (used the railing sensor), changing leaf area (Kc/growth), the **moisture-dependent rate**
+> (drydown slows as soil dries — not yet modelled), FlowerCare nonlinearity, n=12. **Next:** model rate as
+> f(VPD, current-moisture) + leaf-area; then the predictive balance (`moisture(t)` forecast → "water zone X by Yh")
+> and, with the auto-pump as known input, close the loop. (A focused `docs/irrigation.md` may be warranted later.)
+
 The single-image under-vs-over question is the wrong frame. The right frame is a **per-plant water-balance
 estimate over time**, fusing signals already (or soon) available:
 - **Camera:** daily wilt/turgor curve + soil-darkening (water-stress *outcome* signal).
