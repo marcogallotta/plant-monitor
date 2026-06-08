@@ -662,8 +662,13 @@ observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot cle
 >   the wall (highest VPD); **South** = the railing, cool & exposed (lowest VPD); **West** = where the chillis sit in
 >   the **afternoon**. The esp32 server also reports an **indoor** sensor (`EC:2E:84:06:4E:9A`) that is deliberately
 >   NOT in the balcony `SENSOR_SENSORS` — the config is correct, don't add it.
-> - **Next (the join):** map each region→nearest sensor (**time-dependent** for movable pots: chillis → West in the
->   afternoon); assemble per-plant demand = ET₀ × Kc × camera sun-fraction, with VPD per micro-climate.
+> - **The join — BUILT (`scripts/water_balance.py` + `test_water_balance.py`, 7/7).** Pure module:
+>   `demand_mm = ET₀ × Kc × camera sun-fraction`, plus the VPD of each unit's micro-climate sensor and a
+>   heat-stress flag. Runs anywhere (fed the three precomputed inputs, since they come from different
+>   environments). Demo: 1.6–4.9 mm/day, chillis routed to West. **Provisional:** region→sensor map (chillis
+>   34/35/36 → West afternoon, rest → South placeholder) and Kc=1.0 — no in-frame sensor positions yet.
+> - **Remaining:** real region→sensor positions; per-species Kc; the live orchestration gluing host `sun_hours`
+>   + container `forecast_et0`/VPD into the join's inputs; the multi-day sun-hours profile.
 
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
@@ -877,8 +882,9 @@ Operations the review UI needs against `photo_ai_suggestions`:
   (`water_demand.py`, 10/10 FAO-validated) running on the **live** forecast (`forecast_et0.py`) and sensor proxy;
   region/control tag export (`export_reference_regions.py`). Supply side: watering detection ✅
   (`watering_detector.py`), auto-pump TBD; wilt detection prototype (`wilt_alert.py`) — greenness is the right
-  feature, needs a multi-day diurnal baseline. **Remaining: the per-plant join** (region→sensor, time-dependent
-  for the chillis; ET₀ × Kc × sun-fraction; VPD per micro-climate) and the multi-day sun-hours profile.
+  feature, needs a multi-day diurnal baseline. **Per-plant join ✅ built** (`water_balance.py` + test); remaining:
+  real region→sensor positions + per-species Kc + the live orchestration (host `sun_hours` + container
+  `forecast_et0`/VPD), and the multi-day sun-hours profile.
 
 ---
 
