@@ -660,19 +660,22 @@ observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot cle
 >   (Enabling fixes: `.env` `SENSOR_API_URL` :8001→:8000; esp32 openmeteo router opened to api-key auth.)
 > - **Micro-climate sensors** (`SENSOR_API_URL=https://laptop.local:8000`, `X-Api-Key`): **South wall** = hot/dry by
 >   the wall (highest VPD); **South** = the railing, cool & exposed (lowest VPD); **West** = the window the chillis
->   are **moved to ~15:00**. The esp32 server also reports an **indoor** sensor (`EC:2E:84:06:4E:9A`) deliberately
->   NOT in the balcony `SENSOR_SENSORS` — the config is correct, don't add it.
-> - **Chillis are SUN-CHASED (units 34/35/36).** Their morning spot (the overhead region tags) gets sun, **loses it
->   ~15:00**, so they're manually **moved to the West window** for the afternoon → they track sun across two
->   micro-climates all day. Consequences: (1) the overhead chilli tags only measure their **pre-15:00** sun — the
->   afternoon sun seen in those boxes is the *vacated* spot, not the plants (likely out of frame at West); (2) their
->   afternoon insolation ≈ "full sun at the West window" (a known condition, not a camera read), with VPD from the
->   **West** sensor; (3) region→sensor for chillis **switches at ~15:00** (morning spot → West).
+>   are **moved to** when their morning spot loses sun. The esp32 server also reports an **indoor** sensor
+>   (`EC:2E:84:06:4E:9A`) deliberately NOT in the balcony `SENSOR_SENSORS` — the config is correct, don't add it.
+> - **Chillis are SUN-CHASED (units 34/35/36).** Their morning spot (the overhead region tags) gets sun, then
+>   **loses it** — at a **variable, sun-driven time** (not a fixed clock hour; shifts with season/weather) — so
+>   they're manually **moved to the West window** for the afternoon, tracking sun across two micro-climates all day.
+>   Consequences: (1) the overhead chilli tags only measure their **pre-move** sun — afternoon sun seen in those
+>   boxes is the *vacated* spot, not the plants (likely out of frame at West); (2) afternoon insolation ≈ "full sun
+>   at the West window" (a known condition, not a camera read), VPD from the **West** sensor; (3) the move's trigger
+>   (morning region sun→shade) is exactly what `sun_shade` detects — so **infer the switch from that signal**, don't
+>   assume an hour.
 > - **The join — BUILT (`scripts/water_balance.py` + `test_water_balance.py`, 7/7).** Pure module:
 >   `demand_mm = ET₀ × Kc × camera sun-fraction`, plus the VPD of each unit's micro-climate sensor and a
 >   heat-stress flag. Runs anywhere (fed the three precomputed inputs, since they come from different
 >   environments). Demo: 1.6–4.9 mm/day, chillis routed to West. **Provisional:** region→sensor map (chillis
->   34/35/36 → West after their ~15:00 move, rest → South placeholder) and Kc=1.0 — no in-frame sensor positions yet.
+>   34/35/36 → West after their sun-driven (variable-time) move, rest → South placeholder) and Kc=1.0 — no in-frame
+>   sensor positions yet.
 > - **Remaining:** real region→sensor positions; per-species Kc; the live orchestration gluing host `sun_hours`
 >   + container `forecast_et0`/VPD into the join's inputs; the multi-day sun-hours profile.
 
