@@ -23,8 +23,12 @@ import os, sys, json, argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import scripts.water_demand as wd
 
-# Chilli pots are movable; they sit by West in the afternoon (the hot window).
+# Chillis are SUN-CHASED: their morning spot (the overhead tags) loses sun ~15:00,
+# so they're moved to the West window for the afternoon. Their overhead sun-fraction
+# is only valid pre-move; afternoon insolation ~= full sun at the West window, VPD
+# from the West sensor. region->sensor for chillis switches at CHILLI_MOVE_HOUR.
 CHILLI_UNITS = {34, 35, 36}
+CHILLI_MOVE_HOUR = 15              # local hour they move to the West window
 DEFAULT_SENSOR = "South"            # railing, placeholder for non-chilli pots
 CHILLI_SENSOR = "West"
 KC_DEFAULT = 1.0                    # leafy herbs, FAO-56 mid-season (provisional)
