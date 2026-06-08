@@ -380,11 +380,16 @@ The Pi mount drifts, so timelapse/compare are stabilized by warping each frame o
 
 - `POST /photos` only **marks** new Pi frames `stab_status="pending"` (`_upsert_photo_record`). No registration in the request.
 - A dedicated worker image (`Dockerfile.stabilizer`, repo-root context so it bundles `backend/` + `scripts/` + `opencv-python-headless`) runs `scripts/compute_stabilization.py --apply`. It's the `stabilizer` Compose service under the `tools` profile, so `up` never starts it.
-- A systemd **user** timer runs it hourly, after capture:
+- A systemd **user** timer runs it hourly (`OnCalendar=*:10`, after the on-the-hour capture):
   ```sh
   cp scripts/plant-stabilize.{service,timer} ~/.config/systemd/user/
   systemctl --user enable --now plant-stabilize.timer
   ```
+
+**Operating it** (the timer is installed and active — `systemctl --user list-timers plant-stabilize.timer`):
+- Run a pass by hand (backfill, or after a change): `docker compose run --rm stabilizer`.
+- Force a full rebuild of every transform: `docker compose run --rm stabilizer python scripts/compute_stabilization.py --apply --full`.
+- **Rebuild the image after changing baked-in code/deps:** the service mounts `./scripts` (so `stabilize_core.py` / `compute_stabilization.py` edits are picked up live), but `backend/` (`app.database`/`app.models`) and the pinned OpenCV are **baked into the image**. After touching those or `backend/requirements.txt`, run `docker compose build stabilizer` or the timer keeps using the stale image. The dev backend image is separate and unaffected (no cv2).
 
 **Incremental by default.** `compute_transforms(paths, ref, prior=…)` (in `scripts/stabilize_core.py`) reuses frames whose prior status is settled (`FINAL_STATUSES`) and only (re)computes `pending`/new ones, decoding just the new frame + its neighbour + the reference. `compute_stabilization.py` builds `prior` from the DB and writes only the rows it recomputed.
 
