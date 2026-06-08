@@ -762,11 +762,20 @@ Operations the review UI needs against `photo_ai_suggestions`:
 - **`run_id`/`batch_id` columns** on `photo_ai_suggestions` (provenance) before scaling.
 - **Duplicate-ingest protection** — skip on `(run_id, photo_id, bbox, plant)` match.
 - **Session-propagation review actions** ("apply this plant to selected") — human-triggered only.
-- **Phase 2**: frame registration ✅ + burst plates ✅ + lighting-robust signal **method found**
-  (Finlayson illuminant-invariant, see Phase 2; `scripts/lighting_experiment.py`,
-  `finlayson_experiment.py`, `harvest_eval.py`). Remaining: rerun `harvest_eval.py` on **plate-bracketed**
-  harvest data to settle the per-region-baseline separation (current data is pre-plate/noisy), then
-  diff/inherit auto-confirm + harvestability.
+- **Phase 2**: frame registration ✅ + burst plates ✅ + lighting-robust signal ✅ (Finlayson invariant) +
+  **time-series harvest/wilt detector ✅ built & validated** (`scripts/harvest_eval.py`, see below).
+  Remaining: rerun on **plate-bracketed** harvest data (cleaner than the pre-plate frames it was validated on),
+  then diff/inherit auto-confirm + harvestability.
+
+  > **`harvest_eval.py` is now the time-series detector (2026-06-08).** Per region, per frame: Finlayson-
+  > invariant distance to the reference (one θ for the series) → **common-mode detrend** (subtract the
+  > per-frame median across regions = the shared diurnal lighting, so each region's *idiosyncratic* change
+  > remains) → **tail-run persistence**: an elevation that **holds to the end** = harvest; one that **returns**
+  > = wilt. Validated on the known 2026-06-07 harvest (single, pre-plate frames): **Genovese basil (10.5) and
+  > Rocket (5.9) correctly flagged harvest at 16Z**, controls clean, and the **wilt-vs-harvest confound
+  > resolved** (basil called harvest, not wilt, despite also wilting at midday). **Dill borderline** (real
+  > signal `…5 6` but only 1 frame clears 3σ — wispy/small; plates should clear it). `k_sigma` (default 3) is
+  > the tunable; left conservative rather than overtuned on one noisy day. Supersedes the old pairwise diff.
 
 ---
 
