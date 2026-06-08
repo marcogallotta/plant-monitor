@@ -508,6 +508,24 @@ so the lead time is enough. Caveats / open problems:
   watering — low transpiration demand. So posture-based water-stress alerting is **biased toward exposed
   pots**; shaded ones won't telegraph and need the soil read or manual checks.
 
+**Wilt DETECTION attempt (2026-06-08, `scripts/wilt_alert.py` — PROTOTYPE).** Tried to detect the basil
+midday wilt automatically.
+- **Wrong feature class first:** an appearance-distance metric (Finlayson `gradINV` to a turgid-morning ref)
+  **saturated** — ~0.9 for *every* region all day, the wilt invisible. The web literature is unanimous:
+  **wilt is GEOMETRY** (leaf angle / leaf-tip vertical motion / canopy droop — LAX, Kinovea, image-based
+  wilting metrics), not appearance.
+- **Right feature class — projected greenness/area:** a drooping canopy shows less projected green from
+  overhead (folded, edge-on leaves). Green-area (ExG>thr) per region over the day **does** show it — basil
+  dipped **0.85→0.71 at 12–13Z and recovered to 0.84**; shaded **rocket rose** (no wilt ✓), parsley **flat** ✓.
+  So the feature class is validated where gradINV failed.
+- **But single-day is not enough:** the dip is **modest (~16–20%)** and lighting/AWB/shade-net-dappling drive
+  *other* regions' greenness around too — so the prototype's naive single-day rule flags the **wrong** regions
+  (Rosemary, Welsh onion) and **misses** the confirmed basil. Honest prototype: feature right, rule unreliable.
+- **Two real limits:** (1) **overhead is a poor angle for droop** (foreshortened) — the **closeup/LLM layer**
+  sees it natively and may be wilt's proper home; (2) the cheap-metric route needs a per-region **multi-day
+  diurnal baseline** (normal greenness-by-hour) to separate a real midday dip from lighting — which the
+  accruing plate-days feed. Until then, treat overhead wilt as a *trigger to look*, not a detector.
+
 ### Where this is really going: a per-plant WATER-BALANCE estimator + closed-loop irrigation
 
 The single-image under-vs-over question is the wrong frame. The right frame is a **per-plant water-balance
@@ -517,8 +535,9 @@ estimate over time**, fusing signals already (or soon) available:
   **two micro-climate spots**, and readings are already queryable per-photo (`GET /sensors/photos/{id}`,
   `±60 min`; see internals "Sensor proxy"). This gives **evaporative demand** at the plant.
 - **Forecast (user already receives it elsewhere):** forward demand / incoming rain → ingest it.
-- **Watering events:** today inferred from soil-darkening; the user waters **~08:00–09:00 daily** (a strong
-  temporal prior to confirm against).
+- **Watering events:** detectable from the Flower Care soil probe — see the watering-detection note below.
+  The user waters **twice a day**, and **does not always include the sensor pot**, so the probe sees an
+  *irregular subset* of garden waterings (no fixed daily schedule to assume).
 
 Fused over **days**, under-vs-over becomes tractable where a single droop is not: *daily midday wilt that
 recovers after the morning water + hot/dry/no-rain* → **under** (dose < demand); *wilt that does NOT recover
@@ -580,6 +599,27 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 > *plant's* water demand the **camera region-average is the better measure** anyway (canopy-integrated), with
 > the point-lux only a coarse level-calibrator — not the per-frame ground truth.
 
+> **PRELIMINARY result (2026-06-08 morning, n=2 clean points — NOT yet committed/confirmed).** First run of
+> the cap test on the morning's metadata frames: white-cap luminance per frame, exposure-corrected, vs Flower
+> Care lux. On the two clean points (04:00Z, 05:00Z; 03Z too dark, 06Z sunfleck): **naive cap luminance is
+> ~flat** (55→58, +5%) while light rises **7×** — confirming auto-exposure flattening — whereas **radiometric
+> `R = cap/(exp×gain)` tracks lux**: R ×8.9, the camera's own `picamLux` ×8.8, ground-truth FC lux ×7.3, all
+> moving together. Two-link chain holds: R ∝ picamLux (ratio ~constant) and picamLux ≈ FC lux (177 vs 218;
+> 1552 vs 1585). So dividing out exposure×gain **recovers a lux-tracking signal that raw luminance loses** — a
+> reversal of the −0.43 naive falsification. **Caveat: mechanism evidence, not a fitted correlation (only 2
+> clean points, all morning ramp). Definitive confirmation needs the full daytime arc incl. midday/afternoon
+> (where naive broke), accumulating today.** Throwaway script: `/tmp/capval.py`.
+
+> **BUT — the white cap is under the SHADE NET, which breaks it as a reference (2026-06-08).** The net
+> dapples light at fine scale (the ×128 lux swings ARE net sunflecks through the mesh), so the cap — a
+> point/small patch — reads **net-fleck noise, not the plant's insolation**. The "clean fixed-albedo target"
+> premise fails under the net; cap-camera and point-lux may still correlate, but only because both sample the
+> same dapple — it wouldn't validate *insolation* for the plant. **Revised approach:** (1) validate the
+> radiometric correction on a fixed patch in **OPEN sun** (white floor tile / pot rim, not under the net); (2)
+> for per-plant insolation use the **region-average** — the canopy *integrates* the dappling a point can't; (3)
+> under-net plants are inherently reduced + dappled, well captured by a **static shade factor**. The "cap
+> full-arc this afternoon" plan is superseded by this.
+
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
 `https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see
@@ -607,6 +647,27 @@ pot, where there's truth*, validate against the Flower Care, then **transfer the
 sensorless pots.** A single ~$15 sensor turns the gating "is wet/dry soil legible?" unknown into a supervised
 calibration problem. (`conductivity` is a bonus nutrient/feeding signal.)
 
+**Watering detection from the probe — FUSE conductivity + moisture, not either alone (2026-06-08,
+`scripts/watering_detector.py`).** Validated over 19 days of Cilantro history. A watering shows up as a sharp
+**disturbance**, but on *different channels on different days*:
+- **EC step UP** = feed, or water flushing accumulated salts past the electrodes in dry soil;
+- **EC step DOWN** = plain/low-ion water **diluting** the soil solution — so the EC *sign* is information
+  (feed vs plain water), not noise;
+- **moisture step up** = water wetting the capacitive shaft — coarse, laggy, integer %, **least reliable**
+  (pinned for hours; missed a *confirmed* watering on 06-08), but occasionally carries an event EC misses (06-01).
+Single-channel misses a large fraction; the fused "soil-disturbance" detector catches ~all. Detector trick:
+a **short (2-reading) baseline** so it tracks the slow post-feed EC decay and only triggers on a *sharp*
+change (a long baseline misfired on every decay step as a bogus dilution); plus a refractory so one
+disturbance = one event. **Scope/limits:** the probe is **one pot only** and the user waters **twice daily
+without always including it**, so events are an irregular subset — the probe is the **ground-truth anchor**;
+the **camera (soil-darkening)** is what generalizes watering detection to the sensorless pots. Thresholds are
+**provisional** pending a few human-labelled waterings (decay-rejection is the main remaining tuning). One
+label so far: 06-08 watering before 08:00 SAST → detector flagged `06:03Z EC+359`. ✓
+
+**Later feature (deferred): EC as a fertility/nutrient signal.** Beyond watering *events*, the conductivity
+**baseline between waterings** tracks the soil's dissolved-nutrient load, and the EC-step *sign* hints feed
+vs plain water. Over time that's a per-pot **feeding/fertility** signal (when to feed, EC drawn down by uptake,
+salt buildup). Not now — needs the watering detector solid + labelled feeds first; recorded so it isn't lost.
 **Why it matters beyond the balcony:** this is the prototype for a planned **~100 m² garden next year**, where
 automated irrigation is the crucial scaling lever — manual watering doesn't scale; a **sense → dose →
 measure-response → adjust** loop does. The balcony water-balance work is that loop in miniature.
