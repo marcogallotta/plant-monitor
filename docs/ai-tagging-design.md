@@ -682,8 +682,25 @@ observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot cle
 >   South 2.5. Per-species **Kc** now applied by name (`kc_for_name`: chilli 1.1, woody 0.8, leafy 1.0). Two caveats:
 >   (i) **PRELIMINARY** — partial-day arc (sun-fraction is of *observed* daylight); (ii) the **chilli sun-fraction is
 >   contaminated** by the post-move vacated spot (needs the move-inference to use morning-only) — see sun-chase note.
-> - **Remaining:** real region→sensor positions; infer the chilli move (morning-only chilli sun); the multi-day
->   sun-hours profile.
+> - **Remaining:** real region→sensor positions; generic **move detection** (below) to know when a region's plant
+>   has left; the multi-day sun-hours profile.
+
+> **MOVE DETECTION — feature class found, prototype noisy (`scripts/move_detect.py`, 2026-06-08).** ANY pot can
+> move and the user won't log it, so the camera must SPOT a move — the generic form of the chilli sun-chase, and
+> exactly the design's own **diff/inherit / self-maintaining-via-diff**. Findings on the known 2026-06-08 chilli
+> move (crops confirm: 3 pots+seedlings at 10:00 local → bare tile by 16:00):
+> - **A move is a STRUCTURAL change, not a reflectance one.** The Finlayson invariant that catches harvest/wilt
+>   **completely missed** the move (terracotta-pot-on-bark vs beige-tile have similar log-chromaticity; the
+>   invariant discards the intensity/structure a vanishing pot changes most). A **raw-grayscale** structural diff
+>   responds where the invariant is blind — so move detection uses a different feature class than harvest/wilt.
+> - **Use CHAINED registration** (`register_to_reference`), not direct — direct ORB fails across the day's span
+>   (10:00/12:00 not plausible vs an 08:00 ref), which produced the first run's false spikes.
+> - **Still noisy / not a clean detector.** Registration wobbles on the *changed* scene, and today's move landed
+>   near the end of the captured arc (sparse post-move frames), so the persistent-step test can't yet separate a
+>   move from a one-frame blip — classification is unreliable on one day. Like `wilt_alert`: feature class right,
+>   rule needs work (robustness + multi-frame post-move data; a move = a large structural step that **holds** and
+>   often reveals background). **Consequence for the join:** a region flagged moved → stop trusting its camera
+>   sun-fraction (no `CHILLI_UNITS` hardcoding once this is solid).
 
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
