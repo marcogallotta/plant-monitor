@@ -658,8 +658,12 @@ observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot cle
 >   W/m²→MJ/m²/day; ea from dew point. Runs in the backend container (where `laptop.local` resolves).
 > - **`plant_demand_mm` = ET₀ × Kc × camera sun-fraction** (from `sun_hours.py`) — the two halves of the model meet.
 >   (Enabling fixes: `.env` `SENSOR_API_URL` :8001→:8000; esp32 openmeteo router opened to api-key auth.)
-> - **Next (the join):** region→nearest sensor, **time-dependent for movable pots** (chillis → **West** in the
->   afternoon); assemble per-plant demand + VPD per micro-climate; reconcile the stale `SENSOR_SENSORS` MAC list.
+> - **Micro-climate sensors** (`SENSOR_API_URL=https://laptop.local:8000`, `X-Api-Key`): **South wall** = hot/dry by
+>   the wall (highest VPD); **South** = the railing, cool & exposed (lowest VPD); **West** = where the chillis sit in
+>   the **afternoon**. The esp32 server also reports an **indoor** sensor (`EC:2E:84:06:4E:9A`) that is deliberately
+>   NOT in the balcony `SENSOR_SENSORS` — the config is correct, don't add it.
+> - **Next (the join):** map each region→nearest sensor (**time-dependent** for movable pots: chillis → West in the
+>   afternoon); assemble per-plant demand = ET₀ × Kc × camera sun-fraction, with VPD per micro-climate.
 
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
