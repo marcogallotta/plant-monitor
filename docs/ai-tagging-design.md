@@ -685,22 +685,25 @@ observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot cle
 > - **Remaining:** real region→sensor positions; generic **move detection** (below) to know when a region's plant
 >   has left; the multi-day sun-hours profile.
 
-> **MOVE DETECTION — feature class found, prototype noisy (`scripts/move_detect.py`, 2026-06-08).** ANY pot can
-> move and the user won't log it, so the camera must SPOT a move — the generic form of the chilli sun-chase, and
-> exactly the design's own **diff/inherit / self-maintaining-via-diff**. Findings on the known 2026-06-08 chilli
-> move (crops confirm: 3 pots+seedlings at 10:00 local → bare tile by 16:00):
-> - **A move is a STRUCTURAL change, not a reflectance one.** The Finlayson invariant that catches harvest/wilt
->   **completely missed** the move (terracotta-pot-on-bark vs beige-tile have similar log-chromaticity; the
->   invariant discards the intensity/structure a vanishing pot changes most). A **raw-grayscale** structural diff
->   responds where the invariant is blind — so move detection uses a different feature class than harvest/wilt.
-> - **Use CHAINED registration** (`register_to_reference`), not direct — direct ORB fails across the day's span
->   (10:00/12:00 not plausible vs an 08:00 ref), which produced the first run's false spikes.
-> - **Still noisy / not a clean detector.** Registration wobbles on the *changed* scene, and today's move landed
->   near the end of the captured arc (sparse post-move frames), so the persistent-step test can't yet separate a
->   move from a one-frame blip — classification is unreliable on one day. Like `wilt_alert`: feature class right,
->   rule needs work (robustness + multi-frame post-move data; a move = a large structural step that **holds** and
->   often reveals background). **Consequence for the join:** a region flagged moved → stop trusting its camera
->   sun-fraction (no `CHILLI_UNITS` hardcoding once this is solid).
+> **MOVE DETECTION — systematic feature search, still a prototype (`scripts/move_detect.py`, 2026-06-08).** ANY pot
+> can move and the user won't log it, so the camera must SPOT a move — the generic form of the chilli sun-chase, and
+> the design's own **diff/inherit**. Validated against the known 2026-06-08 chilli move (crops: 3 pots+seedlings at
+> 10:00 local → bare tile by ~16:00, abrupt at ~17:00). A literature search drove the rebuild. **What each cue does
+> (the durable result):**
+> - **Finlayson reflectance invariant** (harvest/wilt's feature) — **BLIND** (terracotta-pot vs tile ≈ same chroma).
+> - **Raw-gray / (ε-)census structure** — **BLIND here too**: the pots are flat dark soil + tiny seedlings and bare
+>   tile is also low-texture, so the move barely changes texture (census saturates on foliage noise regardless).
+> - **Mean COLOUR (CIELAB) vs a fixed morning frame** — catches it (chillis rank top), but slow lighting/growth
+>   colour **drift** false-positives (e.g. Rocket).
+> - **WINNER — mean colour, CONSECUTIVE-FRAME (short baseline)** + common-mode removal: a move is an **abrupt** chroma
+>   jump; frame-to-frame cancels slow drift (Rocket falls away) and pinpoints the move hour — the literature's
+>   "removed-object" abrupt-change paradigm. Chillis spike at ~17:00; drift suppressed.
+> - **Two unsolved confounds (why it's not a clean detector):** (1) **registration wobble at the frame edge** — the
+>   bottom (chilli area) misaligns at 10:00, a false colour spike that rivals the real move (argmax can pick the
+>   wrong hour); needs robust edge registration. (2) the move landed at the **end of the arc** → ~1 post-move frame,
+>   so the persistence confirmation (new colour HOLDS) can't run. Remaining: robust edge reg + multi-cue
+>   confirmation + a move with several post-move frames. **For the join:** a region flagged moved → stop trusting its
+>   camera sun-fraction (drops the `CHILLI_UNITS` hardcoding once solid).
 
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;

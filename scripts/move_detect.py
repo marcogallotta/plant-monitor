@@ -1,21 +1,37 @@
 #!/usr/bin/env python3
 """Per-region MOVE detector — spot when a pot is relocated (no manual logging).
 
-Generalises the chilli sun-chase: ANY pot can move, the user won't log it, so the
-camera must detect it. A move is a per-region change-point like harvest/wilt, but a
-DIFFERENT feature class:
+ANY pot can move and the user won't log it, so the camera must detect it — the
+generic form of the chilli sun-chase, and the design's own diff/inherit principle.
 
-  * harvest/wilt = canopy reflectance/texture change  -> the Finlayson invariant
-    (scripts/harvest_eval.py) is the right feature.
-  * MOVE = a whole pot leaves/arrives -> a big STRUCTURAL / intensity change (the
-    pot's edges, shape, shadow vanish, revealing flat background). Validated on the
-    known 2026-06-08 chilli move: morning = 3 pots+seedlings, 17:00 = bare tile.
-    The invariant MISSED it (terracotta-on-bark vs beige-tile are similar chroma);
-    a raw-grayscale structural diff catches it. So move uses raw gray, not invariant.
+Feature search (all validated on the known 2026-06-08 chilli move — 3 pots+seedlings
+at 10:00 local, gone by ~16:00, abrupt at ~17:00):
+  * Finlayson reflectance invariant (harvest/wilt's feature) — BLIND (terracotta-pot
+    vs tile have similar chromaticity).
+  * raw-gray structural diff — responds but lighting-noisy.
+  * (eps-)census / structure — BLIND here: the pots are flat dark soil + tiny
+    seedlings and bare tile is also low-texture, so the move barely changes texture.
+  * mean COLOUR vs a fixed morning frame — catches it, but slow lighting/growth
+    colour DRIFT gives big false positives (e.g. Rocket).
+  * WINNER — mean colour, CONSECUTIVE-FRAME (short baseline): a move is an ABRUPT
+    colour jump; comparing frame-to-frame cancels slow drift (Rocket falls away)
+    and pinpoints the move hour. This is the "removed-object" abrupt-change paradigm.
 
-Per region: raw-gray mean-abs-diff to a MORNING reference, registered, daylight-
-gated, common-mode detrended (shared lighting), then a persistent-step test
-(reuse harvest_eval.classify_series): a move = a large step that HOLDS.
+So: per region, per frame, mean CIELAB; distance to the PREVIOUS frame; common-mode
+(per-frame median) removed to cancel global lighting jolts. A move = a jump above
+threshold. Each frame is chained-registered to the reference first.
+
+STATUS — PROTOTYPE, not a clean detector yet. It surfaces the chilli move (the 3
+pots spike at ~17:00), but two unsolved confounds remain on this one marginal day:
+  (1) REGISTRATION WOBBLE at the frame edge — the bottom (where the chillis sit)
+      misaligns at 10:00 (direct reg there is "not plausible"; chained still wobbles),
+      producing a false colour spike that rivals the real move, so argmax can pick
+      the wrong hour. Needs robust edge registration before this is trustworthy.
+  (2) Only ~1 post-move frame today (move landed at the end of the arc), so the
+      persistence confirmation that separates a move from a one-off jolt can't run.
+Remaining work: robust edge registration; multi-cue confirmation (colour jump +
+the region's new state holding); validate on a move with several post-move frames
+(and ideally several real moves). The FEATURE knowledge above is the durable result.
 
     .venv/bin/python scripts/move_detect.py 'data/photos/2026-06-08T*Z.jpg'
 """
@@ -25,79 +41,76 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import scripts.frame_registration as fr
 import scripts.finlayson_experiment as F
 import scripts.sun_hours as sh
-import scripts.harvest_eval as he
 
-CHILLI_UNITS = {34, 35, 36}        # known 2026-06-08 move — validation handle
+CHILLI_UNITS = {34, 35, 36}            # known 2026-06-08 move — validation handle
 
 
-def gray_series(paths, ref_path):
-    """Per region, raw-gray mean-abs-diff to the reference region over the frames."""
-    ref = cv2.imread(ref_path); h, w = ref.shape[:2]
-    gref = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    regs = {}
-    for r in fr.load_regions():
-        regs.setdefault(r["unit_id"], []).append(r)
-
-    times, series = [], {u: [] for u in regs}
-    for p in paths:
-        im = cv2.imread(p)
-        if os.path.abspath(p) != os.path.abspath(ref_path):
-            # CHAINED registration (hourly hops) — direct fails across the day's
-            # time span (the doc: a 3-4h shadow shift breaks ORB; hops compose).
-            res = fr.register_to_reference(p, ref_path)
-            if res["M"] is not None:
-                im = cv2.warpAffine(im, res["M"], (w, h))
-        g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32)
-        times.append((sh.frame_time(p).hour + sh.UTC_OFFSET_H) % 24)
-        for u, rs in regs.items():
-            ds = []
-            for r in rs:
-                a, b = F._crop(gref, r), F._crop(g, r)
-                if a is not None and b is not None and a.shape == b.shape:
-                    ds.append(float(np.abs(a - b).mean()))
-            series[u].append(float(np.mean(ds)) if ds else np.nan)
-    return times, sorted(regs), series
+def region_lab(path, ref, ref_path, w, h, regs):
+    """Per-region mean CIELAB of a frame (chained-registered to the reference)."""
+    im = cv2.imread(path)
+    if os.path.abspath(path) != os.path.abspath(ref_path):
+        res = fr.register_to_reference(path, ref_path)        # chained hops
+        if res["M"] is not None:
+            im = cv2.warpAffine(im, res["M"], (w, h))
+    lab = cv2.cvtColor(im, cv2.COLOR_BGR2LAB).astype(np.float32)
+    out = {}
+    for u, rs in regs.items():
+        ms = [F._crop(lab, r).reshape(-1, 3).mean(0) for r in rs if F._crop(lab, r) is not None]
+        out[u] = np.mean(ms, 0) if ms else None
+    return out
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("frames", nargs="+")
-    ap.add_argument("--ref", help="morning reference frame (default: first daylight frame)")
+    ap.add_argument("--ref", help="registration reference (default: first daylight frame)")
     ap.add_argument("--min-lux", type=float, default=50.0)
-    ap.add_argument("--k-sigma", type=float, default=4.0)
+    ap.add_argument("--thr", type=float, default=40.0, help="abrupt mean-LAB jump = a move")
     a = ap.parse_args()
     paths = [p for p in sorted(sum((glob.glob(f) for f in a.frames), []))
              if sh.is_daylight(p, a.min_lux)]
-    if len(paths) < 4:
-        sys.exit("need >=4 daylight frames")
-    ref = a.ref or paths[0]                         # morning reference
+    if len(paths) < 3:
+        sys.exit("need >=3 daylight frames")
+    ref_path = a.ref or paths[0]
+    ref = cv2.imread(ref_path); h, w = ref.shape[:2]
+    regs = {}
+    for r in fr.load_regions():
+        regs.setdefault(r["unit_id"], []).append(r)
 
-    times, units, series = gray_series(paths, ref)
-    M = np.array([series[u] for u in units], float)
-    common = np.nanmedian(M, axis=0)                # shared lighting per frame
-    resid = {u: list(np.array(series[u], float) - common) for u in units}
+    times, prev, jump = [], None, {u: [] for u in regs}
+    for p in paths:
+        lab = region_lab(p, ref, ref_path, w, h, regs)
+        times.append((sh.frame_time(p).hour + sh.UTC_OFFSET_H) % 24)
+        for u in regs:
+            if prev is None or prev[u] is None or lab[u] is None:
+                jump[u].append(0.0)
+            else:
+                jump[u].append(float(np.linalg.norm(lab[u] - prev[u])))
+        prev = lab
 
-    rows = []
+    # COMMON-MODE removal: a global lighting shift or a registration wobble jolts
+    # EVERY region together (the morning sunrise/10h artifacts), so subtract the
+    # per-frame median jump across regions. A real move is region-specific and
+    # survives; the shared artifact cancels.
+    U = sorted(regs)
+    J = np.array([jump[u] for u in U], float)
+    common = np.median(J, axis=0)
+    jump = {u: list(J[i] - common) for i, u in enumerate(U)}
+
+    moved = {u: (int(np.argmax(jump[u])) if max(jump[u]) > a.thr else None) for u in regs}
+    units = sorted(regs, key=lambda u: -max(jump[u]))
+    print(f"frames (local h): {' '.join(f'{t:>3d}' for t in times)}   "
+          f"ref={os.path.basename(ref_path)[11:13]}:00Z, abrupt mean-LAB jump\n")
+    print(f"{'unit':>16} {'move':>5} {'at':>4}   jump series")
     for u in units:
-        c = he.classify_series(resid[u], a.k_sigma)
-        rows.append((u, c, resid[u]))
-    rows.sort(key=lambda r: -r[1]["score"])
-
-    hh = " ".join(f"{t:>4d}" for t in times)
-    print(f"frames (local h): {hh}   ref={os.path.basename(ref)[11:13]}:00Z, raw-gray structural diff\n")
-    print(f"{'unit':>16} {'verdict':>7} {'score':>5} {'step':>5}   series")
-    for u, c, s in rows:
-        if c["kind"] == "none":
-            continue
-        # a persistent step in the STRUCTURAL feature = a move (vs harvest's reflectance step)
-        verdict = "MOVE" if c["kind"] == "harvest" else c["kind"]
-        nm = F.NAMES.get(u, str(u))
-        step = f"{times[c['step_at']]:>2d}h" if c["step_at"] is not None else "-"
-        spark = " ".join(f"{v:4.0f}" if v == v else "  - " for v in s)
-        mk = "  <== chilli (known move)" if u in CHILLI_UNITS else ""
-        print(f"{nm:>16} {verdict:>7} {c['score']:5.1f} {step:>5}   {spark}{mk}")
-    moves = [F.NAMES.get(u) for u, c, _ in rows if c["kind"] == "harvest"]
-    print("\nflagged moves:", ", ".join(moves) if moves else "(none)")
+        i = moved[u]
+        at = f"{times[i]:>2d}h" if i is not None else "-"
+        spark = " ".join(f"{v:3.0f}" for v in jump[u])
+        mk = "  <== chilli" if u in CHILLI_UNITS else ""
+        if max(jump[u]) > a.thr * 0.6:
+            print(f"{F.NAMES.get(u, str(u)):>16} {('YES' if i is not None else ''):>5} {at:>4}   {spark}{mk}")
+    flagged = [F.NAMES.get(u) for u in units if moved[u] is not None]
+    print("\nflagged moves:", ", ".join(flagged) if flagged else "(none)")
 
 
 if __name__ == "__main__":
