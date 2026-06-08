@@ -585,40 +585,10 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 > Pi**, every plate carries the data to retry the radiometric insolation read AND to check AWB drift on the
 > real frames. Still TODO: (b) spatial sun/shadow detection and (c) the smoothed-lux reference.
 
-> **Validation design — use the white sensor cap as a co-located reference (2026-06-08).** Two traps in
-> validating camera insolation against the Flower Care `light_lux`: (1) lux is a **point** sensor — when it
-> crosses in/out of a sunfleck its reading swings ×128 (612→78 489) while the region's mean barely moves, so
-> region-luminance-vs-point-lux is a **scale mismatch**; (2) foliage albedo varies. **Both are solved by the
-> probe itself:** the Flower Care's **white cap is visible from overhead** at **~(0.756, 0.606)** in the
-> canonical reference frame (cilantro-root pot, unit 41, by the shade-net edge) — a **fixed-albedo white
-> patch sitting exactly where the lux is measured**. So the clean experiment is **`cap_luminance /
-> (exposure×gain)` vs `light_lux`**: same point, constant reflectance, exposure divided out. If that doesn't
-> correlate, the radiometric correction is broken; if it does, it's validated on the cleanest possible target
-> before trusting it on foliage. (Locate the cap per-frame via registration; watch for the adjacent seedling
-> /shadow occluding it; the white may clip in full sun — the logged exposure flags that.) Corollary: for the
-> *plant's* water demand the **camera region-average is the better measure** anyway (canopy-integrated), with
-> the point-lux only a coarse level-calibrator — not the per-frame ground truth.
-
-> **PRELIMINARY result (2026-06-08 morning, n=2 clean points — NOT yet committed/confirmed).** First run of
-> the cap test on the morning's metadata frames: white-cap luminance per frame, exposure-corrected, vs Flower
-> Care lux. On the two clean points (04:00Z, 05:00Z; 03Z too dark, 06Z sunfleck): **naive cap luminance is
-> ~flat** (55→58, +5%) while light rises **7×** — confirming auto-exposure flattening — whereas **radiometric
-> `R = cap/(exp×gain)` tracks lux**: R ×8.9, the camera's own `picamLux` ×8.8, ground-truth FC lux ×7.3, all
-> moving together. Two-link chain holds: R ∝ picamLux (ratio ~constant) and picamLux ≈ FC lux (177 vs 218;
-> 1552 vs 1585). So dividing out exposure×gain **recovers a lux-tracking signal that raw luminance loses** — a
-> reversal of the −0.43 naive falsification. **Caveat: mechanism evidence, not a fitted correlation (only 2
-> clean points, all morning ramp). Definitive confirmation needs the full daytime arc incl. midday/afternoon
-> (where naive broke), accumulating today.** Throwaway script: `/tmp/capval.py`.
-
-> **BUT — the white cap is under the SHADE NET, which breaks it as a reference (2026-06-08).** The net
-> dapples light at fine scale (the ×128 lux swings ARE net sunflecks through the mesh), so the cap — a
-> point/small patch — reads **net-fleck noise, not the plant's insolation**. The "clean fixed-albedo target"
-> premise fails under the net; cap-camera and point-lux may still correlate, but only because both sample the
-> same dapple — it wouldn't validate *insolation* for the plant. **Revised approach:** (1) validate the
-> radiometric correction on a fixed patch in **OPEN sun** (white floor tile / pot rim, not under the net); (2)
-> for per-plant insolation use the **region-average** — the canopy *integrates* the dappling a point can't; (3)
-> under-net plants are inherently reduced + dappled, well captured by a **static shade factor**. The "cap
-> full-arc this afternoon" plan is superseded by this.
+> **Validation evolution (2026-06-08, condensed):** the first plan calibrated against the Flower Care's
+> overhead-visible **white cap** as a fixed-albedo co-located target — a promising n=2 morning result, then
+> abandoned because the cap sits **under the shade net** (the ×128 lux swings are net sunflecks), so it reads
+> dapple, not insolation. That redirected to **open-sun reference patches**, which validated:
 
 > **VALIDATED on open-sun patches — insolation-from-camera WORKS (2026-06-08, `scripts/insolation_validate.py`).**
 > Ran the revised approach on the full morning→midday arc (04–10Z = 06:00–12:00 CEST) with three open-sun
@@ -650,45 +620,22 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 > why it scales to the 100 m² garden. **Next:** per-region **sun-hours** profile (full-day arc + a few clear
 > days) = the per-plant demand term; combine with the validated global arc (above).
 
-> **SUN-HOURS profiler built + the NEGATIVE-CONTROL refinement validated in principle (2026-06-08,
-> `scripts/sun_hours.py` — PROTOTYPE).** Integrates the per-frame sun/shade signal over a day's arc into
-> per-region **sun-hours** (the demand term), with multi-day averaging. Findings, in order:
-> - **Naïve aggregation is wrong twice.** (1) Subtracting each region's *time-mean* (what `sun_shade` does for
->   per-frame detection) forces every region to ~50% sun by construction and discards the absolute level the
->   demand term needs → switched to a **per-region SHADE BASELINE** (low percentile + `--margin`): albedo-robust
->   but not flattened. (2) The single roof patch leaks a per-frame global term, so I tried removing it — but on
->   the one validated day that **over-subtracted real sun**: the dawn-shade→midday-sun sweep across the balcony
->   is **real** (the building shades everything at dawn), and both the plant-cohort common-mode AND the
->   sun-exposed controls (road/wall/sign — they catch the same midday sun) **deleted the chillis' validated
->   10:00 sun-arrival**.
-> - **The fix is a PERMANENT-SHADE negative control (ChatGPT's steer, confirmed).** A surface that *never* sees
->   direct beam moves only with reference error. Marco marked one (`photo_notes` control **"Always shaded"**,
->   just above the Switchbot). Estimating the global residual from **it alone** (mean-centred → signed) and
->   subtracting **preserves the chillis' 10:00 sun** while still trimming spurious reference-error sun calls —
->   the sun-exposed controls and cohort could not. So a clean negative control corrects the leak without eating
->   plant sun, exactly as predicted.
-> - **Plumbing:** control vs plant tags now flow DB→fixture via `scripts/export_reference_regions.py` (closes
->   the hand-snapshot gap; `reference_regions.json` carries `regions` + `controls`); `frame_registration.load_controls()`.
-> - **Caveats / default:** the shade control is **n=1 and a narrow strip** (noisy, registration-sensitive), and
->   it's still **one partial day** (06:00→14:00 local, frames accruing). So the **default is no-residual** (raw
->   shade baseline, also validated-consistent); `--controls` is the principled refinement. **CHECK AGAIN
->   TOMORROW (2026-06-09):** rerun on the full daytime arc × the accruing clear days; mark a 2nd always-shaded
->   patch for n≥2 median robustness; then lock `--margin`/`--base-pct` and promote the per-region sun-hours
->   numbers into the water-balance demand term.
-
-> **Negative-control follow-up — no truly-fixed shade surface exists here, so the GLOBAL control is a dead end
-> (2026-06-08 eve).** Tried a 2nd always-shade control for n≥2: it was a **frame-edge strip** (`x2≈1.0`) and ran
-> **2× the dev-std** of the interior one (0.54 vs 0.26 on log-ratio) — warped frames have junk borders — so it
-> *degraded* the estimate (lost a chilli's validated 10:00 sun). Added an **edge guard** (`EDGE_MARGIN`, reject
-> controls touching any side) → auto-drops it, interior control restored. But the deeper point (Marco): **besides
-> the dappling shade-net there is no surface in this scene that is truly always-shaded** — every candidate either
-> sees direct sun at some hour or is a noisy thin strip. So the global negative-control refinement is **not viable
-> here**, and that's fine: the **default `no-residual` per-region shade-baseline needs no fixed control** and is
-> the validated-consistent keeper. **The better reframe = a per-region LOCAL reference (pot rim / bare soil by
-> each plant):** fixed (doesn't grow/wilt), so its brightness swing is pure local illumination — a cleaner sun
-> proxy than the foliage, and immune to the **multi-day canopy-drift** that will contaminate whole-region
-> brightness over time (matters for the seasonal profile, not single-day). Caveats: rims are thin and get
-> occluded as plants fill in. **Deferred to the multi-day build**; single-day sun-hours stands on the default.
+> **SUN-HOURS profile (`scripts/sun_hours.py` — PROTOTYPE, 2026-06-08).** Integrates the per-frame sun/shade
+> signal over a day's arc into per-region **sun-hours** (the demand term), multi-day averaged.
+> - **Default = per-region SHADE BASELINE** (low percentile + `--margin`), NOT mean-detrend (which forces ~50% sun
+>   and discards the absolute level the demand term needs). Reproduces the validated labels; needs no fixed reference.
+> - **Negative-control refinement explored, then parked.** A permanent-shade control would correct the single-roof-
+>   patch per-frame leak without eating real sun — sun-exposed controls and plant-cohort common-mode both *deleted*
+>   the chillis' validated 10:00 sun (the dawn-shade→midday-sun sweep is real, not noise). But **no truly-fixed shade
+>   surface exists in this scene** (the net dapples; thin strips are noisy; an edge strip ran 2× the dev-std →
+>   `EDGE_MARGIN` guard), so the **global** control is a dead end here. Better reframe = a per-region **LOCAL**
+>   reference (pot rim / bare soil by each plant): fixed, immune to the **multi-day canopy-drift** that contaminates
+>   whole-region brightness. **Deferred to the multi-day build.**
+> - Plumbing: region/control tags flow DB→fixture via `scripts/export_reference_regions.py` (`reference_regions.json`
+>   = `regions` + `controls`; `frame_registration.load_controls()`).
+> - **CHECK 2026-06-09:** rerun on the full daytime arc × accruing clear days; lock `--margin`/`--base-pct`; promote
+>   per-region sun-hours into the demand term. The sun-map drifts seasonally → re-run through the year (why
+>   auto-detecting beats hand-mapping once; scales to the 100 m² garden).
 
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
@@ -701,30 +648,18 @@ wind_gusts_10m, shortwave_radiation, cloud_cover`. These are **exactly the refer
 (camera)** × a crop factor. `shortwave_radiation` + `cloud_cover` are the **forecast pair** to the camera's
 observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot clear day.
 
-> **DEMAND-SIDE MATH BUILT (2026-06-08 eve, `scripts/water_demand.py` + `test_water_demand.py`).** The
-> evaporative-demand half of the water-balance model, as pure functions ready to wire to live data:
-> - **VPD** (vapour-pressure deficit, kPa) from temperature + humidity **alone** — the immediate demand signal
->   the SwitchBot sensors already give per micro-climate. Validated live: the **wall** sensor (30.5 °C/27 %)
->   read **VPD 3.19 kPa** vs the **railing** sensor (23.1 °C/47 %) **1.50 kPa** — wall plants face >2× the
->   evaporative pull at the same instant, so demand must map each region to its **nearest** sensor, not a garden mean.
-> - **ET₀** (FAO-56 Penman-Monteith reference evapotranspiration, mm/day) from the forecast vars
->   (`temperature_2m`, `relative_humidity_2m`/`dew_point_2m`, `wind_speed_10m`, `shortwave_radiation`), with the
->   full radiation chain (Ra from lat/DOY → Rso → Rn). Defaults to the Aosta site (45.74 °N, 580 m).
-> - **`plant_demand_mm` = ET₀ × Kc × sun-fraction** — where **sun-fraction is the camera term from
->   `sun_hours.py`**, so the two halves of the model finally meet. Demo (clear Aosta summer day, ET₀ ≈ 5.9 mm):
->   rocket(full sun) 5.3, basil(part shade) 3.6, mint(shaded) 1.6 mm/day.
-> - **Validation:** `test_water_demand.py` checks each component against FAO-56's own published values
->   (es(20)=2.338, Δ(20)=0.1448, P@1800 m=81.8, γ=0.054, Ra=32.2 for Example 8) — 10/10.
-> - **Now LIVE (2026-06-08 eve):** `.env` `SENSOR_API_URL` fixed `:8001`→`:8000` (it pointed at our own backend),
->   and the esp32 openmeteo router was opened to api-key auth (was session-only). VPD verified on the live sensor
->   proxy (wall ~3.6 / railing ~2.7 kPa as it heated up); **ET₀ now runs on the live forecast** via
->   `scripts/forecast_et0.py` (fetch `/openmeteo/weather` → daily aggregate → FAO-56): **5.0–5.4 mm/day** across
->   06-05→06-08, the expected early-June Aosta range. Unit gotchas handled: Open-Meteo `wind_speed_10m` is km/h
->   (→m/s), `shortwave_radiation` is W/m² (→MJ/m²/day); ea from `dew_point_2m`. Runs inside the backend container
->   (where `laptop.local` resolves), like `export_reference_regions.py`.
-> - **Next (the join):** map each region→nearest sensor — **time-dependent for movable pots** (the chillis move
->   to the **West** micro-climate in the afternoon) — then assemble per-plant demand = ET₀ × Kc × camera
->   sun-fraction, with VPD per micro-climate. Reconcile the stale `SENSOR_SENSORS` MAC list (a live MAC wasn't in it).
+> **Demand side — BUILT + LIVE (`scripts/water_demand.py` + `test_water_demand.py` + `forecast_et0.py`, 2026-06-08).**
+> - **VPD** (kPa) from temp+humidity alone — the immediate signal the SwitchBot sensors give per micro-climate.
+>   Live: **wall ~3.6 vs railing ~2.7 kPa** → wall plants face >2× the evaporative pull, so map each region to its
+>   **nearest** sensor, not a garden mean.
+> - **ET₀** (FAO-56 Penman-Monteith, mm/day) from the forecast vars, full radiation chain (Ra→Rso→Rn). Validated
+>   component-wise against FAO-56 published values (10/10). **Live** via `forecast_et0.py` (fetch `/openmeteo/weather`
+>   → daily aggregate): **5.0–5.4 mm/day** across 06-05→08. Unit gotchas handled: wind km/h→m/s, shortwave
+>   W/m²→MJ/m²/day; ea from dew point. Runs in the backend container (where `laptop.local` resolves).
+> - **`plant_demand_mm` = ET₀ × Kc × camera sun-fraction** (from `sun_hours.py`) — the two halves of the model meet.
+>   (Enabling fixes: `.env` `SENSOR_API_URL` :8001→:8000; esp32 openmeteo router opened to api-key auth.)
+> - **Next (the join):** region→nearest sensor, **time-dependent for movable pots** (chillis → **West** in the
+>   afternoon); assemble per-plant demand + VPD per micro-climate; reconcile the stale `SENSOR_SENSORS` MAC list.
 
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
@@ -932,6 +867,14 @@ Operations the review UI needs against `photo_ai_suggestions`:
   > resolved** (basil called harvest, not wilt, despite also wilting at midday). **Dill borderline** (real
   > signal `…5 6` but only 1 frame clears 3σ — wispy/small; plates should clear it). `k_sigma` (default 3) is
   > the tunable; left conservative rather than overtuned on one noisy day. Supersedes the old pairwise diff.
+
+- **Water-balance demand side ✅ built & LIVE** (2026-06-08): insolation-from-camera validated
+  (`insolation_validate.py`); per-region **sun-hours** profiler (`sun_hours.py`); **VPD + FAO-56 ET₀**
+  (`water_demand.py`, 10/10 FAO-validated) running on the **live** forecast (`forecast_et0.py`) and sensor proxy;
+  region/control tag export (`export_reference_regions.py`). Supply side: watering detection ✅
+  (`watering_detector.py`), auto-pump TBD; wilt detection prototype (`wilt_alert.py`) — greenness is the right
+  feature, needs a multi-day diurnal baseline. **Remaining: the per-plant join** (region→sensor, time-dependent
+  for the chillis; ET₀ × Kc × sun-fraction; VPD per micro-climate) and the multi-day sun-hours profile.
 
 ---
 
