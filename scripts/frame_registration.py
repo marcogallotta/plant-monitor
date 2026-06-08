@@ -278,11 +278,21 @@ def region_change(ref_bgr, warped_tgt_bgr, region):
 
 
 def load_regions(path=REGIONS_FILE):
-    """Region tags as a flat list of dicts. NOTE: unit_id is NOT unique — a unit
-    can span several regions (e.g. unit 16 has three boxes). Group by unit_id if
-    you need per-unit aggregates."""
+    """Plant region tags as a flat list of dicts. NOTE: unit_id is NOT unique — a
+    unit can span several regions (e.g. unit 16 has three boxes). Group by unit_id
+    if you need per-unit aggregates."""
     with open(path) as f:
         return json.load(f)["regions"]
+
+
+def load_controls(path=REGIONS_FILE):
+    """Fixed NON-plant reference patches (wall, road, railing, sign, glass...).
+    Each is {label, x, y, x2, y2}. These are negative controls: the per-frame
+    component shared across them estimates global reference error (roof/exposure
+    leakage) WITHOUT touching the plant cohort, so a real broad sun-sweep across
+    plants is not erased. Returns [] for an older fixture with no controls."""
+    with open(path) as f:
+        return json.load(f).get("controls", [])
 
 
 # --- CLI demo --------------------------------------------------------------

@@ -650,6 +650,32 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 > why it scales to the 100 m² garden. **Next:** per-region **sun-hours** profile (full-day arc + a few clear
 > days) = the per-plant demand term; combine with the validated global arc (above).
 
+> **SUN-HOURS profiler built + the NEGATIVE-CONTROL refinement validated in principle (2026-06-08,
+> `scripts/sun_hours.py` — PROTOTYPE).** Integrates the per-frame sun/shade signal over a day's arc into
+> per-region **sun-hours** (the demand term), with multi-day averaging. Findings, in order:
+> - **Naïve aggregation is wrong twice.** (1) Subtracting each region's *time-mean* (what `sun_shade` does for
+>   per-frame detection) forces every region to ~50% sun by construction and discards the absolute level the
+>   demand term needs → switched to a **per-region SHADE BASELINE** (low percentile + `--margin`): albedo-robust
+>   but not flattened. (2) The single roof patch leaks a per-frame global term, so I tried removing it — but on
+>   the one validated day that **over-subtracted real sun**: the dawn-shade→midday-sun sweep across the balcony
+>   is **real** (the building shades everything at dawn), and both the plant-cohort common-mode AND the
+>   sun-exposed controls (road/wall/sign — they catch the same midday sun) **deleted the chillis' validated
+>   10:00 sun-arrival**.
+> - **The fix is a PERMANENT-SHADE negative control (ChatGPT's steer, confirmed).** A surface that *never* sees
+>   direct beam moves only with reference error. Marco marked one (`photo_notes` control **"Always shaded"**,
+>   just above the Switchbot). Estimating the global residual from **it alone** (mean-centred → signed) and
+>   subtracting **preserves the chillis' 10:00 sun** while still trimming spurious reference-error sun calls —
+>   the sun-exposed controls and cohort could not. So a clean negative control corrects the leak without eating
+>   plant sun, exactly as predicted.
+> - **Plumbing:** control vs plant tags now flow DB→fixture via `scripts/export_reference_regions.py` (closes
+>   the hand-snapshot gap; `reference_regions.json` carries `regions` + `controls`); `frame_registration.load_controls()`.
+> - **Caveats / default:** the shade control is **n=1 and a narrow strip** (noisy, registration-sensitive), and
+>   it's still **one partial day** (06:00→14:00 local, frames accruing). So the **default is no-residual** (raw
+>   shade baseline, also validated-consistent); `--controls` is the principled refinement. **CHECK AGAIN
+>   TOMORROW (2026-06-09):** rerun on the full daytime arc × the accruing clear days; mark a 2nd always-shaded
+>   patch for n≥2 median robustness; then lock `--margin`/`--base-pct` and promote the per-region sun-hours
+>   numbers into the water-balance demand term.
+
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
 `https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see
