@@ -87,8 +87,20 @@ class PhotoOut(BaseModel):
     growing_units: list[GrowingUnitBrief] = Field(default_factory=list)
     labels: list[LabelOut] = Field(default_factory=list)
     rotation: int = 0
+    stab_matrix: Optional[list[float]] = None
+    stab_ref_w: Optional[int] = None
+    stab_ref_h: Optional[int] = None
+    stab_status: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+    @field_validator("stab_matrix")
+    @classmethod
+    def _stab_matrix_well_formed(cls, v):
+        # A transform is a flat 2x3 affine (6 floats). Anything else (a bad/legacy
+        # row) is treated as "no transform" rather than shipped to the client or
+        # raising on the whole listing — the dashboard falls back to the raw frame.
+        return v if v is not None and len(v) == 6 else None
 
 
 class PhotoListOut(BaseModel):

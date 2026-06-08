@@ -59,6 +59,13 @@ class Photo(Base):
     content_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     location_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("locations.id"), nullable=True)
     rotation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    # Tilt/drift stabilization (see migration 0014 + scripts/compute_stabilization.py).
+    # stab_matrix: cv2 2x3 affine target->reference, row-major [m00,m01,m02,m10,m11,m12].
+    # NULL = not stabilizable (non-Pi or registration failed) -> client uses raw frame.
+    stab_matrix: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    stab_ref_w: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    stab_ref_h: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    stab_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     location: Mapped[Optional["Location"]] = relationship("Location", lazy="raise", viewonly=True)

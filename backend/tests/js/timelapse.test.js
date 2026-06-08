@@ -13,6 +13,7 @@ beforeAll(async () => {
   document.body.innerHTML = `
     <div id="tl-empty" style="display:none"></div>
     <img id="tl-img" style="display:none" src="">
+    <canvas id="tl-canvas" style="display:none"></canvas>
     <div id="tl-label" style="display:none"></div>
     <span id="tl-counter"></span>
     <button id="tl-prev" disabled></button>
@@ -20,6 +21,7 @@ beforeAll(async () => {
     <button id="tl-next" disabled></button>
     <input id="tl-speed" type="range" value="2">
     <span id="tl-fps"></span>
+    <label id="tl-stab-label" style="display:none"><input type="checkbox" id="tl-stab" checked></label>
   `;
 
   ({tlInit, tlPrev, tlNext, tlPlayPause} = await import('@/timelapse.js'));
@@ -32,6 +34,7 @@ beforeEach(() => {
   if (state.tlTimer) { clearInterval(state.tlTimer); state.tlTimer = null; }
   document.getElementById('tl-play').textContent = '▶ Play';
   document.getElementById('tl-play').classList.remove('active');
+  document.getElementById('tl-stab').checked = true;
   vi.useFakeTimers();
 });
 
@@ -74,6 +77,36 @@ describe('tlInit', () => {
     state.allPhotos = PHOTOS;
     tlInit();
     expect(document.getElementById('tl-counter').textContent).toBe('1 / 3');
+  });
+});
+
+// ── night-frame filtering when stabilizing ────────────────
+
+describe('stabilized timelapse skips night frames', () => {
+  const M = [1, 0, 0, 0, 1, 0];
+  const MIXED = [
+    {id: 1, url: '/photos/day1.jpg',   captured_at: '2026-01-01T10:00:00Z', stab_matrix: M, stab_ref_w: 1600, stab_ref_h: 900},
+    {id: 2, url: '/photos/night.jpg',  captured_at: '2026-01-01T22:00:00Z'},  // no transform = night
+    {id: 3, url: '/photos/day2.jpg',   captured_at: '2026-01-02T10:00:00Z', stab_matrix: M, stab_ref_w: 1600, stab_ref_h: 900},
+  ];
+
+  it('plays only stabilizable frames and the night one is dropped', () => {
+    state.allPhotos = MIXED.slice();
+    document.getElementById('tl-stab').checked = true;
+    tlInit();
+    expect(document.getElementById('tl-stab-label').style.display).toBe('');
+    expect(document.getElementById('tl-counter').textContent).toBe('1 / 2');
+    tlNext();
+    expect(document.getElementById('tl-counter').textContent).toBe('2 / 2');
+  });
+
+  it('keeps the same frame set when stabilization is toggled off (only warp changes)', () => {
+    state.allPhotos = MIXED.slice();
+    document.getElementById('tl-stab').checked = false;
+    tlInit();
+    // Membership is stable across the toggle: the night frame stays dropped, the
+    // toggle only controls warping — it must not re-introduce filtered-out frames.
+    expect(document.getElementById('tl-counter').textContent).toBe('1 / 2');
   });
 });
 
