@@ -715,12 +715,16 @@ observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot cle
 >   rocket(full sun) 5.3, basil(part shade) 3.6, mint(shaded) 1.6 mm/day.
 > - **Validation:** `test_water_demand.py` checks each component against FAO-56's own published values
 >   (es(20)=2.338, Δ(20)=0.1448, P@1800 m=81.8, γ=0.054, Ra=32.2 for Example 8) — 10/10.
-> - **Not yet wired (needs live data):** the **forecast endpoint requires session auth** on the esp32 server
->   (`main.py:364` mounts `/openmeteo/weather` under `require_session`, not the API key — sensors are reachable,
->   forecast 401s on the key), and the `.env` `SENSOR_API_URL` was pointing at `:8001` (our own backend) — fixed
->   to `:8000`. **Next:** allow api-key on the openmeteo router (or a login flow), reconcile the stale
->   `SENSOR_SENSORS` MAC list (live `EC:2E:84:06:4E:9A` isn't in it), then a thin fetch/join adapter:
->   forecast→ET₀ + per-sensor→VPD + region→sun-fraction.
+> - **Now LIVE (2026-06-08 eve):** `.env` `SENSOR_API_URL` fixed `:8001`→`:8000` (it pointed at our own backend),
+>   and the esp32 openmeteo router was opened to api-key auth (was session-only). VPD verified on the live sensor
+>   proxy (wall ~3.6 / railing ~2.7 kPa as it heated up); **ET₀ now runs on the live forecast** via
+>   `scripts/forecast_et0.py` (fetch `/openmeteo/weather` → daily aggregate → FAO-56): **5.0–5.4 mm/day** across
+>   06-05→06-08, the expected early-June Aosta range. Unit gotchas handled: Open-Meteo `wind_speed_10m` is km/h
+>   (→m/s), `shortwave_radiation` is W/m² (→MJ/m²/day); ea from `dew_point_2m`. Runs inside the backend container
+>   (where `laptop.local` resolves), like `export_reference_regions.py`.
+> - **Next (the join):** map each region→nearest sensor — **time-dependent for movable pots** (the chillis move
+>   to the **West** micro-climate in the afternoon) — then assemble per-plant demand = ET₀ × Kc × camera
+>   sun-fraction, with VPD per micro-climate. Reconcile the stale `SENSOR_SENSORS` MAC list (a live MAC wasn't in it).
 
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
