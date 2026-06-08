@@ -701,6 +701,27 @@ wind_gusts_10m, shortwave_radiation, cloud_cover`. These are **exactly the refer
 (camera)** × a crop factor. `shortwave_radiation` + `cloud_cover` are the **forecast pair** to the camera's
 observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot clear day.
 
+> **DEMAND-SIDE MATH BUILT (2026-06-08 eve, `scripts/water_demand.py` + `test_water_demand.py`).** The
+> evaporative-demand half of the water-balance model, as pure functions ready to wire to live data:
+> - **VPD** (vapour-pressure deficit, kPa) from temperature + humidity **alone** — the immediate demand signal
+>   the SwitchBot sensors already give per micro-climate. Validated live: the **wall** sensor (30.5 °C/27 %)
+>   read **VPD 3.19 kPa** vs the **railing** sensor (23.1 °C/47 %) **1.50 kPa** — wall plants face >2× the
+>   evaporative pull at the same instant, so demand must map each region to its **nearest** sensor, not a garden mean.
+> - **ET₀** (FAO-56 Penman-Monteith reference evapotranspiration, mm/day) from the forecast vars
+>   (`temperature_2m`, `relative_humidity_2m`/`dew_point_2m`, `wind_speed_10m`, `shortwave_radiation`), with the
+>   full radiation chain (Ra from lat/DOY → Rso → Rn). Defaults to the Aosta site (45.74 °N, 580 m).
+> - **`plant_demand_mm` = ET₀ × Kc × sun-fraction** — where **sun-fraction is the camera term from
+>   `sun_hours.py`**, so the two halves of the model finally meet. Demo (clear Aosta summer day, ET₀ ≈ 5.9 mm):
+>   rocket(full sun) 5.3, basil(part shade) 3.6, mint(shaded) 1.6 mm/day.
+> - **Validation:** `test_water_demand.py` checks each component against FAO-56's own published values
+>   (es(20)=2.338, Δ(20)=0.1448, P@1800 m=81.8, γ=0.054, Ra=32.2 for Example 8) — 10/10.
+> - **Not yet wired (needs live data):** the **forecast endpoint requires session auth** on the esp32 server
+>   (`main.py:364` mounts `/openmeteo/weather` under `require_session`, not the API key — sensors are reachable,
+>   forecast 401s on the key), and the `.env` `SENSOR_API_URL` was pointing at `:8001` (our own backend) — fixed
+>   to `:8000`. **Next:** allow api-key on the openmeteo router (or a login flow), reconcile the stale
+>   `SENSOR_SENSORS` MAC list (live `EC:2E:84:06:4E:9A` isn't in it), then a thin fetch/join adapter:
+>   forecast→ET₀ + per-sensor→VPD + region→sun-fraction.
+
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
 `GET /sensors/{id}/readings`, ~every 3 h). Four channels: **`moisture_pct`, `light_lux`, `temperature_c`,
