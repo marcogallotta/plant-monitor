@@ -32,9 +32,22 @@ import scripts.water_demand as wd
 CHILLI_UNITS = {34, 35, 36}
 DEFAULT_SENSOR = "South"            # railing, placeholder for non-chilli pots
 CHILLI_SENSOR = "West"
-KC_DEFAULT = 1.0                    # leafy herbs, FAO-56 mid-season (provisional)
-KC_BY_NAME = {}                    # per-species overrides go here when calibrated
+KC_DEFAULT = 1.0                    # leafy herbs, FAO-56 Table 12 mid-season (provisional)
+# Crop coefficients by species keyword (FAO-56 Table 12, mid-season, provisional):
+# leafy herbs ~1.0; woody/sclerophyll perennials transpire less ~0.8; peppers ~1.1.
+KC_CHILLI = (("hangijiao", "birdseye", "bird", "chilli", "chili"), 1.1)
+KC_WOODY = (("rosemary", "sage", "thyme", "tarragon"), 0.8)
+KC_LEMONGRASS = (("lemongrass",), 0.9)
 VPD_STRESS_KPA = 2.5               # above this = high evaporative stress (flag, not action)
+
+
+def kc_for_name(name: str) -> float:
+    """Provisional FAO-56 Kc_mid by species keyword in the unit name."""
+    n = (name or "").lower()
+    for kws, kc in (KC_CHILLI, KC_WOODY, KC_LEMONGRASS):
+        if any(k in n for k in kws):
+            return kc
+    return KC_DEFAULT
 
 
 def unit_sensor(unit_id: int) -> str:

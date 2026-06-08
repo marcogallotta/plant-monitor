@@ -47,6 +47,15 @@ def test_stress_flag_on_high_vpd():
     assert hi["stress"] is True and lo["stress"] is False
 
 
+def test_kc_by_species_keyword():
+    approx(wb.kc_for_name("Birdseye"), 1.1)       # chilli
+    approx(wb.kc_for_name("Hangijiao4"), 1.1)
+    approx(wb.kc_for_name("Rosemary"), 0.8)       # woody perennial
+    approx(wb.kc_for_name("Lemongrass"), 0.9)
+    approx(wb.kc_for_name("Rocket"), 1.0)         # leafy default
+    approx(wb.kc_for_name("Peppermint"), 1.0)     # NOT a pepper (keyword regression)
+
+
 def test_missing_sensor_vpd_is_none_not_crash():
     r = wb.assemble(5.0, {1: 0.5}, {})[0]          # no VPD for the unit's sensor
     assert r["vpd_kpa"] is None and r["stress"] is False

@@ -676,8 +676,14 @@ observed insolation → **forward** sun exposure, i.e. dose *ahead* of a hot cle
 >   environments). Demo: 1.6–4.9 mm/day, chillis routed to West. **Provisional:** region→sensor map (chillis
 >   34/35/36 → West after their sun-driven (variable-time) move, rest → South placeholder) and Kc=1.0 — no in-frame
 >   sensor positions yet.
-> - **Remaining:** real region→sensor positions; per-species Kc; the live orchestration gluing host `sun_hours`
->   + container `forecast_et0`/VPD into the join's inputs; the multi-day sun-hours profile.
+> - **LIVE orchestration ✅ (`scripts/water_balance_live.py`, 2026-06-08).** Glues host `sun_hours` (sun-fraction =
+>   sun-hours / captured-arc) + container ET₀ (`forecast_et0`) + per-sensor VPD into a real per-plant table. First
+>   live run (ET₀ 5.42, hot day): demand **1.3–3.9 mm/day**, all stress-flagged; **West 4.5 kPa** (chilli window) vs
+>   South 2.5. Per-species **Kc** now applied by name (`kc_for_name`: chilli 1.1, woody 0.8, leafy 1.0). Two caveats:
+>   (i) **PRELIMINARY** — partial-day arc (sun-fraction is of *observed* daylight); (ii) the **chilli sun-fraction is
+>   contaminated** by the post-move vacated spot (needs the move-inference to use morning-only) — see sun-chase note.
+> - **Remaining:** real region→sensor positions; infer the chilli move (morning-only chilli sun); the multi-day
+>   sun-hours profile.
 
 **Ground-truth calibration anchor: a Xiaomi Flower Care in the Cilantro pot.** One pot already has a soil
 probe (sensor `Cilantro`, type `xiaomi`, id `3ee7f8a3-9811-45ce-8296-c909a104952b`, on the same esp32 server;
