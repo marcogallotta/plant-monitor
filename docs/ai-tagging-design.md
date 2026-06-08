@@ -573,6 +573,21 @@ midday wilt automatically.
 > (drydown slows as soil dries — not yet modelled), FlowerCare nonlinearity, n=12. **Next:** model rate as
 > f(VPD, current-moisture) + leaf-area; then the predictive balance (`moisture(t)` forecast → "water zone X by Yh")
 > and, with the auto-pump as known input, close the loop. (A focused `docs/irrigation.md` may be warranted later.)
+>
+> **Architecture refinement (Marco, 2026-06-08 eve) — sparse by design:**
+> - **Probes CALIBRATE, they don't continuously sense.** A probe establishes `k` for a soil-type/zone *once*; the
+>   zone then runs open-loop on VPD + `k` + static sun-map. So: a *handful* of probes to cover the garden's soil
+>   variety (+ maybe one drift-anchor), **not one per zone**. Caveat: ground ≠ pot (soil/drainage/root depth), so
+>   `k` must be calibrated *in ground*, not transferred from the balcony pot — the method transfers, the constant doesn't.
+> - **Leaf mass is the missing multiplier** (= FAO-56 `Kc`/canopy): `rate = k · VPD · canopy · Ks(moisture)`. The
+>   cilantro's changing leaf area over the 14 days is likely much of the R²=0.39 residual.
+> - **The canopy term can be COARSE and manual/tagged — it does NOT need harvest-grade accuracy.** 3 buckets
+>   (sparse/medium/full) suffice: the overhead **green-coverage that was useless for harvest precision is plenty**
+>   for "how much canopy is transpiring" (a slow level, not a precise event); or a manual toggle ("full" / "cut
+>   back"). **The precision wall that killed vision-for-cooking doesn't apply** — water a zone 20% off and the plant
+>   is fine; mis-read a 50 g harvest and the cooking answer is wrong. Irrigation sits on the forgiving side, which
+>   is why it's the viable product. **Scalable stack:** few calibration probes + few micro-climate sensors + free
+>   forecast + static sun-maps + a coarse (manual-or-tagged) per-zone canopy level + valves.
 
 The single-image under-vs-over question is the wrong frame. The right frame is a **per-plant water-balance
 estimate over time**, fusing signals already (or soon) available:
