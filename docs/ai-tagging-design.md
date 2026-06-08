@@ -549,45 +549,12 @@ midday wilt automatically.
 
 ### Where this is really going: a per-plant WATER-BALANCE estimator + closed-loop irrigation
 
-> **THE PRIMARY PRODUCT (refocused 2026-06-08 eve).** Per nursery.md, **irrigation is the highest-leverage piece of
-> the whole stack** — watering is the one cost that scales *linearly* with plant count and does NOT compress with
-> skill, so automating it is what makes the planned ~100 m² (2026) → 300–500 m² solo garden feasible (scale on
-> infrastructure, not hands). Unlike the cooking-read, it **does not depend on the vision/condition reads that keep
-> failing.** Vision/tagging is the *supporting* layer (right identity → right Kc).
->
-> **Scaling constraint (Marco): cameras may NOT scale broadly across many zones.** So the demand model can't rely on
-> a camera per zone. But a fixed bed's sun exposure is **geometry-driven and slow** → a *measure-once-reuse* static
-> per-zone sun-map (solar geometry + a one-time shade survey, refreshed seasonally; camera as a calibration
-> instrument, not infrastructure). The scalable stack = **sparse soil probes + micro-climate sensors + free forecast
-> + static sun-maps + valves + the balance model**; cameras optional/few.
->
-> **CRACK #1 + #1b — VALIDATED that demand drives soil drydown (`scripts/soil_drydown.py`, 2026-06-08).** Tested on
-> the one instrumented pot (Cilantro Flower Care, 14 days / 12 drydown segments between waterings): does measured
-> moisture loss track demand? **Yes.** Drydown rate vs proxy (Spearman): air temp **+0.49**, **VPD +0.71** (the
-> winner — pot temp + ambient RH, hourly & pot-local), daily ET₀ **+0.52** (hurt by daily resolution + not
-> pot-local). Magnitude is even clearer: a cool spell (20 °C) dried at **1.8 %/day** vs **24–34 %/day** on hot days
-> (~15×). First **depletion model**: `drydown ≈ 13.5·VPD − 10.5 %moisture/day` (R²=0.39; monotonic but noisy/non-
-> linear). **So `k` = a per-zone depletion coefficient (%/day per kPa VPD): calibrate it with a probe, then DRIVE
-> every unprobed zone's drydown from sensor VPD — the sparse-sensing scale path.** Honest gaps before precision
-> dosing: pot-local RH (used the railing sensor), changing leaf area (Kc/growth), the **moisture-dependent rate**
-> (drydown slows as soil dries — not yet modelled), FlowerCare nonlinearity, n=12. **Next:** model rate as
-> f(VPD, current-moisture) + leaf-area; then the predictive balance (`moisture(t)` forecast → "water zone X by Yh")
-> and, with the auto-pump as known input, close the loop. (A focused `docs/irrigation.md` may be warranted later.)
->
-> **Architecture refinement (Marco, 2026-06-08 eve) — sparse by design:**
-> - **Probes CALIBRATE, they don't continuously sense.** A probe establishes `k` for a soil-type/zone *once*; the
->   zone then runs open-loop on VPD + `k` + static sun-map. So: a *handful* of probes to cover the garden's soil
->   variety (+ maybe one drift-anchor), **not one per zone**. Caveat: ground ≠ pot (soil/drainage/root depth), so
->   `k` must be calibrated *in ground*, not transferred from the balcony pot — the method transfers, the constant doesn't.
-> - **Leaf mass is the missing multiplier** (= FAO-56 `Kc`/canopy): `rate = k · VPD · canopy · Ks(moisture)`. The
->   cilantro's changing leaf area over the 14 days is likely much of the R²=0.39 residual.
-> - **The canopy term can be COARSE and manual/tagged — it does NOT need harvest-grade accuracy.** 3 buckets
->   (sparse/medium/full) suffice: the overhead **green-coverage that was useless for harvest precision is plenty**
->   for "how much canopy is transpiring" (a slow level, not a precise event); or a manual toggle ("full" / "cut
->   back"). **The precision wall that killed vision-for-cooking doesn't apply** — water a zone 20% off and the plant
->   is fine; mis-read a 50 g harvest and the cooking answer is wrong. Irrigation sits on the forgiving side, which
->   is why it's the viable product. **Scalable stack:** few calibration probes + few micro-climate sensors + free
->   forecast + static sun-maps + a coarse (manual-or-tagged) per-zone canopy level + valves.
+> **➜ MOVED — irrigation / water-balance is now the PRIMARY product and has its own focused doc:
+> [irrigation.md](irrigation.md)** (the model `rate = k·VPD·canopy·Ks(moisture)`, the validated drydown cracks
+> #1/#1b, the sparse-sensing architecture — probes calibrate not sense, coarse manual/tagged canopy, static
+> sun-maps not per-zone cameras — scaling, supply side, next steps). Vision/tagging (this doc) is the **supporting**
+> layer; the camera-derived *inputs* to the water model (insolation-from-camera, per-region sun-hours) remain below
+> as vision technique. The rest of this section is the original water-balance reasoning, retained as background.
 
 The single-image under-vs-over question is the wrong frame. The right frame is a **per-plant water-balance
 estimate over time**, fusing signals already (or soon) available:
