@@ -272,6 +272,27 @@ garbage.
 
 ## Phase 1 — backfill pipeline (Batch API)
 
+> **TAGGING FEASIBILITY — validated, and the rule is PRIORS-FIRST (2026-06-08 eve).** Supporting layer for
+> irrigation (right identity → right Kc → right demand), not a headline — but it now works where the May run
+> failed (44% precision, 256px grids). Blind held-out test: sampled confirmed single-unit phone photos, hid the
+> labels, hand-read them (Opus = a generous ceiling), then revealed.
+> - **Distinctive plants: ~perfect.** Basil, rosemary, lemongrass, mint, tarragon, chillis — all nailed at full-res.
+> - **The decisive historical failure (lemongrass ↔ garlic-chives swap) DID NOT recur:** 4/4 lemongrass, **zero
+>   swaps**, no over-prediction — separated by **wide blades + midrib + bigger pot + red base + count=1**, not "looks
+>   grassy."
+> - **Every miss was PIXELS-OVER-PRIORS, and each is fixed by a cheap relational prior I already had:**
+>   - parsley↔cilantro → **date**: on 2026-05-27 cilantro was seedlings (unit created 06-06), so a big plant *can't*
+>     be cilantro. Date alone flips it.
+>   - the thin-allium trio (welsh onion / garlic chives / chives), 0/3 on pixels → **stage + relative thickness**:
+>     garlic chives = mature, welsh onion = at seedling stage *now*, chives = finest wisps. With that state, all 3
+>     flip correct (→ 7/7). At sprout stage the pixels are genuinely identical; the answer lives in the inventory state.
+> - **Pipeline rule (non-negotiable):** feed the model the **current inventory STATE** per plant (stage/size,
+>   position/pot, count) + the **photo date**, and let it **rule out candidates by prior BEFORE leaf-shape voting**;
+>   single-pick only when distinctive; **options + agreement gate** for the genuinely date-ambiguous (e.g. the two
+>   basil varieties at equal age). The Pi corpus supplies position + relative-size-over-time; plants-data.md the rest.
+> - **Caveats:** n small; production model (Sonnet) may trail Opus; this validates *feasibility + the rule*, not a
+>   scaled precision number. Build the pipeline below with the date/state gate as a first-class prior, not an afterthought.
+
 0. **Curate inputs (done above):** closed set + container map confirmed; clean DB dupes first.
 1. **Group the 901 by session** (capture-time gaps, ~15 min) for ordering + provenance only.
    Send **individual 1024px images, one per request** — *not* a downscaled grid (this kills
