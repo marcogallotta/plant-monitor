@@ -566,6 +566,20 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 > Pi**, every plate carries the data to retry the radiometric insolation read AND to check AWB drift on the
 > real frames. Still TODO: (b) spatial sun/shadow detection and (c) the smoothed-lux reference.
 
+> **Validation design — use the white sensor cap as a co-located reference (2026-06-08).** Two traps in
+> validating camera insolation against the Flower Care `light_lux`: (1) lux is a **point** sensor — when it
+> crosses in/out of a sunfleck its reading swings ×128 (612→78 489) while the region's mean barely moves, so
+> region-luminance-vs-point-lux is a **scale mismatch**; (2) foliage albedo varies. **Both are solved by the
+> probe itself:** the Flower Care's **white cap is visible from overhead** at **~(0.756, 0.606)** in the
+> canonical reference frame (cilantro-root pot, unit 41, by the shade-net edge) — a **fixed-albedo white
+> patch sitting exactly where the lux is measured**. So the clean experiment is **`cap_luminance /
+> (exposure×gain)` vs `light_lux`**: same point, constant reflectance, exposure divided out. If that doesn't
+> correlate, the radiometric correction is broken; if it does, it's validated on the cleanest possible target
+> before trusting it on foliage. (Locate the cap per-frame via registration; watch for the adjacent seedling
+> /shadow occluding it; the white may clip in full sun — the logged exposure flags that.) Corollary: for the
+> *plant's* water demand the **camera region-average is the better measure** anyway (canopy-integrated), with
+> the point-lux only a coarse level-calibrator — not the per-frame ground truth.
+
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
 `https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see
