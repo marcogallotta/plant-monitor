@@ -676,6 +676,20 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 >   patch for n≥2 median robustness; then lock `--margin`/`--base-pct` and promote the per-region sun-hours
 >   numbers into the water-balance demand term.
 
+> **Negative-control follow-up — no truly-fixed shade surface exists here, so the GLOBAL control is a dead end
+> (2026-06-08 eve).** Tried a 2nd always-shade control for n≥2: it was a **frame-edge strip** (`x2≈1.0`) and ran
+> **2× the dev-std** of the interior one (0.54 vs 0.26 on log-ratio) — warped frames have junk borders — so it
+> *degraded* the estimate (lost a chilli's validated 10:00 sun). Added an **edge guard** (`EDGE_MARGIN`, reject
+> controls touching any side) → auto-drops it, interior control restored. But the deeper point (Marco): **besides
+> the dappling shade-net there is no surface in this scene that is truly always-shaded** — every candidate either
+> sees direct sun at some hour or is a noisy thin strip. So the global negative-control refinement is **not viable
+> here**, and that's fine: the **default `no-residual` per-region shade-baseline needs no fixed control** and is
+> the validated-consistent keeper. **The better reframe = a per-region LOCAL reference (pot rim / bare soil by
+> each plant):** fixed (doesn't grow/wilt), so its brightness swing is pure local illumination — a cleaner sun
+> proxy than the foliage, and immune to the **multi-day canopy-drift** that will contaminate whole-region
+> brightness over time (matters for the seasonal profile, not single-day). Caveats: rims are thin and get
+> occluded as plants fill in. **Deferred to the multi-day build**; single-day sun-hours stands on the default.
+
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
 `https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see

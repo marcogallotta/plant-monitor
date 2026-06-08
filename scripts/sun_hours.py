@@ -38,6 +38,16 @@ TS_FMT = "%Y-%m-%dT%H%M%SZ"
 # never sees direct beam moves only with roof/exposure leak. Sun-exposed controls
 # (road, wall, sign) catch the real midday sun and would subtract it from plants.
 SHADE_CONTROL_MATCH = "always shad"
+# Frames are warped to the reference, so their EDGES catch black border / off-scene
+# pixels — a control touching the edge is noisy garbage (verified: a frame-edge
+# shade strip ran 2x the dev-std of an interior one). Reject controls within this
+# normalised margin of any side.
+EDGE_MARGIN = 0.02
+
+
+def _interior(c):
+    x0, y0, x1, y1 = fr.norm_corners(c)
+    return x0 > EDGE_MARGIN and y0 > EDGE_MARGIN and x1 < 1 - EDGE_MARGIN and y1 < 1 - EDGE_MARGIN
 
 
 def frame_time(path):
@@ -172,7 +182,7 @@ def main():
     # balcony is building-shaded at dawn), so raw per-region shade-baseline (no
     # residual) is validated-consistent.
     controls = [c for c in fr.load_controls()
-                if SHADE_CONTROL_MATCH in c["label"].lower()] if a.controls else []
+                if SHADE_CONTROL_MATCH in c["label"].lower() and _interior(c)] if a.controls else []
     if a.common_mode:
         print("[global residual: plant-cohort common-mode (--common-mode, experimental)]")
     elif a.controls and controls:
