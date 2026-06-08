@@ -54,6 +54,23 @@ services:
     volumes:
       - ./pi:/app
 
+  # Offline stabilization worker (OpenCV); run on a schedule, never with `up`.
+  #   docker compose run --rm stabilizer
+  # registers pending/new Pi frames onto the reference and writes their transforms.
+  stabilizer:
+    build:
+      context: .
+      dockerfile: Dockerfile.stabilizer
+    profiles: ["tools"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/plantmonitoring
+    volumes:
+      - ./data/photos:/app/data/photos
+      - ./scripts:/app/scripts
+    depends_on:
+      db:
+        condition: service_healthy
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}

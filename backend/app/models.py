@@ -66,6 +66,9 @@ class Photo(Base):
     stab_ref_w: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     stab_ref_h: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     stab_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Fingerprint of the algorithm/params that produced stab_matrix; a mismatch
+    # tells the incremental worker to recompute (see scripts/stabilize_core.py).
+    stab_version: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     location: Mapped[Optional["Location"]] = relationship("Location", lazy="raise", viewonly=True)

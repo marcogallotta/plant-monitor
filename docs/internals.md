@@ -372,6 +372,30 @@ Upload attempts are retried if the backend is unreachable. Photos are cleaned up
 
 ---
 
+## Stabilization worker (tilt/drift correction)
+
+The Pi mount drifts, so timelapse/compare are stabilized by warping each frame onto a canonical reference. The transform is computed **offline** and stored per photo; the dashboard warps client-side (`static/stabilize.js`).
+
+**Why a separate worker:** registration uses OpenCV (ORB+RANSAC), which is deliberately **not** in the lean API image, and it's too heavy/failure-prone for the request path. So:
+
+- `POST /photos` only **marks** new Pi frames `stab_status="pending"` (`_upsert_photo_record`). No registration in the request.
+- A dedicated worker image (`Dockerfile.stabilizer`, repo-root context so it bundles `backend/` + `scripts/` + `opencv-python-headless`) runs `scripts/compute_stabilization.py --apply`. It's the `stabilizer` Compose service under the `tools` profile, so `up` never starts it.
+- A systemd **user** timer runs it hourly, after capture:
+  ```sh
+  cp scripts/plant-stabilize.{service,timer} ~/.config/systemd/user/
+  systemctl --user enable --now plant-stabilize.timer
+  ```
+
+**Incremental by default.** `compute_transforms(paths, ref, prior=…)` (in `scripts/stabilize_core.py`) reuses frames whose prior status is settled (`FINAL_STATUSES`) and only (re)computes `pending`/new ones, decoding just the new frame + its neighbour + the reference. `compute_stabilization.py` builds `prior` from the DB and writes only the rows it recomputed.
+
+**Auto-invalidation.** Each computed row stores a `stab_version` — a `fingerprint()` over `ALGO_REV` + the tunables (`NIGHT_LUMA`, `RESID_GATE_FRAC`, `WIDEN`, `WORK_WIDTH`) + the reference frame. A frame whose stored fingerprint differs from the current one is treated as stale and recomputed, so changing a threshold/reference (or bumping `ALGO_REV` for a logic change) reprocesses everything automatically — no need to remember `--full`. `--full` still forces a from-scratch recompute on demand.
+
+**Pipeline** (`stabilize_core.py`): night frames (mean luminance `< NIGHT_LUMA`) are dropped — they break matching across the overnight gap; daytime frames chain straight across the night. Each daytime frame registers onto the nearest already-anchored neighbour (widening past weak dusk hops), then a **residual-to-reference quality gate** drops frames a weak cross-night hop mis-aligned (`low_quality`) so the timeline can't snap. Statuses: `anchor`, `registered`, `night`, `failed`, `low_quality`; only `anchor`/`registered` carry a matrix.
+
+`scripts/test_stabilization.py` covers the core standalone (cv2 isn't in the backend test image) with committed compressed fixtures in `scripts/testdata/frames/`, including the incremental path and a max-consecutive-jump regression check.
+
+---
+
 ## Adding a new stage
 
 1. Add the sub-stage to `docs/design-stage2.md` (or the relevant design doc).

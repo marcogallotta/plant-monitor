@@ -1,0 +1,11 @@
+# Build context for Dockerfile.stabilizer is the repo root — keep it lean.
+.git
+.claude
+.venv
+data
+node_modules
+backend/node_modules
+**/__pycache__
+**/.pytest_cache
+*.pyc
+e2e

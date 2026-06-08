@@ -12,7 +12,7 @@ def test_photos_columns(engine):
         "id", "filename", "captured_at", "storage_path", "metadata_path", "created_at",
         "source", "photo_type", "original_filename", "original_size_bytes", "content_hash",
         "location_id", "rotation",
-        "stab_matrix", "stab_ref_w", "stab_ref_h", "stab_status",
+        "stab_matrix", "stab_ref_w", "stab_ref_h", "stab_status", "stab_version",
     }
 
 

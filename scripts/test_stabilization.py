@@ -152,6 +152,66 @@ def test_real_kept_frames_are_all_registered():
             assert r["status"] in ("anchor", "registered"), r["status"]
 
 
+def _prior_from(records, **overrides):
+    prior = {}
+    for r in records:
+        name = os.path.basename(str(r["path"]))
+        prior[name] = {
+            "status": r["status"],
+            "matrix": None if r["matrix"] is None else r["matrix"].reshape(-1).tolist(),
+            "version": r["version"],
+        }
+    prior.update(overrides)
+    return prior
+
+
+def test_incremental_recomputes_only_pending_frames():
+    paths = _fixtures()
+    full = sc.compute_transforms(paths, REFERENCE)
+    target = next(r for r in full if r["status"] == "registered")
+    tname = os.path.basename(str(target["path"]))
+    other = next(r for r in full if r["status"] == "registered"
+                 and os.path.basename(str(r["path"])) != tname)
+    oname = os.path.basename(str(other["path"]))
+
+    # Mark one registered frame 'pending' (simulating a freshly-uploaded frame).
+    prior = _prior_from(full, **{tname: {"status": "pending", "matrix": None}})
+    inc = _by_name(sc.compute_transforms(paths, REFERENCE, prior=prior))
+
+    # The pending frame is recomputed to the same transform...
+    assert inc[tname]["status"] == "registered"
+    assert np.allclose(inc[tname]["matrix"], target["matrix"], atol=1e-2)
+    # ...and an untouched frame is reused exactly from prior (not re-registered).
+    assert np.array_equal(inc[oname]["matrix"],
+                          np.float32(prior[oname]["matrix"]).reshape(2, 3))
+
+
+def test_incremental_all_pending_matches_full_compute():
+    paths = _fixtures()
+    full = sc.compute_transforms(paths, REFERENCE)
+    prior = {os.path.basename(str(r["path"])): {"status": "pending", "matrix": None}
+             for r in full}
+    inc = sc.compute_transforms(paths, REFERENCE, prior=prior)
+    assert [r["status"] for r in inc] == [r["status"] for r in full]
+
+
+def test_stale_fingerprint_forces_recompute():
+    # A settled prior with a different fingerprint (e.g. after a threshold/reference
+    # change) must NOT be reused — it's recomputed with the current fingerprint.
+    paths = _fixtures()
+    full = sc.compute_transforms(paths, REFERENCE)
+    target = next(r for r in full if r["status"] == "registered")
+    tname = os.path.basename(str(target["path"]))
+    prior = _prior_from(full)
+    for entry in prior.values():
+        entry["version"] = "stale-fp"            # simulate an older algorithm/params
+    assert sc.needs_recompute(prior[tname], sc.fingerprint(REFERENCE))
+    inc = _by_name(sc.compute_transforms(paths, REFERENCE, prior=prior))
+    assert inc[tname]["status"] == "registered"
+    assert inc[tname]["version"] == sc.fingerprint(REFERENCE)
+    assert np.allclose(inc[tname]["matrix"], target["matrix"], atol=1e-2)
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     passed = skipped = failed = 0

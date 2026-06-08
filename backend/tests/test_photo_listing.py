@@ -336,6 +336,24 @@ def test_pi_upload_sets_source_pi(client, isolated_photos_dir):
     assert data["photos"][0]["source"] == "pi"
 
 
+def test_pi_upload_marks_stabilization_pending(client, isolated_photos_dir):
+    # New Pi frames are queued for the stabilizer worker (registration is too
+    # heavy for the request path); the dashboard shows them raw until processed.
+    import json as _json
+    stem = "2026-05-26T100000Z"
+    meta_bytes = _json.dumps({
+        "captured_at": "2026-05-26T10:00:00Z",
+        "filename": f"{stem}.jpg",
+    }).encode()
+    client.post("/photos", files={
+        "image": (f"{stem}.jpg", b"FAKEIMAGE", "image/jpeg"),
+        "metadata": (f"{stem}.json", meta_bytes, "application/json"),
+    })
+    p = client.get("/photos").json()["photos"][0]
+    assert p["stab_status"] == "pending"
+    assert p["stab_matrix"] is None
+
+
 # --- stabilization transform (tilt/drift correction) ---
 
 def test_list_photos_includes_stabilization(client, db_session):

@@ -346,6 +346,9 @@ def _upsert_photo_record(db: Session, stem: str, meta: dict) -> None:
         storage_path=str(PHOTOS_DIR / f"{stem}.jpg"),
         metadata_path=str(PHOTOS_DIR / f"{stem}.json"),
         source="pi",
+        # Mark for the stabilizer worker; registration is too heavy for the
+        # request path, so it's done eventually (see scripts/compute_stabilization.py).
+        stab_status="pending",
     ))
     db.flush()
 

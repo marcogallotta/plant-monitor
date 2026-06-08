@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly Pi frame stabilization (runs after the hourly capture)
+
+[Timer]
+# Capture is hourly on the hour; run a little after so the new frame has uploaded.
+OnCalendar=*:10
+Persistent=true
+
+[Install]
+WantedBy=timers.target

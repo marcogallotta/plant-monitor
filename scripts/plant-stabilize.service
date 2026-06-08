@@ -1,0 +1,13 @@
+[Unit]
+Description=Stabilize new Pi overhead frames (register onto the reference)
+Documentation=https://github.com/  # see docs/internals.md "Stabilization worker"
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/plant-monitoring
+# Incremental: only pending/new frames are registered + written.
+ExecStart=/usr/bin/docker compose run --rm stabilizer
+
+[Install]
+WantedBy=default.target

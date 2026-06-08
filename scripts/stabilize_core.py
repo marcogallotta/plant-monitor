@@ -14,15 +14,43 @@ per frame describing how to warp it onto the reference. The pipeline:
 
 Dropped frames (night / failed / low_quality) get matrix=None.
 """
+import os
+import hashlib
+
 import numpy as np
 import cv2
 
 import scripts.frame_registration as fr
 
+# Statuses that are settled — the incremental worker reuses them instead of
+# recomputing. (A 'pending' frame, or one with no record, is (re)computed.)
+FINAL_STATUSES = {"registered", "anchor", "night", "low_quality", "failed"}
+
 WORK_WIDTH = 1600          # registration resolution; matrix is in these px
 NIGHT_LUMA = 40            # mean 8-bit luminance below this = a night shot
 WIDEN = 3                  # daytime neighbours to try when a hop fails
 RESID_GATE_FRAC = 0.02     # drop a frame still misaligned by >this fraction of width
+
+# Bump on algorithm changes that DON'T alter the tunables below (e.g. a change to
+# the registration/gate logic). Combined with the tunables + reference into the
+# per-frame fingerprint so stale matrices auto-invalidate on any material change.
+ALGO_REV = 1
+
+
+def fingerprint(reference_name, work_width=WORK_WIDTH, night_luma=NIGHT_LUMA,
+                widen=WIDEN, resid_gate_frac=RESID_GATE_FRAC):
+    """Short hash identifying the algorithm + params + reference a transform was
+    produced with. A frame whose stored fingerprint differs is recomputed."""
+    payload = f"{ALGO_REV}|{reference_name}|{work_width}|{night_luma}|{widen}|{resid_gate_frac}"
+    return hashlib.sha1(payload.encode()).hexdigest()[:12]
+
+
+def needs_recompute(prior_entry, version):
+    """True if a frame must be (re)computed: no prior, not settled, or produced
+    by a different algorithm/param fingerprint."""
+    if not prior_entry or prior_entry.get("status") not in FINAL_STATUSES:
+        return True
+    return prior_entry.get("version") != version
 
 
 def mean_luma(bgr, width=320):
@@ -50,39 +78,82 @@ def residual_to_ref(ref_gray, frame_gray, M, w, h):
 
 def compute_transforms(paths, reference_name, work_width=WORK_WIDTH,
                        night_luma=NIGHT_LUMA, widen=WIDEN,
-                       resid_gate_frac=RESID_GATE_FRAC):
+                       resid_gate_frac=RESID_GATE_FRAC, prior=None):
     """paths: frame paths already ordered by capture time. reference_name: the
     anchor frame's basename (must appear in paths and read as daytime).
+
+    `prior` (optional) maps a frame basename -> {"status", "matrix" (6 floats|None)}
+    of an earlier run. Frames whose prior status is settled (FINAL_STATUSES) are
+    reused as-is; only frames that are new or 'pending' are (re)computed. With no
+    prior this does a full compute. Images are loaded lazily, so an incremental
+    run only decodes the new frame + its neighbour + the reference.
 
     Returns a list of records aligned to `paths`, each:
         {"path", "luma", "status", "matrix" (2x3 np.float32 | None),
          "ref_w", "ref_h"}
     status ∈ {anchor, registered, night, failed, low_quality}.
     """
+    prior = prior or {}
+    version = fingerprint(reference_name, work_width, night_luma, widen, resid_gate_frac)
     n = len(paths)
-    grays, dims, luma = [None] * n, [None] * n, [None] * n
-    for i, p in enumerate(paths):
-        bgr = cv2.imread(str(p))
-        if bgr is None:
-            luma[i] = None
-            continue
-        luma[i] = mean_luma(bgr)
-        w = min(work_width, bgr.shape[1])
-        h = int(round(bgr.shape[0] * w / bgr.shape[1]))
-        grays[i] = fr.features_gray(cv2.resize(bgr, (w, h), interpolation=cv2.INTER_AREA))
-        dims[i] = (w, h)
+    names = [os.path.basename(str(p)) for p in paths]
+    _cache = {}
 
-    is_day = [lu is not None and lu >= night_luma for lu in luma]
-    day = [i for i, d in enumerate(is_day) if d]
-    anchor = next((i for i, p in enumerate(paths)
-                   if str(p).endswith(reference_name)), None)
-    if anchor is None or not is_day[anchor]:
-        raise ValueError(f"reference {reference_name!r} missing or not daytime")
+    def _load(i):
+        if i not in _cache:
+            bgr = cv2.imread(str(paths[i]))
+            if bgr is None:
+                _cache[i] = (None, None, None)
+            else:
+                w = min(work_width, bgr.shape[1])
+                h = int(round(bgr.shape[0] * w / bgr.shape[1]))
+                g = fr.features_gray(cv2.resize(bgr, (w, h), interpolation=cv2.INTER_AREA))
+                _cache[i] = (g, (w, h), mean_luma(bgr))
+        return _cache[i]
 
-    ref_w, ref_h = dims[anchor]
+    def gray(i): return _load(i)[0]
+    def dims(i): return _load(i)[1]
+    def luma(i): return _load(i)[2]
+
+    anchor = next((i for i in range(n) if names[i] == reference_name), None)
+    if anchor is None:
+        raise ValueError(f"reference {reference_name!r} not in paths")
+
     M = [None] * n
-    status = ["night" if not is_day[i] else None for i in range(n)]
-    M[anchor], status[anchor] = np.float32([[1, 0, 0], [0, 1, 0]]), "anchor"
+    status = [None] * n
+    is_day = [False] * n
+    computed = [False] * n   # (re)computed this run -> needs the quality gate
+
+    # Reuse settled frames from a prior run (no image decode needed) — but only
+    # if they were produced by the current algorithm/param fingerprint.
+    for i in range(n):
+        pr = prior.get(names[i])
+        if needs_recompute(pr, version):
+            continue                       # new / pending / stale -> compute below
+        status[i] = pr["status"]
+        if pr["status"] in ("registered", "anchor") and pr.get("matrix"):
+            M[i] = np.float32(pr["matrix"]).reshape(2, 3)
+            is_day[i] = True               # candidate to chain new frames onto
+
+    # The reference is always the daytime identity anchor.
+    if dims(anchor) is None:
+        raise ValueError("reference image unreadable")
+    ref_w, ref_h = dims(anchor)
+    M[anchor], status[anchor], is_day[anchor] = np.float32([[1, 0, 0], [0, 1, 0]]), "anchor", True
+
+    # Classify the frames that still need computing.
+    for i in range(n):
+        if status[i] is not None:
+            continue
+        lu = luma(i)
+        if lu is None:
+            status[i] = "failed"
+        elif lu < night_luma:
+            status[i] = "night"
+        else:
+            is_day[i] = True               # daytime, M still None -> register below
+
+    day = [i for i in range(n) if is_day[i]]
     a = day.index(anchor)
 
     def anchor_frame(i, cand_positions):
@@ -90,25 +161,35 @@ def compute_transforms(paths, reference_name, work_width=WORK_WIDTH,
             j = day[pos]
             if M[j] is None:
                 continue
-            Mi, hi, gi = fr.register_pair(grays[j], grays[i])  # i -> j
+            Mi, hi, gi = fr.register_pair(gray(j), gray(i))  # i -> j
             if fr.plausible(Mi, hi, gi):
                 return fr.compose(M[j], Mi)
         return None
 
-    for p in range(a + 1, len(day)):       # forward in time
-        Mi = anchor_frame(day[p], [p - k for k in range(1, widen + 1) if p - k >= a])
-        M[day[p]], status[day[p]] = (Mi, "registered") if Mi is not None else (None, "failed")
-    for p in range(a - 1, -1, -1):         # backward in time
-        Mi = anchor_frame(day[p], [p + k for k in range(1, widen + 1) if p + k < len(day)])
-        M[day[p]], status[day[p]] = (Mi, "registered") if Mi is not None else (None, "failed")
+    def register(p, cand_positions):       # only frames without a matrix yet
+        i = day[p]
+        if M[i] is not None:
+            return
+        Mi = anchor_frame(i, cand_positions)
+        if Mi is not None:
+            M[i], status[i], computed[i] = Mi, "registered", True
+        else:
+            status[i] = "failed"
 
-    # Quality gate: drop frames that still land far off the reference.
+    for p in range(a + 1, len(day)):       # forward in time
+        register(p, [p - k for k in range(1, widen + 1) if p - k >= a])
+    for p in range(a - 1, -1, -1):         # backward in time
+        register(p, [p + k for k in range(1, widen + 1) if p + k < len(day)])
+
+    # Quality gate: drop freshly-computed frames that still land far off the
+    # reference (prior-reused frames were already gated in their own run).
     gate_px = resid_gate_frac * ref_w
     for i in day:
-        if M[i] is None or i == anchor:
+        if not computed[i]:
             continue
-        if residual_to_ref(grays[anchor], grays[i], M[i], ref_w, ref_h) > gate_px:
+        if residual_to_ref(gray(anchor), gray(i), M[i], ref_w, ref_h) > gate_px:
             M[i], status[i] = None, "low_quality"
 
-    return [{"path": paths[i], "luma": luma[i], "status": status[i],
-             "matrix": M[i], "ref_w": ref_w, "ref_h": ref_h} for i in range(n)]
+    return [{"path": paths[i], "luma": _cache.get(i, (None, None, None))[2],
+             "status": status[i], "matrix": M[i], "version": version,
+             "ref_w": ref_w, "ref_h": ref_h} for i in range(n)]

@@ -1,0 +1,20 @@
+# Stabilizer worker image.
+#
+# The API image (backend/Dockerfile) deliberately omits OpenCV to stay lean, so
+# the heavy frame-registration job runs in this dedicated worker instead (the
+# standard web-lean / worker-has-the-heavy-dep split). Built from the repo root
+# so it can bundle both backend/ (for app.database + app.models) and scripts/.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY backend/requirements.txt .
+# Pin OpenCV — registration output must be reproducible; an unpinned bump could
+# silently shift transforms across rebuilds.
+RUN pip install --no-cache-dir -r requirements.txt opencv-python-headless==4.13.0.92
+
+COPY backend/ /app/
+COPY scripts/ /app/scripts/
+
+# Incremental by default: registers only pending/new Pi frames and writes them.
+CMD ["python", "scripts/compute_stabilization.py", "--apply"]

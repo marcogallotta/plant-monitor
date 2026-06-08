@@ -31,7 +31,7 @@ for _p in (REPO_ROOT / "backend", REPO_ROOT):
 sys.path.insert(0, str(REPO_ROOT))
 
 import scripts.frame_registration as fr
-from scripts.stabilize_core import compute_transforms
+from scripts.stabilize_core import compute_transforms, needs_recompute
 
 REFERENCE_FRAME = "2026-06-07T130010Z.jpg"
 TS_RE = re.compile(r"(\d{4}-\d{2}-\d{2}T\d{6}Z)")
@@ -41,6 +41,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="write to DB (default: dry run)")
     ap.add_argument("--reference", default=REFERENCE_FRAME, help="anchor frame filename")
+    ap.add_argument("--full", action="store_true",
+                    help="recompute every frame (ignore prior); default is incremental")
     args = ap.parse_args()
 
     from app.database import build_engine, build_session_factory
@@ -55,37 +57,46 @@ def main():
             print("no Pi frames on disk to stabilize")
             return
 
+        # Incremental: reuse settled frames, only (re)compute new / pending /
+        # stale ones (stale = produced by a different algorithm/param fingerprint).
+        db_prior = {p.filename: {"status": p.stab_status, "matrix": p.stab_matrix,
+                                 "version": p.stab_version} for p in photos}
         recs = compute_transforms([PHOTOS_DIR / p.filename for p in photos],
-                                  args.reference)
+                                  args.reference, prior=None if args.full else db_prior)
+
+        def changed(p, r):
+            return args.full or needs_recompute(db_prior[p.filename], r["version"])
 
         ref_w, ref_h = recs[0]["ref_w"], recs[0]["ref_h"]
-        n_day = sum(1 for r in recs if r["status"] != "night")
-        print(f"{len(photos)} Pi frames ({n_day} day / {len(photos)-n_day} night); "
-              f"anchor={args.reference}  ref {ref_w}x{ref_h}")
+        pending = sum(1 for p, r in zip(photos, recs) if changed(p, r))
+        print(f"{len(photos)} Pi frames; {pending} to (re)compute; "
+              f"anchor={args.reference}  ref {ref_w}x{ref_h}  fp={recs[0]['version']}")
 
-        counts = {}
+        counts, written = {}, 0
         for p, r in zip(photos, recs):
             counts[r["status"]] = counts.get(r["status"], 0) + 1
+            if not changed(p, r):          # reused unchanged -> don't rewrite
+                continue
             M = r["matrix"]
-            mat = None if M is None else [float(v) for v in M.reshape(-1)]
+            detail = "no transform"
             if M is not None:
                 rot, sc, tx, ty = fr.decompose(M)
                 detail = f"rot={rot:+5.2f} sc={sc:.3f} t=({tx:+5.0f},{ty:+5.0f})"
-            else:
-                detail = "no transform"
             print(f"  {TS_RE.search(p.filename).group(1)}  {r['status']:<11} {detail}")
+            written += 1
             if args.apply:
-                p.stab_matrix = mat
+                p.stab_matrix = None if M is None else [float(v) for v in M.reshape(-1)]
                 p.stab_ref_w = r["ref_w"] if M is not None else None
                 p.stab_ref_h = r["ref_h"] if M is not None else None
                 p.stab_status = r["status"]
+                p.stab_version = r["version"]
 
         print("\nsummary:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
         if args.apply:
             db.commit()
-            print(f"committed stabilization for {len(photos)} Pi frames")
+            print(f"committed {written} updated frame(s)")
         else:
-            print("dry run — pass --apply to write")
+            print(f"dry run — pass --apply to write ({written} would change)")
 
 
 if __name__ == "__main__":
