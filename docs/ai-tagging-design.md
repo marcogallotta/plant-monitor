@@ -912,6 +912,27 @@ Operations the review UI needs against `photo_ai_suggestions`:
   > signal `…5 6` but only 1 frame clears 3σ — wispy/small; plates should clear it). `k_sigma` (default 3) is
   > the tunable; left conservative rather than overtuned on one noisy day. Supersedes the old pairwise diff.
 
+  > **LIVE HARVEST TEST — every cheap metric MISSED an obvious harvest; vision nailed it (2026-06-08 eve).**
+  > Marco harvested **Thai basil vendita** (~18:00 local; it was flowering → "use it now", as the doc predicted).
+  > Tested blind ("spot it"):
+  > - **`harvest_eval` (Finlayson invariant) flagged nothing** — blind again (the change is structural/colour, and
+  >   the harvest sat in the last 1–2 frames + evening light).
+  > - **Green-canopy-area DID have it** raw (Thai basil vend dropped 0.92→0.78, a top mover) — **then I destroyed
+  >   the signal with COMMON-MODE removal.** The harvest happened *during* the global evening green-decline, so
+  >   subtracting the per-frame median (assumed = shared lighting) **cancelled the real event**. ⚠️ THE TRAP:
+  >   common-mode / per-region-baseline detrending eats any real change that **coincides with a global one**
+  >   (evening, a cloud, a watering). The very step that rejects lighting also rejects a synchronous harvest.
+  > - **Vision got it instantly** — only by cropping each region and *looking* (big bushy plant → small remnant
+  >   with pot rim + bare soil exposed) was it obvious. Two wrong guesses first (dill) came from comparing badly-
+  >   registered wide crops; the per-region aligned crops made it unambiguous.
+  > **Takeaways (for the harvestability build + ChatGPT):** (1) for "what got picked", a **per-region crop → vision**
+  > beats the hand-built scalar metrics — strongest validation yet of the closeup/LLM value-layer thesis. (2) The
+  > cheap-metric route needs a **guard against the common-mode trap** (don't cancel a region whose drop is large
+  > *in absolute terms* just because the scene also moved; or detect the synchronous-with-global case explicitly).
+  > (3) The complementary cheap cue is **bare-soil/pot REVEALED** (brown-area ↑, structure feathery→smooth), not
+  > only green ↓. (4) Open question for harvest *and* move detection alike: events landing in the last 1–2 frames
+  > can't be confirmed by persistence — need denser cadence around events or accept a 1-frame-lag confirmation.
+
 - **Water-balance demand side ✅ built & LIVE** (2026-06-08): insolation-from-camera validated
   (`insolation_validate.py`); per-region **sun-hours** profiler (`sun_hours.py`); **VPD + FAO-56 ET₀**
   (`water_demand.py`, 10/10 FAO-validated) running on the **live** forecast (`forecast_et0.py`) and sensor proxy;
