@@ -620,6 +620,20 @@ an **open build, not a freebie** — correcting the over-claim in the line above
 > under-net plants are inherently reduced + dappled, well captured by a **static shade factor**. The "cap
 > full-arc this afternoon" plan is superseded by this.
 
+> **VALIDATED on open-sun patches — insolation-from-camera WORKS (2026-06-08, `scripts/insolation_validate.py`).**
+> Ran the revised approach on the full morning→midday arc (04–10Z = 06:00–12:00 CEST) with three open-sun
+> patches (two white floor tiles + a terracotta pot rim, away from the net). **Radiometric
+> `brightness/(exposure×gain)` vs the camera's whole-frame Lux: Spearman +0.96 / +1.00 / +1.00**; naive
+> brightness −0.36 / +0.39 / +0.54 (flat/anti — auto-exposure compensating). The radiometric values trace the
+> solar arc cleanly across the whole day, **including midday where the naive region version broke**. So the
+> earlier −0.43 falsification was **purely auto-exposure + the net-dappled cilantro target**, NOT a real limit:
+> with exposure logged and divided out, on a clean open-sun reference, camera brightness IS a valid insolation
+> measure. **Reversal:** insolation-from-camera is **viable** (open-sun regions directly; net-shaded via the
+> region-average) → the **demand-side insolation term for the water-balance model is unblocked**. Caveat: mild
+> circularity — `picamLux` also derives from exposure×gain — but three independent patches agree at +0.96–1.00,
+> trace the same arc, and `picamLux ≈ Flower-Care lux` in the clean morning regime, so it's corroborated, not
+> tautological.
+
 **Forecast source already exists** — `~/esp32-home-display/server/app/openmeteo.py` (Open-Meteo forecast +
 archive), exposed at `GET /openmeteo/weather?start_ts&end_ts` on the **esp32-home-display server at
 `https://laptop.local:8000/`** — the **same server the sensor proxy already reads** (`SENSOR_API_URL`; see
