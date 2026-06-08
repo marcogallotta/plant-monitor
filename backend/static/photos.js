@@ -2,6 +2,13 @@ import { state } from './state.js';
 import { getPhotos, updatePhoto, deletePhoto, batchUpdatePhotos } from './api.js';
 import { setStatus, formatDate, orientedUrl, thumbnailUrl } from './utils.js';
 import { tlInit } from './timelapse.js';
+import { parseStab, commonCrop, renderFrame } from './stabilize.js';
+
+let flickerCrop = { x0: 0, y0: 0, x1: 1, y1: 1 };
+function flickerStabOn() {
+  const el = document.getElementById('flicker-stab');
+  return !!(el && el.checked);
+}
 
 const FILTER_IDS = ['start', 'end', 'filter-source', 'filter-photo-type', 'filter-location'];
 const _rawPageSize = parseInt(new URLSearchParams(window.location.search).get('page_size') || '60', 10);
@@ -258,6 +265,15 @@ function updateCompare() {
 
   document.getElementById('btn-toggle').disabled = !ready;
   document.getElementById('btn-auto').disabled   = !ready;
+
+  // Stabilization aligns A and B onto a common frame so the change pops; only
+  // offer it when both carry a transform, and crop to their shared region.
+  const stabs = ready ? [parseStab(state.photoA), parseStab(state.photoB)] : [];
+  const canStab = stabs.length === 2 && stabs.every(Boolean);
+  const stabLbl = document.getElementById('flicker-stab-label');
+  if (stabLbl) stabLbl.style.display = canStab ? '' : 'none';
+  flickerCrop = canStab ? commonCrop(stabs) : { x0: 0, y0: 0, x1: 1, y1: 1 };
+
   updateFlickerFps();
 }
 
@@ -273,9 +289,11 @@ function toggleFlickerFrame() {
   if (!state.photoA || !state.photoB) return;
   state.flickerShowing = state.flickerShowing === 'a' ? 'b' : 'a';
   const photo = state.flickerShowing === 'a' ? state.photoA : state.photoB;
-  const flickerImg = document.getElementById('flicker-img');
-  flickerImg.src = photo.url;
-  flickerImg.style.transform = 'rotate(' + (photo.rotation || 0) + 'deg)';
+  renderFrame(
+    document.getElementById('flicker-img'),
+    document.getElementById('flicker-canvas'),
+    photo, flickerCrop, { stabilize: flickerStabOn() },
+  );
   const lbl = document.getElementById('flicker-label');
   lbl.textContent = state.flickerShowing.toUpperCase();
   lbl.className = 'flicker-label ' + state.flickerShowing;
@@ -362,6 +380,16 @@ document.getElementById('flicker-speed').addEventListener('input', function() {
 });
 
 updateFlickerFps();
+
+document.getElementById('flicker-stab')?.addEventListener('change', function() {
+  // Redraw the visible slot in the new mode without advancing the A/B toggle.
+  const photo = state.flickerShowing === 'a' ? state.photoA : state.photoB;
+  if (photo) renderFrame(
+    document.getElementById('flicker-img'),
+    document.getElementById('flicker-canvas'),
+    photo, flickerCrop, { stabilize: flickerStabOn() },
+  );
+});
 
 // ── Mass select / delete ─────────────────────────────────
 

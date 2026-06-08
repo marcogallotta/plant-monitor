@@ -127,8 +127,13 @@
         <span id="flicker-fps" class="panel-toggle"></span>
       </div>
 
+      <label class="panel-toggle" id="flicker-stab-label" style="display:none">
+        <input type="checkbox" id="flicker-stab" checked> Stabilize (align A/B)
+      </label>
+
       <div class="flicker-view" id="flicker-view">
         <img id="flicker-img" src="" alt="">
+        <canvas id="flicker-canvas" style="display:none"></canvas>
         <div class="flicker-label" id="flicker-label"></div>
       </div>
     </div>
@@ -149,6 +154,7 @@
     <div class="upload-form" id="tl-body">
       <div class="tl-view">
         <img id="tl-img" src="" alt="" style="display:none">
+        <canvas id="tl-canvas" style="display:none"></canvas>
         <div id="tl-empty" class="tl-empty">Load photos in the gallery to play</div>
         <div id="tl-label" class="tl-label" style="display:none;"></div>
       </div>
@@ -159,6 +165,9 @@
         <button id="tl-next" onclick="tlNext()" disabled>&#9654; Next</button>
         <label>Speed <input type="range" id="tl-speed" min="1" max="24" value="4"></label>
         <span id="tl-fps" class="panel-toggle"></span>
+        <label class="panel-toggle" id="tl-stab-label" style="display:none">
+          <input type="checkbox" id="tl-stab" checked> Stabilize
+        </label>
       </div>
     </div>
   </div>

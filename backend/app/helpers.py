@@ -74,6 +74,10 @@ def _photo_out(p: Photo) -> PhotoOut:
         growing_units=[GrowingUnitBrief(id=u.id, name=u.name, unit_type=u.unit_type) for u in p.growing_units],
         labels=[LabelOut(id=l.id, name=l.name) for l in p.labels],
         rotation=p.rotation,
+        stab_matrix=p.stab_matrix,
+        stab_ref_w=p.stab_ref_w,
+        stab_ref_h=p.stab_ref_h,
+        stab_status=p.stab_status,
     )
 
 

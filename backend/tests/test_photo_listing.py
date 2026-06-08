@@ -334,3 +334,25 @@ def test_pi_upload_sets_source_pi(client, isolated_photos_dir):
     })
     data = client.get("/photos").json()
     assert data["photos"][0]["source"] == "pi"
+
+
+# --- stabilization transform (tilt/drift correction) ---
+
+def test_list_photos_includes_stabilization(client, db_session):
+    photo = _photo(
+        db_session, "2026-06-07T130010Z", "2026-06-07T13:00:10Z", source="pi",
+        stab_matrix=[1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+        stab_ref_w=1600, stab_ref_h=900, stab_status="anchor",
+    )
+    p = client.get("/photos").json()["photos"][0]
+    assert p["stab_matrix"] == [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    assert p["stab_ref_w"] == 1600 and p["stab_ref_h"] == 900
+    assert p["stab_status"] == "anchor"
+
+
+def test_list_photos_stabilization_null_by_default(client, db_session):
+    _photo(db_session, "2026-06-07T130010Z", "2026-06-07T13:00:10Z", source="phone")
+    p = client.get("/photos").json()["photos"][0]
+    assert p["stab_matrix"] is None
+    assert p["stab_ref_w"] is None
+    assert p["stab_status"] is None

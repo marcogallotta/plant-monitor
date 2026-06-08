@@ -51,7 +51,8 @@ beforeAll(async () => {
     <div id="cap-b"></div>
     <button id="btn-toggle" disabled></button>
     <button id="btn-auto" disabled>Auto flicker</button>
-    <div id="flicker-view"><img id="flicker-img" src=""><span id="flicker-label"></span></div>
+    <label id="flicker-stab-label" style="display:none"><input type="checkbox" id="flicker-stab" checked></label>
+    <div id="flicker-view"><img id="flicker-img" src=""><canvas id="flicker-canvas" style="display:none"></canvas><span id="flicker-label"></span></div>
     <input id="flicker-speed" type="range" value="4">
     <span id="flicker-fps"></span>
     <!-- timelapse (needed because photos.js imports timelapse.js) -->
