@@ -1,7 +1,10 @@
+import logging
 from datetime import timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from .. import sensors as sensor_service
 from ..database import get_db
@@ -18,6 +21,7 @@ def sensor_latest():
     try:
         return {"available": True, "sensors": state.latest()}
     except Exception:
+        logger.warning("sensor latest() failed", exc_info=True)
         return {"available": False, "sensors": []}
 
 
@@ -37,6 +41,7 @@ def sensor_photo_context(photo_id: int, db: Session = Depends(get_db)):
     try:
         id_map = state.resolve_ids()
     except Exception:
+        logger.warning("sensor resolve_ids() failed", exc_info=True)
         return {"available": False, "sensors": []}
     out = []
     for sensor_cfg in state.sensors:
@@ -47,6 +52,7 @@ def sensor_photo_context(photo_id: int, db: Session = Depends(get_db)):
         try:
             readings = state.readings_around(sensor_id, ts)
         except Exception:
+            logger.warning("sensor readings_around() failed for %s", mac, exc_info=True)
             readings = []
         out.append({"name": sensor_cfg["name"], "readings": readings})
     return {"available": True, "sensors": out}
