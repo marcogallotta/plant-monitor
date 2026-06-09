@@ -204,6 +204,20 @@ silent stays on the list marked stale — it does not drop off.
 window, ordered by `recorded_at`. Used by future analysis scripts and by `readings_around` in the
 photo-context endpoint.
 
+### ⚠ Known issue: MAC addresses in URL paths
+
+`GET /sensors/flower-care/{mac}/readings` embeds the MAC (e.g. `5C:85:7E:14:43:45`) directly in
+the path. Colons must be percent-encoded in strict URL parsers (`5C%3A85%3A...`), and the
+MAC is not a stable user-facing identity — a sensor replacement changes the key.
+
+**Planned fix:** introduce a `sensor_id` (short UUID or slug, e.g. `cilantro`) in the
+`sensor_readings` table (or a separate `sensors` lookup table), keyed from `XIAOMI_SENSORS` config.
+The read endpoints should use this ID instead: `GET /sensors/flower-care/{id}/readings`.
+The MAC stays as the ingest key and unique constraint; the slug is display/routing only.
+
+This should be done before any external consumer (dashboard, scripts, ChatGPT action) hardcodes
+the MAC-based URLs.
+
 ### `app/sensors.py` — no changes
 
 `SensorState` and `SENSOR_API_URL` / `SENSOR_API_KEY` / `SENSOR_SENSORS` are **unchanged**. The

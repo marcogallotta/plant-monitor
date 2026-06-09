@@ -292,7 +292,11 @@ async def read_history_since(mac: str, since: datetime | None) -> list[dict]:
         await _ble_write(client, HIST_CTRL_UUID, b"\xA0\x00\x00")
         await asyncio.sleep(0.3)
 
-        for idx in range(MAX_HISTORY_ENTRIES):
+        count_raw = await _ble_read(client, HIST_DATA_UUID)
+        entry_count = int.from_bytes(count_raw[:2], "little") if len(count_raw) >= 2 else MAX_HISTORY_ENTRIES
+        entry_count = min(entry_count, MAX_HISTORY_ENTRIES)
+
+        for idx in range(entry_count):
             cmd = bytes([0xA1, idx & 0xFF, (idx >> 8) & 0xFF])
             await _ble_write(client, HIST_CTRL_UUID, cmd)
             await asyncio.sleep(0.2)
