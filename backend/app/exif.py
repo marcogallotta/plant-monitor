@@ -64,7 +64,11 @@ def read_exif_captured_at(source: ExifSource):
         if not exif:
             return None
 
-        tags = {TAGS.get(k, k): v for k, v in exif.items()}
+        # DateTimeOriginal and offset tags live in the Exif sub-IFD (0x8769);
+        # merge it so they're accessible alongside the root IFD tags.
+        merged = dict(exif)
+        merged.update(exif.get_ifd(0x8769))
+        tags = {TAGS.get(k, k): v for k, v in merged.items()}
         dto_raw = tags.get("DateTimeOriginal")
         if not dto_raw:
             return None
