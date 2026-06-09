@@ -179,8 +179,10 @@ so a casual sweep cannot produce a calibrated cover number.
 
 - **Capture app:** don't write an Android app first. [Epicollect5](https://five.epicollect.net/)
   (Oxford; free, offline, custom forms, photo/video + **barcode**, CSV/JSON export) or ODK /
-  KoboCollect already do bound capture + worklist-style forms. Prove the data model + review loop
-  with a configured form; build custom only if friction demands it.
+  KoboCollect already do bound capture + export. Prove the data model + review loop with a
+  configured form first. But don't assume the tool handles full **worklist/request** logic — if its
+  task UX is clumsy, keep the worklist outside the app initially rather than letting the architecture
+  depend on a third-party form tool's task model.
 - **QR on labels:** a QR/barcode on each bed label gives reliable **scan-to-bind** location (scanned
   up close, unlike detecting a marker in a wide canopy shot) — alongside the big human-readable text.
 - **Canopy read:** [Canopeo](https://apps.apple.com/us/app/canopeo/id929640529) (Oklahoma State;
@@ -201,12 +203,13 @@ so a casual sweep cannot produce a calibrated cover number.
 8. Per-bed mini-video frame extraction (later).
 9. Full walkthrough video (only if needed).
 
-## Three per-photo outputs — keep them separate
+## Per-photo outputs — keep them separate
 
-Do not let identity swallow the task. One photo yields **three independent outputs**, each stored
-on its own, each with its own confidence:
+Do not let identity swallow the task. One photo yields **independent outputs**, each stored on its
+own, each with its own confidence:
 
-1. **Localization** — which bed/zone/patch, from marker + map (above).
+1. **Localization** — which bed/zone/patch, from capture binding, label/OCR/manual confirmation, and
+   the map.
 2. **Canopy / surface state** — the demand signal. Two parts:
    - _canopy bucket:_ `bare → seedling → sparse → moderate → heavy`. **Bucket only — do NOT emit a
      green-fraction percentage.** Handheld RGB isn't robust enough (perspective, occlusion, angle,
@@ -215,26 +218,35 @@ on its own, each with its own confidence:
    - _surface state:_ bare soil / mulch / wet-looking / crusted-dry / newly-sown-germinating / weed
      cover / residue / shade cloth — drives the bare-soil evaporation term `Ke`, which the canopy
      bucket alone misses.
+   - _weeds are irrigation-relevant green cover but crop-map-negative:_ they add real water demand
+     (count toward canopy/`Kcb`) while flagging map drift — so a "heavy canopy" read isn't
+     automatically "crop thriving." Feed demand AND raise a map-confidence flag (output 4).
    Maps onto the dual-`Kc` hook already built: bucket → `COVER_FC` → `fc` → `(Kcb, Ke)` via
    `water_balance.dual_coeffs`, with surface state informing `Ke`.
 3. **Identity** — a **probability distribution over kind / group**, never a forced single label.
-   Its primary value is **localization, not demand** (confirmed 2026-06-09): for watering, canopy
-   alone drives the number; identity's job is to help pin _which zone_ a marker-coarse or markerless
-   photo belongs to (the crop-mix consistency check above). It also sets the default staleness
-   cadence (fast leafy vs slow woody). Variety only matters when its `Kc` differs materially (rare).
+   Canopy/surface is the main visual demand signal; identity mainly supports **localization** (the
+   crop-mix consistency check above) and **class/stage priors** (default demand class, expected
+   canopy trajectory, staleness cadence, a fallback `Kc` when the canopy read is stale). It only
+   _materially_ changes irrigation when it changes the demand class or the staleness model.
+4. **Map confidence** — does what's seen match what the map expects here? One of: expected crop seen
+   / unexpected crop / empty where crop expected / label mismatch / weeds dominate / photo too poor
+   to assess. This is the explicit guard against the map silently rotting — it drives re-survey
+   requests and map corrections, separate from the demand read.
 
 ## How it feeds irrigation
 
 ```text
-photo →  zone            (marker + map; kind dist helps locate)
+photo →  zone            (capture binding / label + map; kind dist as consistency check)
       →  canopy bucket   → fc → (Kcb + Ke)      (water_balance.dual_coeffs)
 
-zone demand ≈ ET₀ × (Kcb + Ke) × sun_fraction(zone) × Ks(class)
+zone demand ≈ ET₀ × (Kcb + Ke) × sun_fraction(zone) × Ks
 ```
 
-Canopy reads from requested photos update `Kcb`; markers + map keep zone identity stable. This
-design supplies exactly the **per-zone canopy source the live dual-`Kc` model currently lacks** (see
-irrigation.md "Wired" note).
+`Ks` (water-stress factor) is estimated from the best available zone/probe state, falling back to
+borrowed class state — don't imply it is known per zone yet; `k` is borrowed from the class. Canopy
+reads from requested photos update `Kcb`; capture binding + labels + map keep zone identity stable.
+This design supplies exactly the **per-zone canopy source the live dual-`Kc` model currently lacks**
+(see irrigation.md "Wired" note).
 
 ### Probe budget forces classes, not per-zone calibration (2026-06-09)
 
@@ -250,7 +262,9 @@ whole garden — far fewer than zones. So probes cannot calibrate per zone. Inst
   `k`. This is the sparse-calibration thesis pushed to its limit by the probe ceiling.
 
 So "how many zones" is a layout/plumbing question (many), decoupled from "how many calibration
-classes" (≈3–5, matched to the probes).
+classes" (≈3–5, matched to the probes). The classes are a **first approximation, not permanent
+truth** — the model must be allowed to split a class later if probe/dose evidence shows it is too
+broad. Don't hard-code the classes early.
 
 ## To decide / build before the site
 
