@@ -3,10 +3,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from PIL import Image
 from sqlalchemy.orm import Session, selectinload
 
 from .models import Event, EventPhoto, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .schemas import EventOut, GrowingUnitBrief, LabelOut, PhotoBrief, PhotoOut
+
+# Maps a clockwise rotation (degrees) to the PIL transpose that bakes it into the
+# pixels — matches the dashboard's CSS `transform: rotate(Ndeg)` (clockwise) direction.
+ROTATION_TRANSPOSE = {
+    90: Image.Transpose.ROTATE_270,
+    180: Image.Transpose.ROTATE_180,
+    270: Image.Transpose.ROTATE_90,
+}
 
 logger = logging.getLogger(__name__)
 

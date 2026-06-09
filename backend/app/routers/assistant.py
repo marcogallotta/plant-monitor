@@ -20,6 +20,7 @@ from ..database import get_db
 from ..helpers import (
     EVENT_LOAD_OPTIONS,
     PHOTO_LOAD_OPTIONS,
+    ROTATION_TRANSPOSE,
     _event_out,
     _filtered_photo_query,
     _get_photo_loaded,
@@ -317,7 +318,6 @@ def assistant_unclassified(db: Session = Depends(get_db)):
 
 
 _CONTACT_SHEET_MAX = 25
-_ROTATION_MAP = {90: Image.Transpose.ROTATE_270, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_90}
 
 
 @router.get("/contact-sheet")
@@ -371,8 +371,8 @@ def assistant_contact_sheet(
                     with Image.open(file_path) as src:
                         src.load()
                         img = src.copy()
-                    if photo.rotation and photo.rotation in _ROTATION_MAP:
-                        img = img.transpose(_ROTATION_MAP[photo.rotation])
+                    if photo.rotation and photo.rotation in ROTATION_TRANSPOSE:
+                        img = img.transpose(ROTATION_TRANSPOSE[photo.rotation])
                     img.thumbnail((cell_size, cell_size))
                     cell_img = img
                 except Exception:

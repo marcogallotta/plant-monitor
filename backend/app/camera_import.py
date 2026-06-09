@@ -21,11 +21,11 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .models import GrowingUnit, Location, Photo, PhotoGrowingUnit, PhotoNote
+from .schemas import VALID_ROTATIONS
 
 router = APIRouter(prefix="/camera-import")
 
 PHOTOS_DIR = Path("data/photos")
-VALID_ROTATIONS = {0, 90, 180, 270}
 
 _IMPORTABLE_EXTS = {".jpg", ".jpeg", ".arw", ".orf"}
 _RAW_EXTS = {".arw", ".orf"}

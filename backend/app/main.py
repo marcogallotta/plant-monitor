@@ -27,7 +27,7 @@ from .database import get_db
 from .exif import read_exif_captured_at
 logger = logging.getLogger(__name__)
 
-from .helpers import EVENT_LOAD_OPTIONS, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _photo_out
+from .helpers import EVENT_LOAD_OPTIONS, ROTATION_TRANSPOSE, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _photo_out
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
@@ -747,13 +747,7 @@ def list_events(db: Session = Depends(get_db)):
     return [_event_out(ev) for ev in events]
 
 
-# Maps a clockwise rotation (degrees) to the PIL transpose that bakes it into the
-# pixels matching the dashboard's CSS `transform: rotate(Ndeg)` (clockwise) direction.
-_ROTATION_TRANSPOSE = {
-    90: Image.Transpose.ROTATE_270,
-    180: Image.Transpose.ROTATE_180,
-    270: Image.Transpose.ROTATE_90,
-}
+
 
 
 @app.get("/photos/export")
@@ -782,7 +776,7 @@ def export_photos(ids: str, db: Session = Depends(get_db)):
             if not file_path.exists():
                 continue
 
-            transpose = _ROTATION_TRANSPOSE.get(photo.rotation)
+            transpose = ROTATION_TRANSPOSE.get(photo.rotation)
             if transpose is not None:
                 try:
                     with Image.open(file_path) as im:
@@ -825,7 +819,7 @@ def photo_thumbnail(filename: str, size: int = Query(400, ge=1, le=1600), orient
 
     try:
         with Image.open(file_path) as im:
-            transpose = _ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
+            transpose = ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
             if transpose:
                 im = im.transpose(transpose)
             im = im.convert("RGB")
@@ -861,7 +855,7 @@ def serve_photo(filename: str, oriented: bool = False, db: Session = Depends(get
     # `oriented=1` bakes the stored rotation into the returned pixels so consumers that
     # bypass the dashboard's CSS rotation (e.g. dragging a thumbnail into a browser tab)
     # see the correct orientation. The on-disk original is never modified.
-    transpose = _ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
+    transpose = ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
     if transpose is not None:
         try:
             with Image.open(file_path) as im:
