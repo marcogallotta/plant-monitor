@@ -37,6 +37,7 @@ services:
       - ./data/photos:/app/data/photos
       - ./data/thumbs:/app/data/thumbs
       - ./scripts:/app/scripts
+      - ./docs:/app/docs:ro
       - ./data/tagging-runs:/app/data/tagging-runs
       - type: bind
         source: /media

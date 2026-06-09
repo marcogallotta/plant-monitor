@@ -172,46 +172,36 @@ Past failures probably came from these issues, not from the goal being impossibl
 11. **Review loop may be the bottleneck.** The system needs cheap human review of disagreements, not
     blind auto-acceptance.
 
-## Next validation test for non-Pi tagging
+## Validation result — priors-first works (2026-06-08)
 
-Before running the full archive, do a small A/B validation.
+Harness: `scripts/tag_eval.py` (runs in the backend container; needs `ANTHROPIC_API_KEY` — gated by
+the API-spend guard hook, **no run without explicit per-run approval**, ~$0.014/photo). It samples a
+**curated confusable-heavy** held-out set of confirmed single-unit phone photos (ground truth = their
+existing `photo_growing_units` link) and scores against it. The chilli-seedling units (10 identical)
+and "Chillis" are excluded as unscoreable singles.
 
-### Sample
+**A/B (thin closed-set-only vs rich priors-first), Sonnet, n=17:**
 
-30–50 photos from the historical phone/camera archive, deliberately mixed:
+| arm | correct (variety) | **correct (kind)** | **overconfident-wrong** |
+|---|---|---|---|
+| thin | 9/17 | 13/17 | 3 |
+| rich | 11/17 | **16/17** | **0** |
 
-- clear single-subject closeups
-- multi-plant trough shots
-- partial edge/fringe photos
-- seedlings/trays
-- confusable groups
-- dated photos where current state rules out some candidates
-- a few known bad cases from the failed run
+- **Rich strictly better; the headline is overconfident-wrong 3 → 0** (the safety property that makes
+  auto-accept viable).
+- Rich **fixed the decisive lemongrass↔garlic-chives swap** (thin: "Lemongrass, high"; rich: "Garlic
+  chives") and turned confident-wrong into honest-`UNKNOWN`. Rich's only kind miss was a welsh-onion
+  seedling → `SEEDLINGS` under the policy = correct, i.e. effectively 17/17.
 
-### A/B prompts
+**Decision:** the priors-first approach is proven. Resolution is at **kind** level (above), with
+the **specific unit bound by position later** — so we do NOT keep spending to micro-tune variety
+calls. A second single-arm run under a stricter generic-only prompt still let one confident
+"Lemongrass" through on a thin-grassy photo — which is exactly why the policy is
+_generic-when-unsure_ + the _acceptance gate_ backstop, not perfect prompt obedience. No further
+validation spend is needed before the real run.
 
-Run two versions:
-
-1. **Thin prior:** closed set + schema only.
-2. **Rich compact prior:** closed set + photo date + inventory state + container/composition
-   matrix + confusable rules.
-
-Do not use long narrative priors.
-
-### Success criteria
-
-The rich prior should reduce wrong confident singles and reduce human review time. It should not
-force stale expected compositions when the photo visibly disagrees.
-
-Track:
-
-- correct accepted single labels
-- correct options on confusables
-- overconfident wrong singles
-- hallucinated expected plants
-- missed secondary/fringe regions
-- review time per photo
-- whether date/state priors actually changed wrong pixel-based guesses
+**Open before the real run:** transport + scope must fit the ~$4 prepaid budget — single-call ≈ 285
+photos; Batch API (~50% off) ≈ 560. Pick scope/transport _before_ spending.
 
 ## Priors-first tagging model
 
@@ -236,52 +226,49 @@ Priority order:
 
 ## Closed set and confusable policy
 
-The closed set comes from the live DB and `plants-data.md`, not from stale prose. Verify before
-running a batch.
+The closed set comes from the live DB and `plants-data.md`, not stale prose. Verify before a batch.
 
-### Distinctive enough for confident singles when clearly visible
+**Governing rule (validated 2026-06-08):** resolve identity only as far as you are genuinely
+confident — fall back coarse, never guess. **Coarse-but-right beats precise-but-wrong.** Vision
+answers the **KIND**; the specific _unit_ is pinned later by **POSITION** (a local step — "garlic
+chives is always _here_ → pin it"), not by pixels. So vision never has to win the variety fight, and
+a future local model replaces the generic AI once we have the kind-tagged data.
 
-- dill
-- parsley
-- rocket
-- rosemary
-- sage
-- sorrel
-- French tarragon
-- mature lemongrass
-- mature basil when the unit/context is pinned
-- mature mint when the unit/context is pinned
+### What's worth distinguishing (the taxonomy)
 
-### Confusable groups: use options unless context pins the answer
+A group is worthwhile when its members are routinely _photo_-confusable **and** the within-group
+distinction is either resolved by position or irrelevant to use (irrigation Kc is the same; the cook
+knows variety by pot).
 
-- peppermint / Moroccan mint
-- chives / garlic chives / Welsh onion
-- parsley / cilantro
-- Genovese basil / Thai basil / Thai basil vendita
-- bird's-eye chilli / Hangjiao H7 / Hangjiao H4
-- lemongrass / rau ram
-- sorrel / rau ram
-- thyme / lemon thyme
+**Distinctive — answer the exact unit:** dill, rocket, rosemary, sage, sorrel, French tarragon,
+lemongrass, rau ram. _(lemongrass is NOT grouped with the thin alliums — the prior separates it;
+rau ram / sorrel / tarragon are visually distinct, not a group.)_
 
-Rules:
+**Groups — answer the GROUP; do not specialise unless the row says so:**
 
-- Pixel-identical varieties are never vision-only calls.
-- If the answer depends on exact cultivar/variety, use position, pot, date, or DB state.
-- If still uncertain, output options and send to review.
-- Do not reward the model for a confident single pick on a known confusable.
+| group | members | within-group rule |
+|---|---|---|
+| **basil** | Genovese / Thai / vendita | group only; upgrade to vendita ONLY on visible purple flower spikes |
+| **mint** | peppermint / Moroccan (spearmint = dead) | **never specialise — just `mint`** |
+| **chilli** | Hangijiao 4/7 / Birdseye | **never specialise — just `chilli`** (identical even mature; variety = position) |
+| **chive-allium** | chives / garlic chives / welsh onion | specialise ONLY at genuine high confidence; else generic `chive-allium`; **never confidently pick lemongrass on a thin-grassy toss-up** |
+| **parsley/cilantro** | parsley / cilantro / cilantro root | group only |
+| **thyme** | thyme / lemon thyme | group only (needs scent) |
 
-### Seedlings ladder
+### Seedlings
 
-Never force a species onto ambiguous seedlings.
+- **Default: bare `SEEDLINGS`** (also the irrigation "newly-sown/seedling" canopy bucket).
+- **Group seedling** (`chilli/basil/umbellifer/allium/mint seedlings`) ONLY at high confidence;
+  medium → bare `SEEDLINGS`.
+- **Never** a variety. Expect most seedlings to stay bare `SEEDLINGS` (parsley vs cilantro seedlings
+  are indistinguishable — could just be cultivar).
 
-- **low confidence:** `SEEDLINGS`
-- **medium confidence:** group/options, e.g. `apiaceae seedlings`, `allium seedlings`,
-  `basil/chilli seedling`
-- **high confidence:** exact species only if leaves are genuinely clear or date/container/state pins
-  it
+### The acceptance gate (why this is safe)
 
-A `SEEDLINGS` tag is a known-unknown. It can be upgraded later by growth, clearer photos, or
-container state.
+Acceptance is **gated, not trusted to model confidence**: auto-accept only high-confidence
+_distinctive_ or _kind_ calls; route anything specific-within-group, options, or low-confidence to
+quick human review. So a stray confident-specific error is caught downstream — safety does not depend
+on perfect prompt-following.
 
 ## Tagging units
 
