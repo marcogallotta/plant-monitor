@@ -1,192 +1,331 @@
-# Plant Tracking System - Initial Design Doc
+# Edible Plant Nursery Automation Roadmap
 
-## 1. Goal
+_Status: current execution roadmap. This is the navigational entry point for the project docs._
 
-Build a small, practical plant-tracking system for the balcony setup that can later scale into a nursery/garden operating system.
+This project is now oriented around a practical goal:
 
-The first version should prove the core workflow:
+> Build a sparse, calibrated irrigation + plant-context system that lets a one-person, quality-led edible-plant project scale from balcony to garden without drowning in daily watering labour.
 
-capture evidence -> attach it to plant/batch/location/time -> combine with sensor/weather/watering data -> review outcomes -> improve decisions.
+## Project docs
 
-The system should avoid premature ML. The priority is reliable data collection, good identifiers, and useful review screens.
+| Track | Doc | Owns |
+|---|---|---|
+| **A — Irrigation control** | [`irrigation.md`](irrigation.md) | water-balance model, sparse probes, pump dosing, EC/moisture response, safety |
+| **B — Photo-to-unit tagging** | [`vision-tagging.md`](vision-tagging.md) | Pi frames, phone/camera archive, manual-photo tagging, reference corpus, vision context |
+| **C — Nursery direction** | [`nursery.md`](nursery.md) | crop priorities, scaling context, strategy, operating constraints |
+| **D — Platform / import / review UX** | code + operational docs | the boring infrastructure: import, sync, review, IDs, data integrity |
 
-## 2. Non-goals for the first version
+## Current north star
 
-The first version will not try to:
+The primary product is **sparse calibrated irrigation**.
 
-- diagnose plant health issues automatically
-- control irrigation automatically
-- track every individual leaf or plant perfectly
-- run heavy ML on the Raspberry Pi
-- build a polished commercial product UI
+The supporting layer is **photo-to-unit tagging**: turning Pi frames, phone/camera photos, and future requested manual photos into reliable plant/unit/context data.
 
-Those can come later if the basic system proves useful.
+The nursery strategy supplies the reason this matters: watering scales badly with plant count, warm-tender quality crops are the moat, and manual logs are not the operating model.
 
-## 3. High-level architecture
+## Working principles
+
+### Irrigation first
+
+Watering is daily, non-deferrable, and scales with plant count. It is the main bottleneck to moving beyond the balcony.
+
+### Known-input dosing is the next unlock
+
+Human watering is noisy and inferred. Pump dosing turns watering into a measured input:
 
 ```text
-Raspberry Pi Zero 2W + Camera
- |
- | scheduled photos + metadata
- v
-Uploader / local queue
- |
- | HTTP upload when laptop/backend reachable
- v
-Laptop backend + Postgres
- |
- +--> photo storage
- +--> plant/batch/location records
- +--> sensor readings
- +--> watering/move/note events
- +--> dashboard
+sense → dose → measure response → adjust
 ```
 
-Additional data sources:
+### Sparse sensing is the economic trick
 
-- SwitchBot temp/humidity sensors -> backend ingestion
-- Xiaomi Flower Care sensor -> light/moisture reference readings
-- Manual camera photos -> high-quality inspection records
-- Weather forecast -> contextual data / future rules
-- Manual notes -> watering, moves, pruning, plant stress, harvest
+Probes should calibrate soil/zone behaviour, not continuously sense every plant.
 
-## 4. Hardware components
+A few probes should anchor many zones through weather, forecast, sun-map, canopy state, known dosing, and learned coefficients.
 
-### 4.1 Raspberry Pi camera node
+### Camera is context, not the core irrigation sensor
 
-Ordered hardware:
+Camera/tagging can provide sun exposure, canopy cover, crop stage, identity, and change events.
 
-- Raspberry Pi Zero 2W / 2WH
-- Official Raspberry Pi Camera Module 3 Standard
-- Standard-to-Mini camera cable for Pi Zero
-- Pi Zero case
-- Camera Module 3 housing
+It should not be required for basic watering control.
 
-Purpose:
+### Non-Pi tagging is central
 
-- take scheduled overview photos
-- store locally if backend is unavailable
-- upload photos and metadata to laptop/backend
+The phone/camera archive is not optional backfill. It is the likely source of the best closeups, reference images, growth-stage examples, and validation data for future requested manual photos.
 
-The Pi is not the main brain. It is a camera node.
+### No manual-log dependency
 
-### 4.2 Existing sensors
+Occasional human corrections are useful. Routine manual logging must not be required for the system to work.
 
-Existing useful inputs:
+## Phase 0 — Preserve the working baseline
 
-- SwitchBot temperature/humidity sensors
-- Xiaomi Flower Care sensor for light/moisture reference
-- manual watering notes
-- manual proper-camera photos
+Do not break the parts that already work.
 
-Do not add wired soil probes yet unless there is a clear test case. Balcony pots plus lots of wires will become messy quickly.
+Keep stable:
 
-## 5. Software components
+- Pi capture
+- hourly burst-averaged plates
+- sensor ingestion
+- weather / forecast feed
+- ET₀ / VPD demand model
+- Flower Care EC + moisture probe data
+- current watering-event detection
+- region map / reference frame
+- existing photo review workflow
+- confirmed photo → growing-unit links
+- reference-labelled photos
 
-### 5.1 Pi camera node
+This is the base the next phases build on.
 
-The Pi is a permanently powered camera node.
+## Parallel workstreams
 
-Camera service:
+The roadmap is phased, but not everything is strictly blocked by hardware.
 
-- take scheduled photos
-- store photos on disk with timestamp metadata
-- start with every 30 minutes during daylight
+### Hardware-gated
 
-Upload service:
+These need pump/valve hardware:
 
-- upload photos and metadata to the backend
-- retry failed uploads
+- known-input dosing
+- measured dose-response curves
+- pump/valve safety testing
+- bounded auto-dosing
+- zone-level closed-loop control
 
-Cleanup service:
+### Software-only / can continue now
 
-- keep 7 days of local backup photos
-- remove older local photos after successful upload
+These can sharpen while pump hardware is sourced:
 
-### 5.2 Backend API
+- improve passive drydown model
+- add or test `Ks(moisture)` from natural drydown curves
+- wire in coarse canopy term
+- refine sun-map / insolation context
+- gather more probe days
+- validate VPD / ET₀ / moisture / EC relationships over more weather cycles
+- clean non-Pi photo import
+- run small A/B tagging validation
+- build review workflow improvements
 
-Runs on laptop.
+Do not let the lack of pump hardware stall the entire roadmap. The dose-response half needs the pump; the passive-drydown-model half does not.
 
-Responsibilities:
+## Phase 1 — Known-input irrigation
 
-- accept photo uploads
-- accept metadata-only events
-- provide dashboard data
+Goal: replace inferred human watering with measured pump dosing.
 
-### 5.3 Database
+Tasks:
 
-Postgres on laptop.
+- choose initial pump/valve architecture
+- define zones
+- record dose events cleanly:
+  - zone
+  - time
+  - volume or duration
+  - pump/valve state
+  - source water if relevant
+- measure EC + moisture response after known doses
+- add basic safety limits:
+  - max dose per cycle
+  - cooldown between repeated doses
+  - fail closed on unknown state
+  - conservative handling of sensor outliers
+- keep human in the loop at first
 
-### 5.4 Photo storage
+Success criterion:
 
-- store files on laptop filesystem
-- database stores path + metadata
+> The system can apply a known dose and observe a usable EC/moisture response without depending on manual watering inference.
 
-### 5.5 Dashboard
+## Phase 1b — Passive model sharpening
 
-First dashboard should be basic but useful.
+Can run before or alongside pump work.
 
-Minimum screens:
+Goal: improve the depletion side of the model using existing sensors and natural drydown.
 
-1. Latest overview
-   - latest Pi camera image
-   - latest sensor values
-   - warnings/missing data
+Tasks:
 
-2. Zone timeline
-   - photos over time
-   - temp/humidity/light/moisture graph
-   - watering/move notes
+- gather more Flower Care drydown segments
+- compare VPD, ET₀, temperature, sun exposure, and drydown
+- test `Ks(moisture)` from natural drydown slowdown
+- add coarse canopy/crop-stage multiplier
+- separate sensor noise from real drydown
+- document which coefficients are pot-specific and non-portable
+- avoid overfitting one cilantro pot
 
-3. Batch timeline
-   - sowing/cutting date
-   - current location
-   - photos/manual photos
-   - events and observations
+Success criterion:
 
-4. To-do / prompts
-   - take manual photo
-   - check plant/batch
-   - sensor offline
-   - missing watering note
+> The model predicts relative drydown pressure better than simple ET₀/VPD alone, while clearly marking what is only balcony-pot calibration.
 
-## 6. Future expansion
+## Phase 2 — Sparse calibration
 
-### 6.1 Manual photo workflow
+Goal: prove the scaling architecture.
 
-Manual photos are useful for close inspection, pests, plant stress, weekly records, before/after moments, and experiments where image quality matters.
+Tasks:
 
-### 6.2 Sensor and weather context
+- use one/few probes as calibration anchors
+- fit per-zone or per-soil coefficients from drydown and dose response
+- reuse coefficients across similar zones
+- define when recalibration is required:
+  - new soil
+  - pot → ground
+  - season change
+  - crop density change
+  - irrigation hardware change
+- avoid one-probe-per-plant or one-probe-per-zone assumptions
+- define drift checks
 
-Later versions can add richer sensor history, weather forecasts, and rules that connect plant outcomes to heat, humidity, light, moisture, and watering.
+Success criterion:
 
-### 6.3 Alerts and prompts
+> A few probes can calibrate many similar zones well enough for practical watering decisions.
 
-Later versions can prompt for missing photos, missed watering notes, heat checks, sensor problems, or batches that need inspection.
+## Phase 3 — Non-Pi photo recovery
 
-### 6.4 Nursery-scale workflow
+Goal: fix the photo-to-unit tagging blocker.
 
-The same structure can later scale from balcony zones to benches, beds, batches, propagation trays, QR labels, and irrigation zones.
+Tasks:
 
-## 7. Roadmap
+- make phone/camera import easy
+- select 30–50 validation photos from the archive
+- run A/B tagging validation:
+  - thin prior
+  - rich compact prior
+- test suspected smoking guns:
+  - resolution starvation
+  - grid/photo-ID misassociation
+  - open-world ID
+  - missing date/state priors
+  - missing container/composition priors
+  - confusables forced into singles
+  - seedlings over-labelled
+  - self-confidence trusted
+- build confirmed photo → growing-unit links
+- label high-quality confirmed references
+- only then consider full archive-scale tagging
 
-Stages:
+Success criterion:
 
-1. Capture, upload, and store photos.
-2. Build a basic frontend to view photos, generate timelapses, compare two times, and track manual notes.
-3. Add simple image metrics:
-   - green pixel area estimate
-   - rough canopy coverage
-   - brightness/exposure quality check
-   - blur/dark image detection
-   - colour trend, cautiously interpreted
-4. Add decision support rules:
-   - pot/zone dries faster after hot days
-   - watering interval too long for forecast temperature
-   - batch needs closer photo after stress event
-   - compare growth between two locations or treatments
-5. Add ML / computer vision experiments, only after enough data exists:
-   - segmentation of plant vs background
-   - growth-rate anomaly detection
-   - wilt/stress classification
-   - batch comparison models
+> Non-Pi photos can be tagged to growing units/zones with useful precision and tolerable review effort.
+
+## Phase 4 — Manual requested photos
+
+Goal: make future garden/greenhouse context scalable without fixed camera coverage everywhere.
+
+Tasks:
+
+- define capture request types:
+  - bed
+  - zone
+  - tray
+  - plant group
+  - specific growing unit
+- allow system to ask for a photo when context is stale or uncertain
+- tag requested photos to unit/zone/state
+- extract:
+  - crop or crop mix
+  - canopy bucket
+  - crop stage
+  - condition
+  - moved / harvested / died-back / replanted
+- feed useful context back to irrigation and cooking availability
+
+Success criterion:
+
+> A human can provide occasional photos, and the system turns them into useful plant/zone context without routine manual logs.
+
+## Phase 5 — Bounded automation
+
+Goal: move from recommendation to safe limited automatic watering.
+
+Tasks:
+
+- start with recommendations
+- add bounded auto-dosing only after dose-response is understood
+- fail closed on unknown pump/sensor/zone state
+- treat overwatering as a real failure
+- use conservative rain/forecast handling
+- require confidence for aggressive corrections
+- allow manual override
+- log every automatic decision and dose
+
+Success criterion:
+
+> The system can safely water within bounded limits and explain why it dosed or refused to dose.
+
+## Track D — Platform / import / review UX
+
+This track supports all phases.
+
+Important work:
+
+- reliable phone/camera import
+- stable photo IDs
+- duplicate-ingest protection
+- batch/run IDs for AI suggestions
+- review UI for accept/edit/reject
+- keyboard/mobile review
+- confirmed reference labelling
+- growing-unit / zone / bed identity hygiene
+- export of context to irrigation:
+  - sun exposure
+  - canopy bucket
+  - crop stage
+  - state changes
+- data integrity checks before large AI runs
+
+This is boring infrastructure, but it is the difference between a clever demo and a usable system.
+
+## Deferred / not now
+
+- polished commercial UI
+- generic plant-diagnosis product
+- heavy Pi-side CV
+- open-world plant identification
+- dense sensor mesh
+- one probe per plant
+- gram-perfect harvest logging
+- full archive tagging before small validation succeeds
+- fully autonomous watering before bounded known-input tests
+- ML experiments that do not feed tagging, context, or irrigation decisions
+
+## Do not re-open these decisions
+
+- Do not make basic irrigation depend on continuous camera reads.
+- Do not design a one-probe-per-plant architecture.
+- Do not treat Flower Care moisture percentage as absolute truth.
+- Do not transfer balcony-pot coefficients directly to ground beds.
+- Do not keep polishing inferred human-watering detection instead of adding known dosing.
+- Do not rebuild the 256px contact-sheet tagging pipeline.
+- Do not trust model self-confidence as an acceptance gate.
+- Do not ask open-world plant ID when this is a closed-set matching problem.
+- Do not force confusables into confident single labels.
+- Do not require manual logs as normal operation.
+- Do not bury durable failure lessons inside chronological narration.
+
+## Near-term focus
+
+The next useful work should concentrate on two parallel tracks:
+
+1. **Irrigation hardware path**
+   - choose pump/valve approach
+   - record known doses
+   - measure EC/moisture response
+   - add safety gates
+
+2. **Software/model/tagging path**
+   - keep improving passive drydown model
+   - add `Ks(moisture)` and coarse canopy terms carefully
+   - make phone/camera import easier
+   - run small non-Pi tagging validation
+   - build confirmed reference corpus
+
+The important discipline: do not wait for perfect AI before doing irrigation, and do not wait for pump hardware before improving the model and tagging pipeline.
+
+## Goal
+
+A system that scales like this:
+
+```text
+few probes + microclimate sensors + forecast/rain + sun-map + canopy/context + known dosing
+→ practical irrigation decisions
+→ occasional photo/context correction
+→ bounded automation
+```
+
+The strategic win is not a garden gadget. It is making serious, high-quality, climate-constrained edible growing operationally possible beyond balcony scale.
