@@ -27,7 +27,7 @@ from .database import get_db
 from .exif import read_exif_captured_at
 logger = logging.getLogger(__name__)
 
-from .helpers import EVENT_LOAD_OPTIONS, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _photo_out
+from .helpers import EVENT_LOAD_OPTIONS, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _photo_out
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
@@ -149,12 +149,7 @@ def assistant_openapi_public(request: Request):
     return JSONResponse({"openapi": full["openapi"], "info": full["info"], "servers": [{"url": public_url}], "paths": paths, "components": full.get("components", {})})
 
 PHOTOS_DIR = Path("data/photos")
-THUMBS_DIR = Path("data/thumbs")
 
-
-def _invalidate_thumb_cache(filename: str) -> None:
-    for p in THUMBS_DIR.rglob(f"*_{filename}"):
-        p.unlink(missing_ok=True)
 _STATIC_DIR = Path(__file__).parent.parent / "static"
 
 
@@ -511,22 +506,7 @@ def delete_photo(photo_id: int, db: Session = Depends(get_db)):
     photo = db.query(Photo).filter_by(id=photo_id).first()
     if not photo:
         raise HTTPException(status_code=404, detail="photo not found")
-    db.query(PhotoNote).filter_by(photo_id=photo_id).delete()
-    db.query(PhotoLabel).filter_by(photo_id=photo_id).delete()
-    db.query(PhotoGrowingUnit).filter_by(photo_id=photo_id).delete()
-    db.query(PhotoAiSuggestion).filter_by(photo_id=photo_id).delete()
-    db.query(EventPhoto).filter_by(photo_id=photo_id).delete()
-    storage_path = Path(photo.storage_path) if photo.storage_path else None
-    metadata_path = Path(photo.metadata_path) if photo.metadata_path else None
-    filename = photo.filename
-    db.delete(photo)
-    db.commit()
-    _invalidate_thumb_cache(filename)
-    for path in filter(None, [storage_path, metadata_path]):
-        try:
-            path.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.warning("could not delete file %s: %s", path, exc)
+    _delete_photo(db, photo)
 
 @app.post("/manual-photos", response_model=PhotoOut, status_code=201)
 async def upload_manual_photo(

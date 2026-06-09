@@ -1,10 +1,44 @@
+import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Event, Photo, PhotoGrowingUnit, PhotoLabel
+from .models import Event, EventPhoto, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .schemas import EventOut, GrowingUnitBrief, LabelOut, PhotoBrief, PhotoOut
+
+logger = logging.getLogger(__name__)
+
+THUMBS_DIR = Path("data/thumbs")
+
+
+def _invalidate_thumb_cache(filename: str) -> None:
+    for p in THUMBS_DIR.rglob(f"*_{filename}"):
+        p.unlink(missing_ok=True)
+
+
+def _delete_photo(db: Session, photo: Photo) -> None:
+    """Cascade-delete a photo and all dependents, commit, then best-effort unlink files."""
+    photo_id = photo.id
+    filename = photo.filename
+    storage_path = Path(photo.storage_path) if photo.storage_path else None
+    metadata_path = Path(photo.metadata_path) if photo.metadata_path else None
+
+    db.query(PhotoNote).filter_by(photo_id=photo_id).delete()
+    db.query(PhotoLabel).filter_by(photo_id=photo_id).delete()
+    db.query(PhotoGrowingUnit).filter_by(photo_id=photo_id).delete()
+    db.query(PhotoAiSuggestion).filter_by(photo_id=photo_id).delete()
+    db.query(EventPhoto).filter_by(photo_id=photo_id).delete()
+    db.delete(photo)
+    db.commit()
+
+    _invalidate_thumb_cache(filename)
+    for path in filter(None, [storage_path, metadata_path]):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("could not delete file %s: %s", path, exc)
 
 PHOTO_LOAD_OPTIONS = (
     selectinload(Photo.location),

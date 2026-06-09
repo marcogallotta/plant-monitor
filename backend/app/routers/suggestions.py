@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..helpers import _delete_photo
 from ..models import GrowingUnit, Label, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel
 from ..schemas import SuggestionOut
 
@@ -128,30 +129,12 @@ def resolve_suggestion(
         return _suggestion_out(suggestion, photo)
 
     if body.action == "deleted":
-        suggestion.status = "deleted"
-        suggestion.reviewed_at = now
-        db.flush()
-        # delete_photo logic inline — imports kept local to avoid circular
-        from ..models import EventPhoto, PhotoNote, PhotoLabel as PL, PhotoGrowingUnit as PGU
-        db.query(PhotoNote).filter_by(photo_id=photo.id).delete()
-        db.query(PL).filter_by(photo_id=photo.id).delete()
-        db.query(PGU).filter_by(photo_id=photo.id).delete()
-        db.query(PhotoAiSuggestion).filter_by(photo_id=photo.id).delete()
-        db.query(EventPhoto).filter_by(photo_id=photo.id).delete()
-        db.delete(photo)
-        db.commit()
-        # suggestion row is gone; return a minimal shell
-        from pathlib import Path
-        import logging
-        for p in [photo.storage_path, photo.metadata_path]:
-            if p:
-                try:
-                    Path(p).unlink(missing_ok=True)
-                except OSError as exc:
-                    logging.getLogger(__name__).warning("could not delete file %s: %s", p, exc)
+        captured_at = photo.captured_at
+        _delete_photo(db, photo)
+        # suggestion row is gone with the photo; return a minimal shell
         return SuggestionOut(
             id=suggestion_id, photo_id=suggestion.photo_id,
-            photo_url="", photo_captured_at=photo.captured_at,
+            photo_url="", photo_captured_at=captured_at,
             model=suggestion.model, status="deleted",
             created_at=now,
         )
