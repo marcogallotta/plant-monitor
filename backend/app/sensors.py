@@ -26,7 +26,7 @@ class SensorState:
         return httpx.Client(
             base_url=self.api_url,
             headers={"X-Api-Key": self.api_key},
-            verify=False,
+            verify=False,  # self-signed cert on LAN display server; intentional
             timeout=5.0,
         )
 
