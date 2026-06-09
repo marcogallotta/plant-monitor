@@ -116,6 +116,8 @@ def resolve_suggestion(
         raise HTTPException(status_code=404, detail="suggestion not found")
 
     photo = db.query(Photo).filter_by(id=suggestion.photo_id).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
     now = datetime.now(timezone.utc)
 
     if body.action == "reject":
