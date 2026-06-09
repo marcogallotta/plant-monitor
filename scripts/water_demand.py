@@ -153,6 +153,48 @@ def plant_demand_mm(et0_mm: float, crop_coeff: float, sun_fraction: float) -> fl
     return et0_mm * crop_coeff * max(0.0, min(1.0, sun_fraction))
 
 
+# --- FAO-56 DUAL crop coefficient (Kcb + Ke) ------------------------------
+# For sparse / newly-sown beds a single Kc hides that demand splits between canopy
+# transpiration and BARE-SOIL evaporation. The dual form (FAO-56 ch.7) makes it
+# explicit:  ETc = (Kcb + Ke) × ET0.  Kcb scales with canopy GROUND COVER (estimable
+# from RGB — docs/irrigation.md "cover, not biomass"); Ke is wet-exposed-soil
+# evaporation — large for a bare wet bed, ~0 under full canopy or once the surface
+# dries. For dense established zones the dual result converges to the single-Kc one.
+
+def basal_kc_from_cover(fc: float, kcb_full: float = 1.10, kcb_min: float = 0.15,
+                        height_m: float = 0.30, m_l: float = 1.5) -> float:
+    """Kcb from fraction of ground cover fc (0..1). Allen & Pereira (2009) density
+    coefficient: Kcb = kcb_min + Kd·(kcb_full − kcb_min), with the density coefficient
+    Kd = min(1, m_l·fc, fc**(1/(1+h))). fc=1 → kcb_full (full canopy); fc=0 → kcb_min
+    (bare basal). kcb_full is the species mid-season basal Kc (FAO-56 Table 17); h is
+    mean plant height (m); m_l (~1.5–2) caps Kd for clumped/very short cover."""
+    fc = max(0.0, min(1.0, fc))
+    if fc <= 0.0:
+        return kcb_min
+    kd = min(1.0, m_l * fc, fc ** (1.0 / (1.0 + max(0.0, height_m))))
+    return kcb_min + kd * (kcb_full - kcb_min)
+
+
+def soil_evap_kc(kcb: float, fc: float, kc_max: float = 1.20, kr: float = 1.0,
+                 fraction_wetted: float = 1.0) -> float:
+    """Ke, the wet-bare-soil evaporation coefficient. FAO-56 eq.71:
+    Ke = min(Kr·(Kc_max − Kcb), few·Kc_max), where few = fraction of soil both EXPOSED
+    (1−fc) and wetted. Kr (0..1) is the topsoil evaporation reduction: ≈1 just after
+    rain/irrigation, →0 as the surface dries. So a bare freshly-watered bed → big Ke;
+    full canopy (fc→1) or a dry surface (Kr→0) → Ke→0."""
+    fc = max(0.0, min(1.0, fc))
+    few = max(0.0, min(1.0 - fc, fraction_wetted))
+    return max(0.0, min(kr * (kc_max - kcb), few * kc_max))
+
+
+def dual_demand_mm(et0_mm: float, kcb: float, ke: float, sun_fraction: float) -> float:
+    """Per-zone demand via the FAO-56 dual coefficient: ET0 × (Kcb + Ke) × sun-fraction.
+    Reuses plant_demand_mm with the combined coefficient, so the sun-fraction clamp is
+    shared. Use for sparse/newly-sown beds where soil evaporation is a real share of
+    demand; converges to plant_demand_mm(et0, Kc, sun) for dense zones (Ke→0)."""
+    return plant_demand_mm(et0_mm, kcb + ke, sun_fraction)
+
+
 if __name__ == "__main__":
     # Demo on a realistic hot, mostly-clear Aosta summer day (no live data yet).
     tmin, tmax, rh = 16.0, 30.0, 45.0

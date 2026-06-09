@@ -50,6 +50,25 @@ def kc_for_name(name: str) -> float:
     return KC_DEFAULT
 
 
+# Canopy-cover buckets (docs/irrigation.md / vision-tagging.md) → representative
+# ground-cover fraction fc for the FAO-56 dual coefficient. Coarse on purpose: cover
+# is the demand signal vision can give, not biomass. This is how a canopy read from a
+# Pi frame / manual photo feeds the dual model.
+COVER_FC = {"bare": 0.0, "newly-sown": 0.05, "seedlings": 0.15,
+            "sparse": 0.35, "moderate": 0.60, "heavy": 0.85}
+
+
+def dual_coeffs(name: str, cover_bucket: str, kr: float = 1.0) -> tuple:
+    """(Kcb, Ke) for a unit from its species (full-cover Kc) + canopy bucket, via the
+    FAO-56 dual coefficient (water_demand). kr (0..1) is topsoil wetness (1 just after
+    watering/rain → big soil-evap Ke on bare beds; →0 dry surface). For a dense/'heavy'
+    canopy Ke→0 and Kcb+Ke ≈ the single Kc. Unknown bucket falls back to 'heavy'
+    (treat as established) so callers never crash on a missing canopy read."""
+    fc = COVER_FC.get(cover_bucket, COVER_FC["heavy"])
+    kcb = wd.basal_kc_from_cover(fc, kcb_full=kc_for_name(name))
+    return kcb, wd.soil_evap_kc(kcb, fc, kr=kr)
+
+
 def unit_sensor(unit_id: int) -> str:
     """Nearest micro-climate sensor for a unit (provisional; time-collapsed to the
     afternoon high-demand window for movable chillis)."""

@@ -75,9 +75,13 @@ Current working pieces:
 - forecast/archive integration
 - live ET₀ calculation
 - VPD from local temperature/RH sensors
-- per-region sun-hours from camera **(preliminary)** — `sun_hours.py` is a prototype pending
-  multi-day / full-arc validation (the 2026-06-09 check); `water_balance_live.py` flags its
-  sun-fraction as partial-day
+- per-region sun-hours from camera **(preliminary)** — `sun_hours.py`. The 2026-06-09 multi-day
+  re-run is done: the two full daytime arcs (06-07, 06-08) give a profile that is stable for most
+  regions (±0–1.1 h/day; chillis + basils ~9–10 h top the ranking, mints/dill ~4.5 h bottom). A
+  handful flip between the two days (Sage 9.0→3.2, Rosemary 9.0→4.0, Lemongrass 9.0→3.2) — a tool
+  caveat (shade-baseline percentile shifts when 06-08's early-morning shaded frames are included),
+  so still needs more clear days for the full standing profile. Drop evening-only partial arcs
+  (06-06 was 17:00→00:00) before averaging. `water_balance_live.py` flags partial-day arcs.
 - `demand_mm = ET₀ × Kc × sun-fraction`
 - watering-event inference from EC + soil-moisture response
 - first soil drydown validation on the Cilantro Flower Care probe
@@ -120,6 +124,20 @@ from bare-soil evaporation (`Ke`), which matters for **newly-sown / sparse beds*
 evaporation dominates. `Kc` from **fraction-of-ground-cover + crop height** is a documented method,
 and **canopy-cover / LAI from RGB images** is established — so the camera term is a known build, not
 research. Implication: estimate **cover + stage**, not plant identity or biomass.
+
+**Wired (2026-06-09).** The dual form is now in code:
+
+- `water_demand.basal_kc_from_cover(fc, …)` — `Kcb` from ground-cover fraction `fc` via the Allen &
+  Pereira (2009) density coefficient (`fc=1 → Kcb_full`, `fc=0 → Kcb_min`).
+- `water_demand.soil_evap_kc(kcb, fc, kr, …)` — `Ke` (FAO-56 eq.71); big for a bare freshly-wetted
+  bed, →0 under full canopy (`fc→1`) or a dry surface (`kr→0`).
+- `water_demand.dual_demand_mm(et0, kcb, ke, sun)` = `ET₀ × (Kcb + Ke) × sun` (converges to the
+  single-`Kc` demand for dense zones).
+- `water_balance.COVER_FC` maps the canopy buckets (bare/newly-sown/seedlings/sparse/moderate/heavy)
+  → representative `fc`, and `water_balance.dual_coeffs(name, bucket, kr)` returns `(Kcb, Ke)` — the
+  hook a vision/manual-photo canopy read feeds. Covered by `test_water_demand.py` /
+  `test_water_balance.py`. The live join still needs a per-unit canopy/`kr` source before it drives
+  real dosing.
 
 ## Validated state as of 2026-06-08
 
@@ -170,6 +188,25 @@ This is monotonic but noisy. Likely residual sources:
 - pot-specific behaviour that will not transfer directly to ground beds
 
 The method transfers. The balcony pot coefficient does not.
+
+### Crack #2 — `Ks(moisture)` test: no signal yet (2026-06-09)
+
+`soil_drydown.py` now carries a `Ks(moisture)` probe (`ks_intervals`): within each drydown segment
+it computes per-reading-interval rates and **divides VPD out** (`y = rate / VPD = k · Ks(moisture)`),
+so any remaining trend of `y` vs the moisture **level** is the supply-limitation (FAO-56 `Ks`)
+signature — drier soil should drydown slower.
+
+Result over ~15 probe-days, 100 within-segment intervals: **no `Ks` slowdown.** The sign is in fact
+reversed (`Spearman(rate/VPD, moisture) = −0.27`; driest third `rate/VPD ≈ 19.2` vs wettest `≈ 15.7`).
+Read: the pot is kept watered in the **36–54 %** band and never reaches the dry tail where `Ks`
+bites, and the slight reverse slope is consistent with Flower Care nonlinearity, not physics. **Do
+not add a `Ks` term to the production model on this evidence.**
+
+Also noted: the segment-level depletion fit is **unstable** at this data volume — adding the one
+low-demand 06-09 day swung it from `k≈13.9 / R²=0.40` to `k≈10.0 / R²=0.28` (12 segments is too
+few). This quantifies the "needs more probe-days" caveat and cautions against trusting any single
+`k`. Re-run `soil_drydown.py` as probe-days accrue; the `Ks` verdict will flip only once the pot is
+allowed to dry past the stress threshold.
 
 ## Sparse-probe calibration protocol
 
@@ -301,10 +338,13 @@ Xiaomi **Flower Care** probe:
 
 ### Scripts
 
-- `water_demand.py`: VPD, ET₀, Kc
+- `water_demand.py`: VPD, ET₀, single Kc, and the FAO-56 dual coefficient
+  (`basal_kc_from_cover` / `soil_evap_kc` / `dual_demand_mm`)
 - `forecast_et0.py`: live daily ET₀
-- `water_balance.py`: joined demand model + per-species Kc
-- `soil_drydown.py`: drydown/demand validation + depletion fit
+- `water_balance.py`: joined demand model + per-species Kc; canopy-bucket→`fc` map (`COVER_FC`) and
+  `dual_coeffs` for the dual form
+- `soil_drydown.py`: drydown/demand validation + depletion fit + the `Ks(moisture)` probe
+  (`ks_intervals`)
 - `watering_detector.py`: EC + moisture watering-event detection
 - `sun_hours.py`: camera-derived sun-hours / exposure context
 

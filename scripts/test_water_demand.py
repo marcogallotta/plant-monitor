@@ -84,6 +84,36 @@ def test_plant_demand_scales_with_sun():
     approx(wd.plant_demand_mm(et0, 1.0, 1.5), 5.0, 1e-9)   # sun_fraction clamped to 1
 
 
+def test_basal_kc_cover_boundaries_and_monotone():
+    # fc=1 -> full-cover Kcb; fc=0 -> bare basal; rises monotonically in between.
+    approx(wd.basal_kc_from_cover(1.0, kcb_full=1.10, kcb_min=0.15), 1.10, 1e-9)
+    approx(wd.basal_kc_from_cover(0.0, kcb_full=1.10, kcb_min=0.15), 0.15, 1e-9)
+    seq = [wd.basal_kc_from_cover(fc) for fc in (0.0, 0.2, 0.5, 0.8, 1.0)]
+    assert seq == sorted(seq) and seq[0] < seq[-1], seq
+
+
+def test_soil_evap_kc_bare_wet_vs_covered_vs_dry():
+    # Bare + freshly wetted -> big Ke (up to Kc_max - Kcb_bare). Full canopy or a dry
+    # surface -> Ke = 0.
+    approx(wd.soil_evap_kc(0.15, fc=0.0, kc_max=1.20, kr=1.0), 1.05, 1e-9)
+    approx(wd.soil_evap_kc(1.10, fc=1.0, kc_max=1.20, kr=1.0), 0.0, 1e-9)   # no exposed soil
+    approx(wd.soil_evap_kc(0.15, fc=0.0, kc_max=1.20, kr=0.0), 0.0, 1e-9)   # dry topsoil
+    # Few-ceiling binds when little soil is exposed: Ke <= (1-fc)*Kc_max.
+    assert wd.soil_evap_kc(0.2, fc=0.9, kc_max=1.20, kr=1.0) <= 0.1 * 1.20 + 1e-9
+
+
+def test_dual_demand_converges_and_helps_sparse():
+    et0 = 5.0
+    # Dense canopy (fc=1): Ke=0, dual == single-Kc result.
+    kcb = wd.basal_kc_from_cover(1.0, kcb_full=1.10)
+    ke = wd.soil_evap_kc(kcb, fc=1.0)
+    approx(wd.dual_demand_mm(et0, kcb, ke, 1.0), wd.plant_demand_mm(et0, 1.10, 1.0), 1e-9)
+    # Bare freshly-sown wet bed: single-Kc (low Kcb) badly under-counts vs dual (+Ke).
+    kcb0 = wd.basal_kc_from_cover(0.0, kcb_full=1.10)
+    ke0 = wd.soil_evap_kc(kcb0, fc=0.0, kr=1.0)
+    assert wd.dual_demand_mm(et0, kcb0, ke0, 1.0) > wd.plant_demand_mm(et0, kcb0, 1.0)
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     passed = skipped = failed = 0

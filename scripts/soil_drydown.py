@@ -25,7 +25,7 @@ SOUTH_ID = "1be4c2d4-988c-40c4-8b22-3304f352c3dc"   # railing SwitchBot -> ambie
 WATER_JUMP = 4.0          # +%moisture between readings = a watering event
 MIN_SEG_HOURS = 6.0       # ignore tiny segments
 MIN_DROP = 2.0            # need a real decline to estimate a rate
-START, END = "2026-05-25T00:00:00Z", "2026-06-09T00:00:00Z"
+START, END = "2026-05-25T00:00:00Z", "2026-06-10T00:00:00Z"
 
 
 def fetch(sensor_id, start, end, n=400):
@@ -89,6 +89,29 @@ def linfit(x, y):
     return slope, inter, r2
 
 
+def ks_intervals(t, m, vpd, segs):
+    """Per-reading-interval drydown WITHIN segments, VPD-normalised — the Crack #2
+    Ks(moisture) probe. Model each interval as rate = k·VPD·Ks(moisture); then
+    y = rate/VPD = k·Ks(moisture) divides demand out, so any remaining trend of y
+    vs the interval's moisture LEVEL is the supply-limitation signature (FAO-56 Ks:
+    drydown slows as the soil dries below readily-available water). Returns parallel
+    lists (y, moisture_mid, rate, vpd_mid) over drydown intervals only."""
+    y, mmid, rate, vmid = [], [], [], []
+    for a, b in segs:
+        for i in range(a, b):
+            dt_d = (t[i + 1] - t[i]).total_seconds() / 86400.0
+            if dt_d <= 0:
+                continue
+            r = (m[i] - m[i + 1]) / dt_d          # %/day; >0 = drying
+            v = (vpd[i] + vpd[i + 1]) / 2.0
+            if r <= 0 or v <= 0:                   # skip noise upticks / bad VPD
+                continue
+            rate.append(r); vmid.append(v)
+            mmid.append((m[i] + m[i + 1]) / 2.0)
+            y.append(r / v)
+    return y, mmid, rate, vmid
+
+
 def main():
     rows = fetch(PROBE_ID, START, END)
     rows = [r for r in rows if r.get("moisture_pct") is not None
@@ -141,6 +164,37 @@ def main():
         print(f"\nDepletion model:  drydown ≈ {k:.1f}·VPD {c:+.1f}  (%moisture/day, R²={r2:.2f})")
         print("k = this pot's depletion coefficient (%/day per kPa VPD). Calibrate k per zone with a")
         print("probe, then DRIVE every unprobed zone's drydown from sensor VPD — the sparse-sensing scale path.")
+
+    # --- Crack #2: does drydown SLOW as the soil dries? (FAO-56 Ks(moisture)) ---
+    y, mm, rt, vm = ks_intervals(t, m, vpd, segs)
+    print(f"\nKs(moisture) probe — {len(y)} drydown intervals (within-segment, VPD-normalised):")
+    if len(y) >= 6:
+        # y = rate/VPD = k·Ks(moisture). If Ks ramps with moisture, y rises with the
+        # moisture LEVEL — positive Spearman. (Raw rate-vs-moisture is confounded by VPD.)
+        print(f"  Spearman(rate, VPD)            {spearman(rt, vm):+.2f}   (demand — expect strong +)")
+        print(f"  Spearman(rate, moisture)       {spearman(rt, mm):+.2f}   (raw, VPD-confounded)")
+        print(f"  Spearman(rate/VPD, moisture)   {spearman(y, mm):+.2f}   <- Ks signal: + = drier→slower")
+        # Tercile means of y across the moisture range make the ramp legible.
+        order = sorted(range(len(mm)), key=lambda i: mm[i])
+        k3 = max(1, len(order) // 3)
+        lo, hi = order[:k3], order[-k3:]
+        ylo, yhi = _mean([y[i] for i in lo]), _mean([y[i] for i in hi])
+        mlo, mhi = _mean([mm[i] for i in lo]), _mean([mm[i] for i in hi])
+        print(f"  driest third  (moisture~{mlo:4.0f}%):  rate/VPD = {ylo:.1f}")
+        print(f"  wettest third (moisture~{mhi:4.0f}%):  rate/VPD = {yhi:.1f}")
+        sig = spearman(y, mm)
+        if sig >= 0.2:
+            print("  => supports a Ks(moisture) term (drydown slows as soil dries). Needs more")
+            print("     probe-days to fit a threshold; per-reading quantisation still adds noise.")
+        elif sig <= -0.2:
+            print("  => NO Ks slowdown (sign is reversed): demand-normalised drydown is flat-to-")
+            print("     higher when drier. Consistent with the pot staying ABOVE the FAO-56 stress")
+            print("     threshold (kept watered) so Ks never bites, plus Flower Care nonlinearity.")
+            print("     Don't add a Ks term to the production model on this evidence.")
+        else:
+            print("  => no clear Ks(moisture) signal yet at this moisture range / probe-day count.")
+    else:
+        print("  too few intervals — gather more probe-days.")
 
 
 if __name__ == "__main__":
