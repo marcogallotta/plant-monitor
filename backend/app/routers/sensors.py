@@ -1,8 +1,8 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -63,6 +63,56 @@ def sensor_ingest(readings: list[SensorReadingIn], db: Session = Depends(get_db)
     inserted = len(result.fetchall())
     skipped = len(rows) - inserted
     return {"inserted": inserted, "skipped": skipped}
+
+
+FLOWER_CARE_STALE_MINUTES = 90
+
+
+def _reading_out(r: SensorReading, stale: Optional[bool] = None) -> dict:
+    d = {
+        "mac": r.mac,
+        "name": r.name,
+        "recorded_at": r.recorded_at.isoformat(),
+        "temperature_c": r.temperature_c,
+        "lux": r.lux,
+        "moisture_pct": r.moisture_pct,
+        "conductivity_us_cm": r.conductivity_us_cm,
+    }
+    if stale is not None:
+        d["stale"] = stale
+    return d
+
+
+@router.get("/flower-care/latest")
+def flower_care_latest(db: Session = Depends(get_db)):
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=FLOWER_CARE_STALE_MINUTES)
+    rows = (
+        db.query(SensorReading)
+        .distinct(SensorReading.mac)
+        .order_by(SensorReading.mac, SensorReading.recorded_at.desc())
+        .all()
+    )
+    return [_reading_out(r, stale=r.recorded_at < stale_cutoff) for r in rows]
+
+
+@router.get("/flower-care/{mac}/readings")
+def flower_care_readings(
+    mac: str,
+    start_ts: Optional[datetime] = Query(default=None),
+    end_ts: Optional[datetime] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    if start_ts is not None and start_ts.tzinfo is None:
+        raise HTTPException(status_code=422, detail="start_ts must include a UTC offset")
+    if end_ts is not None and end_ts.tzinfo is None:
+        raise HTTPException(status_code=422, detail="end_ts must include a UTC offset")
+    q = db.query(SensorReading).filter(SensorReading.mac == mac)
+    if start_ts is not None:
+        q = q.filter(SensorReading.recorded_at >= start_ts.astimezone(timezone.utc))
+    if end_ts is not None:
+        q = q.filter(SensorReading.recorded_at <= end_ts.astimezone(timezone.utc))
+    rows = q.order_by(SensorReading.recorded_at).all()
+    return [_reading_out(r) for r in rows]
 
 
 @router.get("/latest")

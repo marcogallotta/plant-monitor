@@ -76,6 +76,11 @@ async def auth_middleware(request: Request, call_next):
         if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], ingest_token):
             return await call_next(request)
         return JSONResponse({"detail": "authentication required"}, status_code=401)
+    # Flower Care read endpoints: accept ingest bearer but fall through to session auth if absent.
+    if ingest_token and path.startswith("/sensors/flower-care"):
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], ingest_token):
+            return await call_next(request)
     password = os.environ.get("DASHBOARD_PASSWORD", "")
     if not password:
         return await call_next(request)
