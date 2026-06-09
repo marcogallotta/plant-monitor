@@ -193,7 +193,7 @@ def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail="photo file could not be decoded")
 
 
-@router.get("/photos/{photo_id}", response_model=PhotoOut)
+@router.get("/photos/{photo_id:int}", response_model=PhotoOut)
 def assistant_get_photo(photo_id: int, db: Session = Depends(get_db)):
     photo = _get_photo_loaded(db, photo_id)
     if not photo:

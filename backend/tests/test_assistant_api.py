@@ -617,3 +617,37 @@ def test_contact_sheet_missing_photo_still_returns_200(client, isolated_photos_d
     assert body["photo_ids"] == [real_id, missing_id]
     assert "image_data_url" in body
     assert client.get("/photos").status_code == 200
+
+
+# --- GET /assistant/photos/{filename} (public, unauthenticated) ---
+
+def _md5_jpeg(photos_dir):
+    """Write a tiny JPEG under a valid MD5-hex filename and return the name."""
+    name = "a" * 32 + ".jpg"
+    img = Image.new("RGB", (10, 10))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    (photos_dir / name).write_bytes(buf.getvalue())
+    return name
+
+
+def test_assistant_photo_file_valid_md5_filename_returns_jpeg(client, isolated_photos_dir):
+    name = _md5_jpeg(isolated_photos_dir)
+    resp = client.get(f"/assistant/photos/{name}")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/jpeg"
+
+
+def test_assistant_photo_file_non_md5_filename_returns_404(client):
+    assert client.get("/assistant/photos/2026-05-26T100000Z.jpg").status_code == 404
+
+
+def test_assistant_photo_file_uppercase_hex_returns_404(client):
+    # regex is [a-f0-9] only — uppercase fails
+    assert client.get("/assistant/photos/" + "A" * 32 + ".jpg").status_code == 404
+
+
+def test_assistant_photo_file_missing_file_returns_404(client, isolated_photos_dir):
+    name = "b" * 32 + ".jpg"
+    # file not written to disk
+    assert client.get(f"/assistant/photos/{name}").status_code == 404

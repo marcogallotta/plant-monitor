@@ -83,3 +83,46 @@ def test_logout_clears_session(client, monkeypatch):
     assert client.get("/", headers={"Accept": "text/html"}, follow_redirects=False).status_code == 200
     client.post("/logout", follow_redirects=False)
     assert client.get("/", headers={"Accept": "text/html"}, follow_redirects=False).status_code == 303
+
+
+# --- INGEST_API_TOKEN bearer auth ---
+
+def test_ingest_token_accepted_on_post_photos(client, monkeypatch, isolated_photos_dir):
+    import json
+    monkeypatch.setenv("INGEST_API_TOKEN", "pi-secret")
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "secret")
+    stem = "2026-05-26T103000Z"
+    meta = {"captured_at": "2026-05-26T10:30:00Z", "filename": f"{stem}.jpg"}
+    resp = client.post(
+        "/photos",
+        files={
+            "image": (f"{stem}.jpg", b"FAKEJPEG", "image/jpeg"),
+            "metadata": (f"{stem}.json", json.dumps(meta).encode(), "application/json"),
+        },
+        headers={"Authorization": "Bearer pi-secret"},
+        follow_redirects=False,
+    )
+    assert resp.status_code not in (401, 403)
+
+
+def test_ingest_token_rejected_with_wrong_value(client, monkeypatch):
+    monkeypatch.setenv("INGEST_API_TOKEN", "pi-secret")
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "secret")
+    resp = client.post(
+        "/photos",
+        files={"image": ("x.jpg", b"", "image/jpeg")},
+        headers={"Authorization": "Bearer wrong"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 401
+
+
+def test_ingest_token_does_not_grant_access_to_other_routes(client, monkeypatch):
+    monkeypatch.setenv("INGEST_API_TOKEN", "pi-secret")
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "secret")
+    resp = client.get(
+        "/photos",
+        headers={"Authorization": "Bearer pi-secret"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 401
