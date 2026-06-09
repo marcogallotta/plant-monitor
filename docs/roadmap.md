@@ -15,6 +15,7 @@ This project is now oriented around a practical goal:
 | **B — Photo-to-unit tagging**         | [`vision-tagging.md`](vision-tagging.md) | Pi frames, phone/camera archive, manual-photo tagging, reference corpus, vision context |
 | **C — Nursery direction**             | [`nursery.md`](nursery.md)               | crop priorities, scaling context, strategy, operating constraints                       |
 | **D — Platform / import / review UX** | code + operational docs                  | the boring infrastructure: import, sync, review, IDs, data integrity                    |
+| **Garden-scale design (A+B)**         | [`garden-sensing.md`](garden-sensing.md) | pre-site sketch: coordinate system, marker localization, capture workflow, 3-output split |
 
 ## Current north star
 

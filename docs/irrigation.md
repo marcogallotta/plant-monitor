@@ -343,6 +343,8 @@ Xiaomi **Flower Care** probe:
 
 ## Garden scale — design before the site (~Sept/Oct 2026)
 
+_Full design: [`garden-sensing.md`](garden-sensing.md). This section is the irrigation-side summary._
+
 The balcony is research input; the real target is the ground garden, where the problem is **different
 and simpler**: ground plants stay put (no sun-chasing / moving pots), there is no fixed overhead
 camera, and the dynamic is mostly "**detect a new plant**" against an otherwise static layout. Design
