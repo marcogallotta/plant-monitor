@@ -1,103 +1,183 @@
-# Nursery Plan — context brief
+# Nursery Direction — strategic context
 
-_A short orientation for a chat helping with the **automation / irrigation** side of this
-project. For the full monitoring + water-balance research detail, see
-[ai-tagging-design.md](ai-tagging-design.md)._
+_A short orientation for the plant-growing direction behind this project._
+
+This doc explains **why** the automation work matters and what nursery direction it supports.
+
+- For irrigation control, water-balance modelling, sparse sensing, canopy/context inputs, and pump design, see [`irrigation.md`](irrigation.md).
+- For camera monitoring, plant identity, event detection, manual-photo tagging, and AI tagging, see [`ai-tagging-design.md`](ai-tagging-design.md).
+
+This doc owns: nursery direction, crop prioritisation, scaling assumptions, and why irrigation/automation is strategically important.
+
+This doc does **not** own: irrigation formulas, pump hardware, camera pipelines, database schema, prompts, or implementation sequence.
 
 ## Who / what
 
-A serious, cooking-led edible-plant project in **Aosta, northern Italy** (alpine-adjacent),
-heading toward a **specialist nursery** direction over a 3–5+ year horizon. Run by one person
-with an unusual skill stack that is the whole point: **serious cook + plant/soil-science theory
-+ software / embedded / IoT + data rigour + fermentation**. The automation work sits exactly on
-the software-meets-soil intersection.
+A serious, cooking-led edible-plant project in **Aosta, northern Italy**: alpine-adjacent, short-season, with real climate constraints.
 
-Income from software remains primary; the nursery is a slow, compounding build, not a sprint.
+The long-term direction is a **specialist nursery / high-quality edible-plant operation** over a 3–5+ year horizon. It is run by one person with an unusual skill stack:
 
-## The thesis (why the plant choices look the way they do)
+- serious cooking
+- plant and soil-science theory
+- software / embedded / IoT
+- data rigour
+- fermentation and ingredient-quality obsession
 
-- **Demand ≠ current cooking use.** Current use is capped by what's been *learned to grow* and
-  by space — not by want. A plant's absence today is the *gap to close*, not low demand. Current
-  cooking already runs on **inferior local substitutes**, which is both the demand evidence and
-  the quality-gap thesis.
-- **The moat is the hard part.** Warm-tender, short-season, quality-gap crops that are hard to
-  grow *and* hard to source well in northern Italy. If they were easy, there'd be no edge.
-- **Quality-first, cooking-led.** Better ingredient → better cooking; cooking is the evidence
-  engine for what's worth growing.
+That combination is the edge. The automation work sits exactly at the software-meets-soil intersection.
 
-### Three buckets (gating logic — useful for automation prioritisation)
+Income from software remains primary. The nursery direction is a slow, compounding build, not a sprint.
 
-1. **Warm-tender annuals** (chillies, aubergine, SEA/Chinese/Japanese crops) — gated on
-   contained-heat propagation skill + a heated enclosure. The R&D moat.
-2. **Leafy / veg succession** (cilantro, parsley, dill, mint, salad veg) — gated on garden
-   **area** (volume + resow); demand is *proven now* (rationed to ~1 portion/week, shop-topped).
-   Works in temporary ground.
-3. **Slow perennials / woody / immobile** (rhubarb, citrus, figs, curry leaf, Sichuan
-   peppercorn, galangal, wasabi) — gated on **tenure/permanence**; deferred until non-temporary
-   ground.
+## Core thesis
+
+### Demand is not measured by current growing volume
+
+Current use is capped by what has been learned to grow and by available space. A plant’s absence today is often the **gap to close**, not evidence of low demand.
+
+Current cooking already relies on inferior local substitutes. That is both the demand signal and the quality-gap thesis.
+
+### The moat is the hard part
+
+The interesting crops are warm-tender, short-season, quality-gap crops that are hard to grow well and hard to source well in northern Italy.
+
+If they were easy, there would be no edge.
+
+### Quality-first, cooking-led
+
+The cooking is the evidence engine. Better ingredient → better cooking. Crops are prioritised by whether they materially improve the food, not by novelty alone.
+
+## Crop buckets
+
+| Bucket | Examples | Gate | Why it matters |
+|---|---|---|---|
+| **Warm-tender annuals** | chillies, aubergine, Southeast Asian / Chinese / Japanese crops | contained-heat propagation skill + heated enclosure | Main R&D moat; high quality gap in northern Italy |
+| **Leafy / veg succession** | cilantro, parsley, dill, mint, salad veg | area + resowing rhythm | Proven demand now; currently rationed and shop-topped |
+| **Slow perennials / woody / immobile crops** | rhubarb, citrus, figs, curry leaf, Sichuan peppercorn, galangal, wasabi | tenure / permanence | Valuable later, but deferred until non-temporary ground |
+
+The practical priority is:
+
+1. Learn reliable warm-crop propagation and control.
+2. Use leafy succession crops as high-frequency learning and eating volume.
+3. Defer immobile/perennial commitments until land tenure is stable.
 
 ## Scale trajectory
 
-- **Now:** ~4 × 1 m south-facing balcony, ~22 plants, **physically maxed** — no slack space.
-- **From ~Oct 2026:** renting a place with garden/plot space; target ~300–500 m² over 3–4 years,
-  staged use. First serious footprint likely ~100 m².
-- **Long horizon:** possible expansion to **Piedmont** (Turin–Ivrea–Canavese), possibly a second
-  site with a hire.
+Planning assumptions as of June 2026:
 
-## Why automation / irrigation is the scaling lever (the key point for this chat)
+- **Now:** ~4 × 1 m south-facing balcony, ~22 plants, physically maxed.
+- **From ~Oct 2026:** likely move toward rented garden/plot space.
+- **First serious footprint:** around 100 m².
+- **3–4 year target:** roughly 300–500 m² staged use.
+- **Long horizon:** possible expansion to Piedmont, especially Turin–Ivrea–Canavese; possibly a second site with a hire.
 
-**Watering is the one cost that scales linearly with plant count and does NOT compress with
-skill.** Sowing is seasonal, selection improves with experience, cooking batches — but watering
-is daily, non-deferrable, per-plant, and grows in lockstep with area. Twice-daily hand-watering
-is fine on the balcony, hours/day at 100 m², impossible across two sites.
+These are planning assumptions, not fixed commitments. The important point is the direction: balcony → garden → larger or multi-site operation.
 
-- **Automating it decouples plant-count from daily labour** → the difference between scaling on
-  *hands* vs. scaling on *infrastructure*. It's what makes multi-site feasible.
-- **Highest-stakes failure mode** — under/over-watering is the #1 survival/quality risk, worst on
-  the warm-tender quality crops that *are* the edge. Per-plant dosing (not garden-average)
-  preserves the quality story at scale.
-- **Location-portable** — the model (ET₀ × Kc × per-plant sun-fraction + sensor/forecast fusion)
-  ports to the garden and to Piedmont. Build once, compounds.
+## Why automation / irrigation is the scaling lever
 
-So irrigation is the **highest-leverage piece of the whole stack**; the vision/event-detection
-work is the supporting layer.
+Watering is the one cost that scales almost linearly with plant count and does **not** compress much with skill.
 
-## Current automation state (summary — detail in ai-tagging-design.md)
+Sowing is seasonal. Selection improves with experience. Cooking can batch. But watering is daily, non-deferrable, per-plant, and grows with area.
 
-- **Overhead Pi camera** (hourly burst-averaged "plates", sway-suppressed) = cheap continuous
-  index: identity-by-position, presence, gross change.
-- **Closeups + LLM vision** = the value layer: confident ID + harvest/condition reads where
-  overhead gives green blobs.
-- **Sensors:** SwitchBot temp/humidity at **two balcony micro-climates** (wall = hot/dry, railing
-  = cool/exposed; chillis sun-chased to a west window); a **Xiaomi Flower Care soil probe** in the
-  cilantro pot (moisture, lux, temp, EC) = the ground-truth calibration anchor.
-- **Forecast + sensors** served from an existing **ESP32 home-display server** (Open-Meteo
-  forecast + archive; sensor proxy).
-- **Water-balance demand side: built & live** — FAO-56 Penman-Monteith **ET₀** from forecast,
-  **VPD** per micro-climate, **camera-derived per-region sun-hours**, joined as
-  `demand_mm = ET₀ × Kc × sun-fraction`.
-- **Supply side:** watering-event detection from the soil probe (built); **auto-pump = the planned
-  unlock** — it turns watering from a noisy *inferred* event into **known input**, which lets the
-  control loop close (and dissolves the under-vs-over-watering ambiguity).
+Twice-daily hand-watering is acceptable on a balcony. At 100 m² it becomes hours of labour. Across two sites it becomes structurally impossible.
 
-## The goal
+So irrigation is the highest-leverage automation target.
 
-A **closed-loop irrigation controller**: `sense → dose → measure response → adjust`, learning each
-plant's demand curve and dosing ahead of the forecast. The balcony is a working miniature of the
-100 m² garden.
+### Strategic implication
 
-## Constraints an automation helper should know
+Automated irrigation decouples plant count from daily labour. That is the difference between scaling on hands and scaling on infrastructure.
 
-- **Cold room kept at 14–16°C** (deliberate); warm crops need a contained heated enclosure, not
-  ambient heat.
-- **Pi hardware is tiny** (~416 MB RAM, no `cv2`, tmpfs `/tmp`) — algorithms are shaped by this
-  (e.g. streaming-mean burst collapse, not median).
-- **No manual logs** — the user won't keep watering/harvest logs; everything must self-bootstrap
-  from the one soil probe + camera + occasional human corrections.
-- **Garden will differ from the balcony:** pots → ground changes the water physics (soil profile,
-  drainage, root depth); many zones with sparse sensors instead of two micro-climates; likely
-  **off-grid / visited every few days**, so power + water storage/pressure are site constraints.
-- **Signal confounds are the hard part** — foliage sway, diurnal lighting (illuminant *colour*),
-  camera auto-exposure, registration under moving shadows, wilt-mimics-harvest, the **common-mode
-  trap** (detrending that removes lighting also removes events coinciding with a global change).
-  See ai-tagging-design.md for how each is handled.
+For this project, irrigation must preserve quality, not just keep plants alive: per-plant or per-zone control matters because warm-tender crops, leafy succession crops, pots, beds, shaded areas, and exposed areas will not share the same demand.
+
+The model should therefore be location-portable: weather + forecast + local sensing + known dosing + observed response, with camera/tagging used as occasional context where useful.
+
+The same sparse-sensing principle matters economically: probes should **calibrate**, not continuously sense every plant or zone. A few probes establish soil/zone behaviour and drift anchors, allowing many zones to run from weather, microclimate, sun-map, canopy state, and known dosing.
+
+The vision/tagging work matters because it supports this loop, but irrigation is the primary product.
+
+## Current automation state
+
+The balcony is the working miniature of the future garden.
+
+Current system capabilities include:
+
+- overhead Pi camera monitoring
+- closeup images for higher-value AI/vision reads
+- sparse temperature/humidity sensing across balcony microclimates
+- one soil probe as a calibration anchor
+- forecast and historical weather integration
+- live water-demand modelling
+- watering-event inference from EC + soil-moisture response
+
+The next major unlock is **known-input dosing** via pump control.
+
+That changes watering from a noisy inferred event into a measured input:
+
+`sense → dose → measure response → adjust`
+
+Once the system controls the dose, it can learn plant and zone demand curves instead of guessing from human watering behaviour.
+
+## Camera is context, not the core irrigation sensor
+
+A key design conclusion is that irrigation control should **not** depend on continuous camera observation.
+
+For the basic control loop — whether a zone has been watered, how much was dosed, and how the soil responded — the system should rely on known pump input, soil/climate sensing, weather, and forecast data.
+
+Camera input is still useful, but in a different role: it gives occasional visual context about **sun exposure, canopy cover, and crop stage**.
+
+Some visual inputs are almost static calibration tasks, such as mapping per-zone sun exposure / insolation once and updating only when the layout or season materially changes.
+
+A zone of bare soil, newly sown seed, seedlings, moderate canopy, and heavy leaf cover will not have the same water demand under the same weather. The model does not need perfect daily vision, but it benefits from periodic reference images that classify zones by coverage and growth state.
+
+This may come from a fixed Pi camera where practical. On a balcony or small greenhouse, one overhead camera may be enough to give useful reference frames. But that probably will not scale cleanly to larger plots or multiple sites.
+
+The scalable version may be **requested manual photos**: ask for a picture of a bed, zone, tray, or plant group when the model needs a visual reference. That only works if the tagging layer can turn those photos into useful irrigation context:
+
+- which bed, zone, tray, or plant group the photo shows
+- what crop or crop mix is present
+- whether the area is bare, newly sown, seedlings, moderate canopy, or heavy canopy
+- whether anything has moved, been harvested, died back, or changed state
+
+So tagging is not merely a nice camera feature. It is the bridge between occasional human/photos and irrigation-relevant context.
+
+## Operating constraints
+
+The system must fit the real operating model:
+
+- One-person project.
+- No reliable manual logs.
+- Balcony now, garden later.
+- Pots now, ground later.
+- Cold indoor room, usually 14–16°C.
+- Warm crops need contained heated propagation, not ambient room heat.
+- Future garden may be off-grid or only visited every few days.
+- Power, water storage, pressure, and maintenance must be treated as real constraints.
+- Edge hardware and outdoor signals are messy; technical handling lives in the irrigation and AI/tagging docs.
+
+## Automation priorities from nursery strategy
+
+1. **Irrigation first.**
+   Watering is the daily scaling bottleneck and the highest-stakes quality/survival risk.
+
+2. **Known-input dosing before clever inference.**
+   A pump-controlled dose is more valuable than endlessly improving inference from messy human watering events.
+
+3. **Sparse probes before dense sensing.**
+   Probes should calibrate soil and zone behaviour, not become one-sensor-per-plant infrastructure.
+
+4. **Climate / heated enclosure second.**
+   Warm-tender crops are the moat, but they need controlled propagation and protection.
+
+5. **Vision/tagging as support layer.**
+   Camera and AI work should support identity, condition reads, harvest/move detection, and irrigation context such as sun exposure, canopy cover, crop stage, and zone state. It should not be a hard dependency for basic watering control.
+
+6. **No manual-log dependency.**
+   The system must self-bootstrap from sensors, camera observations, known pump events, forecasts, and occasional human corrections or requested photos.
+
+## Goal
+
+Build a practical automation stack that lets a one-person, quality-led edible-plant project scale from balcony to garden without drowning in daily watering labour.
+
+The core loop is:
+
+`sense → dose → observe → adjust`
+
+The strategic win is not “smart garden gadgetry”. It is making serious, high-quality, climate-constrained edible growing operationally possible at larger-than-balcony scale.
