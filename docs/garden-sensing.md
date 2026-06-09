@@ -5,7 +5,8 @@ Nothing here is built yet. The point is to design the coordinate system, localiz
 workflow, and per-photo outputs now, so September is execution and not improvisation._
 
 This doc owns the **garden-scale sensing design**: how a mostly-handheld, location-tagged photo
-stream becomes irrigation-relevant context for a ~100 m² ground garden.
+stream becomes irrigation-relevant context for the ground garden — the candidate plot is ~200 m²
+over ~3 terraces, staged, so **year-1 ≈ 100 m²**. The terraces map naturally onto beds/zones.
 
 - The irrigation model it feeds (zone demand, dual-`Kc`, sparse probes, `Ks`) lives in
   [`irrigation.md`](irrigation.md).
@@ -28,7 +29,9 @@ The balcony is research input, not the target. The garden inverts most of the ha
 
 So the garden problem reduces to: **localize a handheld photo to a zone, read its canopy, and note
 change** — against an otherwise static layout. The irrigation unit is the **zone / bed-section, not
-the plant**: demand and valves are per-zone.
+the plant**: demand and valves are per-zone. (One exception to "static": a small subset of
+snip-herb pots bike-rotates home for a harvest week, then returns — treat those as a handful of
+movable units, not a reason to abandon the static-layout simplification.)
 
 **Balcony machinery that does NOT transfer** (do not port it): move detection, chilli sun-chase
 modelling, the fixed-Pi region map, and "plants as the fingerprint of location."
@@ -112,8 +115,12 @@ how occasional handheld shots become a sensing stream without fixed cameras ever
   **planting/update photo** (marker visible) taken whenever a zone changes.
 - **Planting / change events** (the "detect a new plant" dynamic) ride on that update photo: newly
   sown bed, transplanted seedlings, replaced crop, harvested-out patch, fallow zone. A marked update
-  photo is the **non-annoying replacement for manual logging** — capture the change once, with the
-  marker in frame, instead of keeping a written log.
+  photo is a **lower-friction form of logging** — capture the change once, with the label in frame,
+  instead of a written log. But it _is_ still a log: the project's hard constraint is **no reliable
+  manual logs**, and this user already doesn't keep them, so **the system must NOT depend on it.**
+  When change-capture lapses, the map-confidence output (4) + staleness must catch the drift and
+  irrigation degrades to conservative/stale — never silently wrong, never broken. Design it as the
+  _ideal_ path, not a solved replacement.
 - **What triggers a request:** model uncertainty for a zone; staleness (weighted by crop growth
   speed — fast crops like rocket/basil go stale quickly, woody herbs slowly); a recent watering to
   verify; a flagged change.
@@ -127,8 +134,10 @@ roadmap (manual requested photos).
 
 ### Cadence — confidence decay, not a fixed schedule (and not "never")
 
-The control loop runs continuously on probes + VPD + forecast + dosing; photos only refresh slow
-context. So capture is driven by **per-zone confidence decay**, not a calendar:
+The control loop runs on its own between visits on probes + VPD + forecast + dosing — _subject to the
+site's power/connectivity_, which an off-grid terraced orto may limit (irrigation.md owns that
+constraint). Photos only refresh slow context, so capture is driven by **per-zone confidence decay**,
+not a calendar:
 
 ```text
 zone state: canopy_bucket, surface_state, last_observed_at, confidence
@@ -165,8 +174,10 @@ routine irrigation sweep stays cheap.
 1. **Ad-hoc bound capture** (foundation): "photograph B3" → confirm/scan bed → 1–3 photos → metadata
    stored.
 2. **Worklist** (the scaling path): "today: B3 overview, PROP-2, the bed you sowed Tuesday."
-3. **Change/event capture** (critical): "I sowed / transplanted / harvested-out B3" → photo + event
-   type. Without this the map silently rots.
+3. **Change/event capture** (ideal, but best-effort): "I sowed / transplanted / harvested-out B3" →
+   photo + event type. If it lapses the map drifts — but that's _detected_ by map-confidence +
+   staleness (not silent), and irrigation degrades to conservative. Don't architect a hard
+   dependency on it (no-logs constraint).
 4. **Per-bed mini-video** (later): tap B3, record 5–10 s, backend picks the best frames — redundancy
    without full-walk segmentation complexity.
 5. **Full walkthrough video** (last, if ever): seductive but adds motion blur, frame selection,
