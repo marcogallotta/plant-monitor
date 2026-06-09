@@ -317,7 +317,7 @@ def assistant_unclassified(db: Session = Depends(get_db)):
 
 
 _CONTACT_SHEET_MAX = 25
-_ROTATION_MAP = {90: Image.ROTATE_270, 180: Image.ROTATE_180, 270: Image.ROTATE_90}
+_ROTATION_MAP = {90: Image.Transpose.ROTATE_270, 180: Image.Transpose.ROTATE_180, 270: Image.Transpose.ROTATE_90}
 
 
 @router.get("/contact-sheet")
