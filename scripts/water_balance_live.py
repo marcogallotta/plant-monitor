@@ -62,9 +62,13 @@ def main():
 
     times, _above, hours, _ = sh.sun_hours_for_day(
         paths, ref, a.ref, w, h, regs, [], a.margin, a.base_pct, False)
+    # Denominator must be the SAME per-frame durations the numerator sums (each frame =
+    # gap to the next, last reuses the median), NOT the bare first→last span: the span
+    # omits the last frame's duration, so dividing by it inflates the fraction past 1.0.
+    observed_h = sum(sh.frame_durations_h(times))
     arc_h = (times[-1] - times[0]).total_seconds() / 3600.0
     names = {u: F.NAMES.get(u, str(u)) for u in regs}
-    sun_fraction = {u: min(1.0, hours[u] / arc_h) for u in regs}
+    sun_fraction = {u: min(1.0, hours[u] / observed_h) for u in regs}
     kc_by_unit = {u: wb.kc_for_name(names[u]) for u in regs}
 
     rows = wb.assemble(a.et0, sun_fraction, vpd_by_sensor, kc_by_unit, names)

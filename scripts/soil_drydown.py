@@ -19,16 +19,16 @@ import httpx
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import scripts.water_demand as wd
 import scripts.forecast_et0 as fe
+import scripts.watering_detector as wdet
 
 PROBE_ID = "3ee7f8a3-9811-45ce-8296-c909a104952b"   # Cilantro Flower Care (moisture/temp/light/EC)
 SOUTH_ID = "1be4c2d4-988c-40c4-8b22-3304f352c3dc"   # railing SwitchBot -> ambient RH for VPD
-WATER_JUMP = 4.0          # +%moisture between readings = a watering event
 MIN_SEG_HOURS = 6.0       # ignore tiny segments
 MIN_DROP = 2.0            # need a real decline to estimate a rate
 START, END = "2026-05-25T00:00:00Z", "2026-06-10T00:00:00Z"
 
 
-def fetch(sensor_id, start, end, n=400):
+def fetch(sensor_id, start, end, n=5000):
     url = os.environ.get("SENSOR_API_URL", ""); key = os.environ.get("SENSOR_API_KEY", "")
     with httpx.Client(base_url=url, headers={"X-Api-Key": key}, verify=False, timeout=20) as c:
         r = c.get(f"/sensors/{sensor_id}/readings",
@@ -89,6 +89,27 @@ def linfit(x, y):
     return slope, inter, r2
 
 
+def drydown_segments(t, m, onsets):
+    """Drydown spans BETWEEN fused watering events (onsets = reading indices from
+    watering_detector). Each event closes the prior drydown at the reading before it;
+    the next drydown starts at the moisture PEAK inside the event's settle window, so
+    the wetting rise + decay is excluded rather than counted as 'drydown'. Replaces the
+    old moisture-jump split, which missed EC-only waterings and merged two drydowns."""
+    segs, start = [], 0
+    for oi in sorted(set(onsets)):
+        if oi - 1 > start:
+            segs.append((start, oi - 1))
+        j, peak = oi, oi                              # moisture peak within settle window
+        while j < len(t) and (t[j] - t[oi]).total_seconds() / 60.0 <= wdet.REFRACTORY_MIN:
+            if m[j] >= m[peak]:
+                peak = j
+            j += 1
+        start = peak
+    if start < len(t) - 1:
+        segs.append((start, len(t) - 1))
+    return segs
+
+
 def ks_intervals(t, m, vpd, segs):
     """Per-reading-interval drydown WITHIN segments, VPD-normalised — the Crack #2
     Ks(moisture) probe. Model each interval as rate = k·VPD·Ks(moisture); then
@@ -96,31 +117,42 @@ def ks_intervals(t, m, vpd, segs):
     vs the interval's moisture LEVEL is the supply-limitation signature (FAO-56 Ks:
     drydown slows as the soil dries below readily-available water). Returns parallel
     lists (y, moisture_mid, rate, vpd_mid) over drydown intervals only."""
+    # Flower Care moisture is integer-quantised, so a single 1% step over a few minutes
+    # reads as ~hundreds of %/day. Compare readings at least MIN_DT_H apart so one
+    # quantisation step can't dominate the rate (high-res data makes this essential).
+    MIN_DT_H = 2.0
     y, mmid, rate, vmid = [], [], [], []
     for a, b in segs:
-        for i in range(a, b):
-            dt_d = (t[i + 1] - t[i]).total_seconds() / 86400.0
-            if dt_d <= 0:
-                continue
-            r = (m[i] - m[i + 1]) / dt_d          # %/day; >0 = drying
-            v = (vpd[i] + vpd[i + 1]) / 2.0
-            if r <= 0 or v <= 0:                   # skip noise upticks / bad VPD
-                continue
-            rate.append(r); vmid.append(v)
-            mmid.append((m[i] + m[i + 1]) / 2.0)
-            y.append(r / v)
+        i = a
+        while i < b:
+            j = i + 1
+            while j <= b and (t[j] - t[i]).total_seconds() / 3600.0 < MIN_DT_H:
+                j += 1
+            if j > b:
+                break
+            dt_d = (t[j] - t[i]).total_seconds() / 86400.0
+            r = (m[i] - m[j]) / dt_d              # %/day; >0 = drying
+            v = (vpd[i] + vpd[j]) / 2.0
+            if r > 0 and v > 0:                    # skip noise upticks / bad VPD
+                rate.append(r); vmid.append(v)
+                mmid.append((m[i] + m[j]) / 2.0)
+                y.append(r / v)
+            i = j
     return y, mmid, rate, vmid
 
 
 def main():
     rows = fetch(PROBE_ID, START, END)
     rows = [r for r in rows if r.get("moisture_pct") is not None
-            and r.get("temperature_c") is not None and r.get("light_lux") is not None]
+            and r.get("temperature_c") is not None and r.get("light_lux") is not None
+            and r.get("conductivity_us_cm") is not None]
     rows = sorted(rows, key=lambda r: r["timestamp"])
     t = [_ts(r) for r in rows]
+    ts_str = [r["timestamp"] for r in rows]
     m = [float(r["moisture_pct"]) for r in rows]
     temp = [float(r["temperature_c"]) for r in rows]
     light = [float(r["light_lux"]) for r in rows]
+    ec = [float(r["conductivity_us_cm"]) for r in rows]
 
     # Ambient RH (railing SwitchBot) -> per-probe-reading VPD using the pot's OWN
     # temp + nearest-in-time ambient RH. VPD = the proper instantaneous demand driver.
@@ -134,12 +166,17 @@ def main():
     print(f"{len(rows)} readings, {t[0].date()}→{t[-1].date()}, moisture {min(m):.0f}–{max(m):.0f}%; "
           f"ambient RH {min(sv):.0f}–{max(sv):.0f}%; ET0 days {len(et0_by_day)}")
 
-    # Split into drydown segments at each watering (moisture jump up).
-    segs, start = [], 0
-    for i in range(1, len(m)):
-        if m[i] - m[i - 1] >= WATER_JUMP:           # watering -> close prior segment
-            segs.append((start, i - 1)); start = i
-    segs.append((start, len(m) - 1))
+    # Split drydowns at RE-WETTING events only. watering_detector.detect fuses EC +
+    # moisture, but for drydown segmentation only events that actually add water bound a
+    # segment: a moisture rise, or an EC+ feed/flush. EC- excursions with no moisture
+    # rise are dilution OR post-feed decay drift (the detector is explicitly un-tuned for
+    # decay) — they do NOT reverse a drydown, so they must not split it. (Verified: a
+    # single 06-01→06-05 cool-spell drydown was being chopped by EC-decay false splits.)
+    idx = {ts: i for i, ts in enumerate(ts_str)}
+    events = wdet.detect(list(zip(ts_str, ec, m)))
+    rewet = [e for e in events if e["peak_m"] >= wdet.M_STEP or e["peak_ec"] >= wdet.EC_STEP]
+    segs = drydown_segments(t, m, [idx[e["onset"]] for e in rewet])
+    print(f"{len(events)} events ({len(rewet)} re-wetting) -> {len(segs)} drydown segments")
 
     print(f"\n{'segment start':<18}{'hrs':>5}{'rate/d':>8}{'Tmean':>7}{'VPDmn':>7}{'ET0mn':>7}")
     rate, Tm, Vm, Em = [], [], [], []
@@ -161,9 +198,10 @@ def main():
         print(f"  ET0 (FAO-56) {spearman(rate, Em):+.2f}   (the reference demand)")
         print("(higher = better predictor of real water loss = stronger water-balance model)")
         k, c, r2 = linfit(Vm, rate)
-        print(f"\nDepletion model:  drydown ≈ {k:.1f}·VPD {c:+.1f}  (%moisture/day, R²={r2:.2f})")
-        print("k = this pot's depletion coefficient (%/day per kPa VPD). Calibrate k per zone with a")
-        print("probe, then DRIVE every unprobed zone's drydown from sensor VPD — the sparse-sensing scale path.")
+        print(f"\nDepletion fit:  drydown ≈ {k:.1f}·VPD {c:+.1f}  (%moisture/day, R²={r2:.2f})")
+        print("CAUTION: this segment-level coefficient is NOT stable — it swings with watering-event")
+        print("segmentation and probe resolution. VPD→drydown holds qualitatively (per-interval below),")
+        print("but don't treat k as a fitted constant until known dosing / ground-truth waterings exist.")
 
     # --- Crack #2: does drydown SLOW as the soil dries? (FAO-56 Ks(moisture)) ---
     y, mm, rt, vm = ks_intervals(t, m, vpd, segs)
@@ -183,16 +221,12 @@ def main():
         print(f"  driest third  (moisture~{mlo:4.0f}%):  rate/VPD = {ylo:.1f}")
         print(f"  wettest third (moisture~{mhi:4.0f}%):  rate/VPD = {yhi:.1f}")
         sig = spearman(y, mm)
-        if sig >= 0.2:
-            print("  => supports a Ks(moisture) term (drydown slows as soil dries). Needs more")
-            print("     probe-days to fit a threshold; per-reading quantisation still adds noise.")
-        elif sig <= -0.2:
-            print("  => NO Ks slowdown (sign is reversed): demand-normalised drydown is flat-to-")
-            print("     higher when drier. Consistent with the pot staying ABOVE the FAO-56 stress")
-            print("     threshold (kept watered) so Ks never bites, plus Flower Care nonlinearity.")
-            print("     Don't add a Ks term to the production model on this evidence.")
-        else:
-            print("  => no clear Ks(moisture) signal yet at this moisture range / probe-day count.")
+        lean = ("drier→slower, toward Ks" if sig >= 0.2 else
+                "drier→faster, against Ks" if sig <= -0.2 else "flat")
+        print(f"  => INCONCLUSIVE: this run leans {lean} (sig={sig:+.2f}), but the sign is")
+        print("     METHOD-SENSITIVE — segmentation + moisture quantisation flip it run to run.")
+        print("     Treat Ks as unresolved (neither absent nor confirmed). Fitting a reliable k/Ks")
+        print("     needs known pump dosing or ground-truth watering labels, not passive days alone.")
     else:
         print("  too few intervals — gather more probe-days.")
 

@@ -82,9 +82,15 @@ Current working pieces:
   caveat (shade-baseline percentile shifts when 06-08's early-morning shaded frames are included),
   so still needs more clear days for the full standing profile. Drop evening-only partial arcs
   (06-06 was 17:00→00:00) before averaging. `water_balance_live.py` flags partial-day arcs.
+  **Caveat (2026-06-09):** most frames (13/14, 14/17) FAIL single-reference registration under
+  dawn→dusk lighting and fall back to raw identity geometry — `sun_hours.py` now reports this loudly
+  instead of using it silently. Tolerable because the Pi mount is fixed (raw ≈ aligned), but the
+  profile currently rests on that assumption; chained-hop or stored stabilization transforms are the
+  real fix before the sun map is trusted as an irrigation input.
 - `demand_mm = ET₀ × Kc × sun-fraction`
 - watering-event inference from EC + soil-moisture response
-- first soil drydown validation on the Cilantro Flower Care probe
+- soil drydown analysis on the Cilantro Flower Care probe (VPD→drydown holds _qualitatively_; the
+  fitted coefficient is method-sensitive — see Evidence)
 
 ### Target model
 
@@ -157,56 +163,41 @@ research. Implication: estimate **cover + stage**, not plant identity or biomass
   - watering-event detection from EC + moisture fusion
   - auto-pump/valves are the planned unlock
 
-### Evidence
+### Evidence — VPD→drydown is qualitative, NOT a stable fitted coefficient (revised 2026-06-09)
 
-On the one instrumented pot, Cilantro Flower Care, 14 days, 12 drydown segments between watering
-events:
+On the one instrumented pot (Cilantro Flower Care, ~16 days), a measured soil-moisture drydown does
+rise with evaporative demand: VPD is the best short-term predictor (hourly, zone-local), ahead of air
+temperature and daily ET₀. That **qualitative** relationship is robust, and is clearest at the
+**per-interval** level once quantisation artefacts are guarded (`Spearman(rate, VPD) ≈ +0.6`).
 
-- drydown rate vs air temperature: Spearman **+0.49**
-- drydown rate vs VPD: Spearman **+0.71**
-- drydown rate vs daily ET₀: Spearman **+0.52**
+But the **fitted depletion coefficient is not robust.** An earlier headline (`drydown ≈ 13.5·VPD −
+10.5`, `R² = 0.39`, Spearman +0.71) does **not** reproduce: re-running `soil_drydown.py` across
+defensible method changes — full-resolution fetch (5000 vs 400 points), and splitting drydowns on
+**re-wetting events** instead of a moisture-jump threshold — swung the segment-level fit anywhere from
+`R² ≈ 0.39` down to `R² ≈ 0.01–0.07`. The segment-level `k` depends strongly on **watering-event
+segmentation** and **probe resolution**, both of which are themselves unsolved (watering detection is
+provisional; Flower Care moisture is integer-quantised). Treat `k` as **not yet a fitted constant.**
 
-VPD is the best validated short-term predictor so far because it is hourly and zone-local.
+Residual / confounding sources: watering-event segmentation, moisture quantisation, unmodelled canopy
+/ crop stage, and pot-specific behaviour that will not transfer to ground beds anyway. **The method
+transfers; the balcony pot coefficient does not.**
 
-Magnitude was large:
+### Crack #2 — `Ks(moisture)`: unresolved / method-sensitive (2026-06-09)
 
-- cool spell around 20 °C: about **1.8 %/day**
-- hot days: about **24–34 %/day**
+`soil_drydown.py` carries a `Ks(moisture)` probe (`ks_intervals`): within each drydown it computes
+per-interval rates (guarded to ≥2 h apart so a single integer moisture step can't dominate) and
+**divides VPD out** (`y = rate / VPD = k · Ks(moisture)`), so a remaining trend of `y` vs moisture
+**level** is the supply-limitation (FAO-56 `Ks`) signature — drier soil should drydown slower.
 
-First depletion fit:
+**The result is method-sensitive and currently inconclusive.** The sign of
+`Spearman(rate/VPD, moisture)` **flips** with segmentation and quantisation handling (observed −0.27
+with one method, +0.38 with another in the same session). So `Ks` is **neither absent nor
+confirmed** — do not add a `Ks` term to the production model, and do not record it as ruled out.
 
-```text
-drydown ≈ 13.5 · VPD − 10.5 %/day
-R² = 0.39
-```
-
-This is monotonic but noisy. Likely residual sources:
-
-- unmodelled canopy / crop stage
-- missing `Ks(moisture)`
-- Flower Care moisture quantisation / nonlinearity
-- pot-specific behaviour that will not transfer directly to ground beds
-
-The method transfers. The balcony pot coefficient does not.
-
-### Crack #2 — `Ks(moisture)` test: no signal yet (2026-06-09)
-
-`soil_drydown.py` now carries a `Ks(moisture)` probe (`ks_intervals`): within each drydown segment
-it computes per-reading-interval rates and **divides VPD out** (`y = rate / VPD = k · Ks(moisture)`),
-so any remaining trend of `y` vs the moisture **level** is the supply-limitation (FAO-56 `Ks`)
-signature — drier soil should drydown slower.
-
-Result over ~15 probe-days, 100 within-segment intervals: **no `Ks` slowdown.** The sign is in fact
-reversed (`Spearman(rate/VPD, moisture) = −0.27`; driest third `rate/VPD ≈ 19.2` vs wettest `≈ 15.7`).
-Read: the pot is kept watered in the **36–54 %** band and never reaches the dry tail where `Ks`
-bites, and the slight reverse slope is consistent with Flower Care nonlinearity, not physics. **Do
-not add a `Ks` term to the production model on this evidence.**
-
-Also noted: the segment-level depletion fit is **unstable** at this data volume — adding the one
-low-demand 06-09 day swung it from `k≈13.9 / R²=0.40` to `k≈10.0 / R²=0.28` (12 segments is too
-few). This quantifies the "needs more probe-days" caveat and cautions against trusting any single
-`k`. Re-run `soil_drydown.py` as probe-days accrue; the `Ks` verdict will flip only once the pot is
-allowed to dry past the stress threshold.
+The blocker is not more passive probe-days. Fitting a reliable `k` or `Ks` needs **known pump dosing
+and/or ground-truth watering labels** so drydown segments are correctly bounded — the same
+known-input unlock the rest of this doc points to. Re-running `soil_drydown.py` will keep producing
+method-dependent numbers until then.
 
 ## Sparse-probe calibration protocol
 

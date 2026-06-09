@@ -84,18 +84,27 @@ def region_logratios(paths, ref, ref_path, w, h, regs, controls=()):
     """Per-frame log(region/roof), registering each frame to ref ONCE. Returns
     (times, {unit_id: [logratio]}, [[control logratio per frame] per control])."""
     times, ratio, cratio = [], {u: [] for u in regs}, [[] for _ in controls]
+    unregistered = 0
     for p in sorted(paths):
         im = cv2.imread(p)
         if os.path.abspath(p) != os.path.abspath(ref_path):
             M, inl, good = fr.register_pair(fr.features_gray(ref), fr.features_gray(im))
             if M is not None and fr.plausible(M, inl, good):
                 im = cv2.warpAffine(im, M, (w, h))
+            else:
+                unregistered += 1                  # fixed Pi mount: fall back to raw
+                                                   # (identity) geometry, but COUNT it —
+                                                   # don't silently pretend it registered
         roof = ss.gray_box(im, h, w, *ss.ROOF)
         times.append(frame_time(p))
         for u, rs in regs.items():
             ratio[u].append(np.mean([np.log((ss.region_b(im, h, w, r) + 1) / (roof + 1)) for r in rs]))
         for j, c in enumerate(controls):
             cratio[j].append(float(np.log((ss.region_b(im, h, w, c) + 1) / (roof + 1))))
+    if unregistered:
+        print(f"[sun_hours: {unregistered}/{len(times)} frame(s) FAILED registration -> used raw "
+              "(identity) geometry. Tolerable for the fixed Pi mount, but flags that single-ref "
+              "registration is failing (dawn→dusk lighting); chained/stored transforms are the fix]")
     return times, ratio, cratio
 
 
