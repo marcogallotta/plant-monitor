@@ -22,9 +22,9 @@ decay-rejection is the main remaining tuning.
 """
 import os, sys, json, argparse, ssl, urllib.request, datetime as dt
 
-CILANTRO = "3ee7f8a3-9811-45ce-8296-c909a104952b"   # the only soil probe (Flower Care)
-# .env's SENSOR_API_URL reads a stale :8001 (now the backend port); sensor server is :8000.
-SENSOR_SERVER = "https://laptop.local:8000"
+# Flower Care now comes from the in-repo backend (Pi BLE ingest -> sensor_readings),
+# keyed by MAC from XIAOMI_SENSORS; default base URL is the backend's published port.
+DEFAULT_BACKEND_URL = "http://localhost:8001"
 
 EC_STEP = 80        # uS/cm excursion (either sign) that counts as a disturbance
 M_STEP = 3          # moisture-% rise that counts (below this is quantization wiggle)
@@ -44,15 +44,26 @@ def _env(key, default=""):
     return os.getenv(key, default)
 
 
-def fetch(start, end, server, sensor):
-    # verify disabled: the sensor server uses a self-signed cert on the LAN
-    # (laptop.local). Same as app/sensors.py. Do NOT copy this pattern to anything
-    # internet-facing.
+def cilantro_mac():
+    """Cilantro Flower Care MAC from XIAOMI_SENSORS (name match, else first entry)."""
+    sensors = json.loads(_env("XIAOMI_SENSORS", "[]"))
+    for s in sensors:
+        if (s.get("name") or "").lower().startswith("cilantro"):
+            return s["mac"]
+    return sensors[0]["mac"] if sensors else None
+
+
+def fetch(start, end, base_url, mac):
+    """Clean Flower Care history from the in-repo backend (Pi ingest). Normalises
+    recorded_at -> timestamp so series_of works unchanged. Ingest bearer auth."""
+    token = _env("INGEST_API_TOKEN")
     req = urllib.request.Request(
-        f"{server}/sensors/{sensor}/readings?start_ts={start}&end_ts={end}&max_points=5000",
-        headers={"X-Api-Key": _env("SENSOR_API_KEY")})
-    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-    return json.load(urllib.request.urlopen(req, context=ctx))
+        f"{base_url}/sensors/flower-care/{mac}/readings?start_ts={start}&end_ts={end}",
+        headers={"Authorization": f"Bearer {token}"} if token else {})
+    rows = json.load(urllib.request.urlopen(req))
+    for r in rows:
+        r["timestamp"] = r["recorded_at"]
+    return rows
 
 
 def series_of(rows):
@@ -111,15 +122,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=20)
     ap.add_argument("--file", help="analyze a saved readings JSON instead of fetching")
-    ap.add_argument("--sensor", default=CILANTRO, help="sensor UUID (default: Cilantro Flower Care)")
-    ap.add_argument("--server", default=SENSOR_SERVER, help="sensor server base URL")
+    ap.add_argument("--mac", default=None, help="Flower Care MAC (default: Cilantro from XIAOMI_SENSORS)")
+    ap.add_argument("--backend-url", default=None, help="in-repo backend base URL (default XIAOMI_BACKEND_URL)")
     a = ap.parse_args()
     if a.file:
         rows = json.load(open(a.file))
     else:
+        mac = a.mac or cilantro_mac()
+        if not mac:
+            sys.exit("no Cilantro MAC in XIAOMI_SENSORS")
+        base = a.backend_url or _env("XIAOMI_BACKEND_URL", DEFAULT_BACKEND_URL)
         now = dt.datetime.now(dt.timezone.utc)
         rows = fetch((now - dt.timedelta(days=a.days)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                     now.strftime("%Y-%m-%dT%H:%M:%SZ"), a.server, a.sensor)
+                     now.strftime("%Y-%m-%dT%H:%M:%SZ"), base, mac)
     s = series_of(rows)
     if not s:
         print("0 usable readings"); return

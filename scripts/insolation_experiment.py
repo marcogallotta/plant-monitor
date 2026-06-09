@@ -28,6 +28,10 @@ import numpy as np, cv2
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import scripts.frame_registration as fr
 
+# NOTE (2026-06-09): falsified, frozen experiment on the 2026-06-07 window — that data
+# predates the Pi cutover and came from the corrupt esp32 ingestion. Intentionally NOT
+# migrated to the in-repo Flower Care source (re-running would only reproduce the
+# falsified result on a window with no clean data). Kept as a record, not a live tool.
 SENSOR_URL = os.getenv("SENSOR_API_URL", "https://laptop.local:8000")
 KEY = os.getenv("SENSOR_API_KEY", "")
 CILANTRO_SENSOR = "3ee7f8a3-9811-45ce-8296-c909a104952b"
