@@ -23,6 +23,7 @@ from ..helpers import (
     ROTATION_TRANSPOSE,
     _event_out,
     _filtered_photo_query,
+    _generate_thumbnail,
     _get_photo_loaded,
     _photo_out,
 )
@@ -187,14 +188,9 @@ def assistant_photo_thumbnail(photo_id: int, db: Session = Depends(get_db)):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="photo file not found on disk")
     try:
-        img = Image.open(file_path)
-        img.load()
+        return Response(content=_generate_thumbnail(file_path, 256), media_type="image/jpeg")
     except Exception:
         raise HTTPException(status_code=422, detail="photo file could not be decoded")
-    img.thumbnail((256, 256))
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG")
-    return Response(content=buf.getvalue(), media_type="image/jpeg")
 
 
 @router.get("/photos/{photo_id}", response_model=PhotoOut)
@@ -232,12 +228,9 @@ def assistant_photo_vision_context(photo_id: int, db: Session = Depends(get_db))
     file_path = Path(photo.storage_path).resolve()
     if file_path.exists():
         try:
-            img = Image.open(file_path)
-            img.load()
-            img.thumbnail((256, 256))
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=75)
-            thumbnail_data_url = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+            thumbnail_data_url = "data:image/jpeg;base64," + base64.b64encode(
+                _generate_thumbnail(file_path, 256, quality=75)
+            ).decode()
         except Exception:
             pass
     return PhotoVisionContext(

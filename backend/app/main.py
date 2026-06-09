@@ -27,7 +27,7 @@ from .database import get_db
 from .exif import read_exif_captured_at
 logger = logging.getLogger(__name__)
 
-from .helpers import EVENT_LOAD_OPTIONS, ROTATION_TRANSPOSE, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _normalise_label_name, _photo_out
+from .helpers import EVENT_LOAD_OPTIONS, ROTATION_TRANSPOSE, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _generate_thumbnail, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _normalise_label_name, _photo_out
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
@@ -827,19 +827,15 @@ def photo_thumbnail(filename: str, size: int = Query(400, ge=1, le=1600), orient
         return FileResponse(cache_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000"})
 
     try:
-        with Image.open(file_path) as im:
-            transpose = ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
-            if transpose:
-                im = im.transpose(transpose)
-            im = im.convert("RGB")
-            im.thumbnail((size, size))
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.NamedTemporaryFile(dir=cache_path.parent, suffix=".tmp", delete=False) as f:
-                tmp = Path(f.name)
-            im.save(tmp, format="JPEG", quality=80)
-            tmp.rename(cache_path)
+        transpose = ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
+        data = _generate_thumbnail(file_path, size, transpose=transpose)
     except (UnidentifiedImageError, OSError) as exc:
         raise HTTPException(status_code=422, detail="could not decode image") from exc
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=cache_path.parent, suffix=".tmp", delete=False) as f:
+        tmp = Path(f.name)
+    tmp.write_bytes(data)
+    tmp.rename(cache_path)
     return FileResponse(cache_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000"})
 
 
