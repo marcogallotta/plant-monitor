@@ -1,6 +1,7 @@
 # AI / Vision Tagging — photo-to-unit support layer
 
-_Status: active working design. This draft replaces the old research-diary shape with a current spec + durable lessons._
+_Status: active working design. This draft replaces the old research-diary shape with a current
+spec + durable lessons._
 
 This doc owns the **image-to-growing-unit tagging layer** across:
 
@@ -20,7 +21,8 @@ It supports:
 
 It does **not** own:
 
-- irrigation control, sparse-probe calibration, pump dosing, or water-balance equations — see [`irrigation.md`](irrigation.md)
+- irrigation control, sparse-probe calibration, pump dosing, or water-balance equations — see
+  [`irrigation.md`](irrigation.md)
 - nursery strategy, crop prioritisation, or scaling thesis — see [`nursery.md`](nursery.md)
 - generic image-processing experimentation unless it produces one of the outputs above
 
@@ -30,22 +32,25 @@ The vision problem is not "identify plants from pixels".
 
 The useful problem is:
 
-> turn messy images into confirmed links between photos, growing units, regions, crop state, and practical actions.
+> turn messy images into confirmed links between photos, growing units, regions, crop state, and
+> practical actions.
 
-The Pi gives a stable overhead anchor. Phone/camera photos give detail. Future requested manual photos are how this scales when fixed cameras are not enough.
+The Pi gives a stable overhead anchor. Phone/camera photos give detail. Future requested manual
+photos are how this scales when fixed cameras are not enough.
 
 The whole layer exists to connect those image streams into reliable, reviewable plant context.
 
 ## Image streams
 
-| Stream | Role | Main value | Main weakness |
-|---|---|---|---|
-| **Pi overhead** | stable map, identity-by-position, change hints, sun/canopy context | continuous, comparable, cheap | low detail; confusables and harvest amounts often invisible |
-| **Historical phone/camera archive** | reference corpus, closeups, past growth/condition examples | high detail; real examples | hard to tag reliably; current blocker |
-| **Future requested manual photos** | scalable context when fixed cameras do not cover a bed/site | targeted, cheap, human-in-loop | only useful if tagging can map photo → unit/zone/state |
-| **Closeups** | condition, harvestability, discriminating identity features | best value reads | sparse and must be linked to the right unit |
+| Stream                              | Role                                                               | Main value                     | Main weakness                                               |
+| ----------------------------------- | ------------------------------------------------------------------ | ------------------------------ | ----------------------------------------------------------- |
+| **Pi overhead**                     | stable map, identity-by-position, change hints, sun/canopy context | continuous, comparable, cheap  | low detail; confusables and harvest amounts often invisible |
+| **Historical phone/camera archive** | reference corpus, closeups, past growth/condition examples         | high detail; real examples     | hard to tag reliably; current blocker                       |
+| **Future requested manual photos**  | scalable context when fixed cameras do not cover a bed/site        | targeted, cheap, human-in-loop | only useful if tagging can map photo → unit/zone/state      |
+| **Closeups**                        | condition, harvestability, discriminating identity features        | best value reads               | sparse and must be linked to the right unit                 |
 
-Non-Pi image tagging is not optional backfill. It is the bridge between the current balcony system and a scalable garden/greenhouse workflow.
+Non-Pi image tagging is not optional backfill. It is the bridge between the current balcony system
+and a scalable garden/greenhouse workflow.
 
 ## Current state
 
@@ -59,7 +64,8 @@ Non-Pi image tagging is not optional backfill. It is the bridge between the curr
 - Frame registration exists in `scripts/frame_registration.py`.
 - Pi burst-averaged plates are built in `pi/capture.py`.
 - Sway suppression from burst mean reduced foliage sway noise by roughly 60–69%.
-- Finlayson illuminant-invariant signal was method-found for lighting-robust change, but needs plate-bracketed harvest validation.
+- Finlayson illuminant-invariant signal was method-found for lighting-robust change, but needs
+  plate-bracketed harvest validation.
 - Closeups are validated as the value layer for identity/condition where overhead is weak.
 
 ### Still unresolved
@@ -68,7 +74,8 @@ Non-Pi image tagging is not optional backfill. It is the bridge between the curr
 - Frictionless phone/camera import/sync.
 - Agreement-gated Batch API workflow for archive recovery.
 - Turning confirmed non-Pi images into a clean reference corpus.
-- Future manual-photo workflow: request photo → identify bed/unit → extract crop/canopy/stage/condition.
+- Future manual-photo workflow: request photo → identify bed/unit → extract
+  crop/canopy/stage/condition.
 - Plate-bracketed validation for harvest/change detection.
 - Clear review policy for confusables and seedlings.
 
@@ -79,11 +86,13 @@ Non-Pi image tagging is not optional backfill. It is the bridge between the curr
 3. Fix non-Pi photo-to-unit tagging on a small validation set before running the full archive.
 4. Build a confirmed reference corpus from accepted non-Pi closeups.
 5. Use tagged closeups for cooking availability and plant condition reads.
-6. Export irrigation context where useful: sun/shade, canopy bucket, crop stage, moved/harvested/died-back.
+6. Export irrigation context where useful: sun/shade, canopy bucket, crop stage,
+   moved/harvested/died-back.
 7. Use Pi frames for continuity, region-map maintenance, gross change, sun/canopy context.
 8. Run large historical archive recovery only after the small tagging validation stops failing.
 
-Do not spend another session improving generic image recognition. The key blocker is photo-to-unit tagging with the right priors and review loop.
+Do not spend another session improving generic image recognition. The key blocker is photo-to-unit
+tagging with the right priors and review loop.
 
 ## Non-Pi tagging problem
 
@@ -99,13 +108,16 @@ The historical phone/camera archive likely contains the best available data for:
 - human photo-taking patterns
 - training/evaluation for future requested manual photos
 
-A fixed Pi camera will not give enough detail and will not scale across larger plots or multiple sites. If manual requested photos are part of the future irrigation/cooking loop, the system must learn to tag non-Pi photos reliably.
+A fixed Pi camera will not give enough detail and will not scale across larger plots or multiple
+sites. If manual requested photos are part of the future irrigation/cooking loop, the system must
+learn to tag non-Pi photos reliably.
 
 ### Status
 
 Paused, not abandoned.
 
-Past attempts failed badly, but that does not prove the task is impossible. It proves the old setup was wrong.
+Past attempts failed badly, but that does not prove the task is impossible. It proves the old setup
+was wrong.
 
 ### Known failed approach
 
@@ -118,44 +130,47 @@ Do not rebuild:
 - grid-cell photo-ID mapping as a trusted transport
 - no current inventory/date/state prior
 
-A live run produced about 44% precision even on the model's own high-confidence tier. It overused lemongrass as a catch-all, confused sage/basil, tagged fringe plants, and may have associated answers with the wrong grid cells.
+A live run produced about 44% precision even on the model's own high-confidence tier. It overused
+lemongrass as a catch-all, confused sage/basil, tagged fringe plants, and may have associated
+answers with the wrong grid cells.
 
 ## Suspected smoking guns
 
 Past failures probably came from these issues, not from the goal being impossible:
 
-1. **Resolution starvation.**
-   256px contact sheets turned useful plant detail into green blobs. Use individual images at 1024px or better where possible.
+1. **Resolution starvation.** 256px contact sheets turned useful plant detail into green blobs. Use
+   individual images at 1024px or better where possible.
 
-2. **Grid/cell ID misassociation.**
-   Contact sheets introduced a transport bug class: the model may describe the wrong cell/photo ID. Use one image per request for serious tagging runs.
+2. **Grid/cell ID misassociation.** Contact sheets introduced a transport bug class: the model may
+   describe the wrong cell/photo ID. Use one image per request for serious tagging runs.
 
-3. **Open-world identification.**
-   The model was asked to identify plants in general instead of matching against this project's live closed set.
+3. **Open-world identification.** The model was asked to identify plants in general instead of
+   matching against this project's live closed set.
 
-4. **No first-class photo date.**
-   Date matters. A plant that did not exist yet, was still seedlings, or had already died cannot be the answer.
+4. **No first-class photo date.** Date matters. A plant that did not exist yet, was still seedlings,
+   or had already died cannot be the answer.
 
-5. **No current inventory state.**
-   Stage, size, pot, count, status, and confusable group need to be fed before leaf-shape guessing.
+5. **No current inventory state.** Stage, size, pot, count, status, and confusable group need to be
+   fed before leaf-shape guessing.
 
-6. **Weak container/composition priors.**
-   Troughs and pots have composition signatures. Container-first matching often beats plant-level botany.
+6. **Weak container/composition priors.** Troughs and pots have composition signatures.
+   Container-first matching often beats plant-level botany.
 
-7. **Long/stale prose priors.**
-   A rich prior can help, but long stale prose can make the model hallucinate expected compositions. Use compact matrices/state, not essays.
+7. **Long/stale prose priors.** A rich prior can help, but long stale prose can make the model
+   hallucinate expected compositions. Use compact matrices/state, not essays.
 
-8. **Self-confidence was trusted.**
-   Model confidence was anti-calibrated on confusables. Agreement and review are the gates, not self-confidence.
+8. **Self-confidence was trusted.** Model confidence was anti-calibrated on confusables. Agreement
+   and review are the gates, not self-confidence.
 
-9. **Confusables were forced into single labels.**
-   Chilli varieties, alliums, basil variants, parsley/cilantro, thyme/lemon thyme, and mint variants need options unless position/date/state pins them.
+9. **Confusables were forced into single labels.** Chilli varieties, alliums, basil variants,
+   parsley/cilantro, thyme/lemon thyme, and mint variants need options unless position/date/state
+   pins them.
 
-10. **Seedlings were over-labelled.**
-    `SEEDLINGS` is a valid known-unknown. It should be upgraded later, not forced now.
+10. **Seedlings were over-labelled.** `SEEDLINGS` is a valid known-unknown. It should be upgraded
+    later, not forced now.
 
-11. **Review loop may be the bottleneck.**
-    The system needs cheap human review of disagreements, not blind auto-acceptance.
+11. **Review loop may be the bottleneck.** The system needs cheap human review of disagreements, not
+    blind auto-acceptance.
 
 ## Next validation test for non-Pi tagging
 
@@ -178,13 +193,15 @@ Before running the full archive, do a small A/B validation.
 Run two versions:
 
 1. **Thin prior:** closed set + schema only.
-2. **Rich compact prior:** closed set + photo date + inventory state + container/composition matrix + confusable rules.
+2. **Rich compact prior:** closed set + photo date + inventory state + container/composition
+   matrix + confusable rules.
 
 Do not use long narrative priors.
 
 ### Success criteria
 
-The rich prior should reduce wrong confident singles and reduce human review time. It should not force stale expected compositions when the photo visibly disagrees.
+The rich prior should reduce wrong confident singles and reduce human review time. It should not
+force stale expected compositions when the photo visibly disagrees.
 
 Track:
 
@@ -202,30 +219,25 @@ Identity comes from priors first. Vision confirms and reads condition.
 
 Priority order:
 
-1. **Photo date**
-   What existed, what was seedling-stage, what was dead/retired, what had moved?
+1. **Photo date** What existed, what was seedling-stage, what was dead/retired, what had moved?
 
-2. **Live growing-unit state**
-   Stage, size, count, status, pot/container, known confusables.
+2. **Live growing-unit state** Stage, size, count, status, pot/container, known confusables.
 
-3. **Container / composition**
-   Trough or pot identity, known plant groupings, relative arrangement.
+3. **Container / composition** Trough or pot identity, known plant groupings, relative arrangement.
 
-4. **Region / position**
-   For Pi frames and photos that can be mapped to the layout, position is stronger than pixels.
+4. **Region / position** For Pi frames and photos that can be mapped to the layout, position is
+   stronger than pixels.
 
-5. **Reference corpus**
-   Confirmed reference images for the candidate unit or confusable group.
+5. **Reference corpus** Confirmed reference images for the candidate unit or confusable group.
 
-6. **Visual features**
-   Leaf shape, texture, stem, colour, growth habit, scale, condition.
+6. **Visual features** Leaf shape, texture, stem, colour, growth habit, scale, condition.
 
-7. **Agreement gate**
-   Trust cross-read agreement and human review, not model self-confidence.
+7. **Agreement gate** Trust cross-read agreement and human review, not model self-confidence.
 
 ## Closed set and confusable policy
 
-The closed set comes from the live DB and `plants-data.md`, not from stale prose. Verify before running a batch.
+The closed set comes from the live DB and `plants-data.md`, not from stale prose. Verify before
+running a batch.
 
 ### Distinctive enough for confident singles when clearly visible
 
@@ -263,10 +275,13 @@ Rules:
 Never force a species onto ambiguous seedlings.
 
 - **low confidence:** `SEEDLINGS`
-- **medium confidence:** group/options, e.g. `apiaceae seedlings`, `allium seedlings`, `basil/chilli seedling`
-- **high confidence:** exact species only if leaves are genuinely clear or date/container/state pins it
+- **medium confidence:** group/options, e.g. `apiaceae seedlings`, `allium seedlings`,
+  `basil/chilli seedling`
+- **high confidence:** exact species only if leaves are genuinely clear or date/container/state pins
+  it
 
-A `SEEDLINGS` tag is a known-unknown. It can be upgraded later by growth, clearer photos, or container state.
+A `SEEDLINGS` tag is a known-unknown. It can be upgraded later by growth, clearer photos, or
+container state.
 
 ## Tagging units
 
@@ -274,7 +289,8 @@ A `SEEDLINGS` tag is a known-unknown. It can be upgraded later by growth, cleare
 
 Use container-first matching.
 
-A trough photo should usually output one row per visible plant/zone, but the identity logic should start with the container/composition signature.
+A trough photo should usually output one row per visible plant/zone, but the identity logic should
+start with the container/composition signature.
 
 Do not ID each leaf as if it were an independent wild plant.
 
@@ -282,7 +298,8 @@ Do not ID each leaf as if it were an independent wild plant.
 
 Usually plant-level ID.
 
-Single-subject pot photos are the easiest source of reference images, but confusables still need options when the pot/unit is not pinned.
+Single-subject pot photos are the easiest source of reference images, but confusables still need
+options when the pot/unit is not pinned.
 
 ### Trays / seedlings
 
@@ -290,7 +307,8 @@ Use the seedlings ladder. Do not over-label.
 
 ### Pi overhead regions
 
-Identity mostly comes from the region map, not appearance. Vision reads presence/change/coverage more than species.
+Identity mostly comes from the region map, not appearance. Vision reads presence/change/coverage
+more than species.
 
 ### Manual requested photos
 
@@ -308,7 +326,8 @@ Confirmed links live in `photo_growing_units`.
 
 The curated high-quality subset carries the `reference` label.
 
-A good reference image is not just pretty or sharp. It clearly shows discriminating features for a unit or confusable group.
+A good reference image is not just pretty or sharp. It clearly shows discriminating features for a
+unit or confusable group.
 
 Examples of useful reference qualities:
 
@@ -323,7 +342,8 @@ Rules:
 
 - Reference corpus is confirmed-only.
 - Do not let guesses into the reference set.
-- Prefer images that are both high-quality identity references and recent state references, but keep those two roles distinct.
+- Prefer images that are both high-quality identity references and recent state references, but keep
+  those two roles distinct.
 - Old reference images can remain useful for identity even when stale for harvestability.
 - Recent images are useful for state even if not ideal as identity references.
 
@@ -333,7 +353,8 @@ Every image can be useful in two different ways.
 
 ### Identity / disambiguation
 
-Use the best confirmed references for the unit or confusable group. Age matters less if the features are durable.
+Use the best confirmed references for the unit or confusable group. Age matters less if the features
+are durable.
 
 ### State / harvestability
 
@@ -372,7 +393,8 @@ It is weak for:
 - small harvest changes
 - subtle condition reads
 
-A known roughly 20 g dill harvest was invisible from overhead. That is a design fact, not a temporary bug.
+A known roughly 20 g dill harvest was invisible from overhead. That is a design fact, not a
+temporary bug.
 
 ### Region map
 
@@ -444,13 +466,15 @@ Useful outputs:
 - plant/unit identity
 - harvestable/not harvestable
 - rough relative amount
-- condition: flowering, bolting, wilting, yellowing, pest damage, drought stress, recovering, vigorous
+- condition: flowering, bolting, wilting, yellowing, pest damage, drought stress, recovering,
+  vigorous
 - freshness/staleness date
 - suggested urgency: use now / wait / check again / likely stale
 
 Do not require gram-accurate logging. Rough usable amounts are enough for cooking.
 
-Asana/harvest notes should not be a required operating dependency. Occasional human/cooking corrections can still provide calibration evidence.
+Asana/harvest notes should not be a required operating dependency. Occasional human/cooking
+corrections can still provide calibration evidence.
 
 ## Change detection lessons
 
@@ -458,19 +482,22 @@ Asana/harvest notes should not be a required operating dependency. Occasional hu
 
 Model the per-region time series. Do not trust pairwise diffs alone.
 
-Lighting, watering, wind, and camera changes create common-mode shifts. The useful signal is often a region changing relative to its own baseline and relative to other regions.
+Lighting, watering, wind, and camera changes create common-mode shifts. The useful signal is often a
+region changing relative to its own baseline and relative to other regions.
 
 ### Common-mode trap
 
 Common-mode detrending can erase real synchronous events.
 
-If multiple plants are harvested or watered together, treating that as lighting noise can remove the event.
+If multiple plants are harvested or watered together, treating that as lighting noise can remove the
+event.
 
 Use common-mode correction carefully. Preserve the possibility of real group events.
 
 ### Harvest
 
-Overhead may miss small harvests. Higher resolution and closeups/manual photos are likely better for harvest amount.
+Overhead may miss small harvests. Higher resolution and closeups/manual photos are likely better for
+harvest amount.
 
 Pi overhead can still detect large visible changes and keep stale closeups honest.
 
@@ -480,17 +507,20 @@ Wilt is geometry more than appearance.
 
 The failed path: appearance-distance / invariant colour metrics saturated and missed confirmed wilt.
 
-The more promising cheap signal: projected green area per region can drop when leaves droop, but single-day rules are unreliable because lighting and shade move other regions too.
+The more promising cheap signal: projected green area per region can drop when leaves droop, but
+single-day rules are unreliable because lighting and shade move other regions too.
 
 Treat overhead wilt as an attention flag, not a diagnosis.
 
-Under- vs over-watering is not separable from droop shape alone. Over-watering can wilt too. Diagnosis belongs in irrigation data, soil/probe response, weather, and human inspection.
+Under- vs over-watering is not separable from droop shape alone. Over-watering can wilt too.
+Diagnosis belongs in irrigation data, soil/probe response, weather, and human inspection.
 
 ### Move detection
 
 Do not rely on one visual feature.
 
-Moves can look like lighting, growth, harvest, sway, or partial occlusion. Use region map, registration, continuity, and human confirmation.
+Moves can look like lighting, growth, harvest, sway, or partial occlusion. Use region map,
+registration, continuity, and human confirmation.
 
 ## Batch API / archive recovery plan
 
@@ -632,14 +662,16 @@ Read before Pi-side work.
 
 ## Open questions
 
-- What exactly is the photo mix of the historical archive: closeups, troughs, wide overviews, seedlings, edge cases?
+- What exactly is the photo mix of the historical archive: closeups, troughs, wide overviews,
+  seedlings, edge cases?
 - Which 30–50 photos should form the first A/B validation set?
 - What compact inventory-state format best prevents pixels-over-priors mistakes?
 - What is the minimum review UI needed to make non-Pi tagging tolerable?
 - When should a photo become a `reference` image?
 - Should future requested photos be linked to capture requests / tasks?
 - What are the per-species harvestability thresholds?
-- Can plate-bracketed Pi data validate harvest/change detection, or should harvestability live mostly in closeups?
+- Can plate-bracketed Pi data validate harvest/change detection, or should harvestability live
+  mostly in closeups?
 - How should stale closeups decay by plant type and microclimate?
 
 ## Appendix A — durable evidence summary
@@ -665,13 +697,16 @@ Conclusion: grid is dead.
 - 1024px: more variety/detail/condition
 - visually identical varieties still cannot be solved from pixels alone
 
-Conclusion: use adequate resolution, but do not expect pixels to solve variety identity without priors.
+Conclusion: use adequate resolution, but do not expect pixels to solve variety identity without
+priors.
 
 ### Priors-first validation
 
-A later held-out read suggested the task is feasible when date/state/position/count/pot priors are used first.
+A later held-out read suggested the task is feasible when date/state/position/count/pot priors are
+used first.
 
-Distinctive plants performed well. The decisive lemongrass ↔ garlic-chives failure did not recur when the model had the right relational priors.
+Distinctive plants performed well. The decisive lemongrass ↔ garlic-chives failure did not recur
+when the model had the right relational priors.
 
 Every observed miss was a pixels-over-priors miss.
 
@@ -679,7 +714,8 @@ Conclusion: the pipeline must rule out candidates by date/state/context before l
 
 ### Pi region marking
 
-Reference frame tagging became load-bearing because vision confidently swaps confusables and cannot separate pixel-identical varieties.
+Reference frame tagging became load-bearing because vision confidently swaps confusables and cannot
+separate pixel-identical varieties.
 
 Conclusion: region map is authoritative for Pi identity.
 
@@ -706,7 +742,8 @@ Conclusion: Pi change detection is useful but must be time-series-based and cons
 
 ## Appendix B — old content policy
 
-The previous `ai-tagging-design.md` contained valuable research narration. Keep old chronological detail only as evidence, not current instruction.
+The previous `ai-tagging-design.md` contained valuable research narration. Keep old chronological
+detail only as evidence, not current instruction.
 
 Current sections win over old appendices when they conflict.
 

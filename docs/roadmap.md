@@ -4,30 +4,34 @@ _Status: current execution roadmap. This is the navigational entry point for the
 
 This project is now oriented around a practical goal:
 
-> Build a sparse, calibrated irrigation + plant-context system that lets a one-person, quality-led edible-plant project scale from balcony to garden without drowning in daily watering labour.
+> Build a sparse, calibrated irrigation + plant-context system that lets a one-person, quality-led
+> edible-plant project scale from balcony to garden without drowning in daily watering labour.
 
 ## Project docs
 
-| Track | Doc | Owns |
-|---|---|---|
-| **A — Irrigation control** | [`irrigation.md`](irrigation.md) | water-balance model, sparse probes, pump dosing, EC/moisture response, safety |
-| **B — Photo-to-unit tagging** | [`vision-tagging.md`](vision-tagging.md) | Pi frames, phone/camera archive, manual-photo tagging, reference corpus, vision context |
-| **C — Nursery direction** | [`nursery.md`](nursery.md) | crop priorities, scaling context, strategy, operating constraints |
-| **D — Platform / import / review UX** | code + operational docs | the boring infrastructure: import, sync, review, IDs, data integrity |
+| Track                                 | Doc                                      | Owns                                                                                    |
+| ------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| **A — Irrigation control**            | [`irrigation.md`](irrigation.md)         | water-balance model, sparse probes, pump dosing, EC/moisture response, safety           |
+| **B — Photo-to-unit tagging**         | [`vision-tagging.md`](vision-tagging.md) | Pi frames, phone/camera archive, manual-photo tagging, reference corpus, vision context |
+| **C — Nursery direction**             | [`nursery.md`](nursery.md)               | crop priorities, scaling context, strategy, operating constraints                       |
+| **D — Platform / import / review UX** | code + operational docs                  | the boring infrastructure: import, sync, review, IDs, data integrity                    |
 
 ## Current north star
 
 The primary product is **sparse calibrated irrigation**.
 
-The supporting layer is **photo-to-unit tagging**: turning Pi frames, phone/camera photos, and future requested manual photos into reliable plant/unit/context data.
+The supporting layer is **photo-to-unit tagging**: turning Pi frames, phone/camera photos, and
+future requested manual photos into reliable plant/unit/context data.
 
-The nursery strategy supplies the reason this matters: watering scales badly with plant count, warm-tender quality crops are the moat, and manual logs are not the operating model.
+The nursery strategy supplies the reason this matters: watering scales badly with plant count,
+warm-tender quality crops are the moat, and manual logs are not the operating model.
 
 ## Working principles
 
 ### Irrigation first
 
-Watering is daily, non-deferrable, and scales with plant count. It is the main bottleneck to moving beyond the balcony.
+Watering is daily, non-deferrable, and scales with plant count. It is the main bottleneck to moving
+beyond the balcony.
 
 ### Known-input dosing is the next unlock
 
@@ -41,7 +45,8 @@ sense → dose → measure response → adjust
 
 Probes should calibrate soil/zone behaviour, not continuously sense every plant.
 
-A few probes should anchor many zones through weather, forecast, sun-map, canopy state, known dosing, and learned coefficients.
+A few probes should anchor many zones through weather, forecast, sun-map, canopy state, known
+dosing, and learned coefficients.
 
 ### Camera is context, not the core irrigation sensor
 
@@ -51,11 +56,13 @@ It should not be required for basic watering control.
 
 ### Non-Pi tagging is central
 
-The phone/camera archive is not optional backfill. It is the likely source of the best closeups, reference images, growth-stage examples, and validation data for future requested manual photos.
+The phone/camera archive is not optional backfill. It is the likely source of the best closeups,
+reference images, growth-stage examples, and validation data for future requested manual photos.
 
 ### No manual-log dependency
 
-Occasional human corrections are useful. Routine manual logging must not be required for the system to work.
+Occasional human corrections are useful. Routine manual logging must not be required for the system
+to work.
 
 ## Phase 0 — Preserve the working baseline
 
@@ -105,7 +112,8 @@ These can sharpen while pump hardware is sourced:
 - run small A/B tagging validation
 - build review workflow improvements
 
-Do not let the lack of pump hardware stall the entire roadmap. The dose-response half needs the pump; the passive-drydown-model half does not.
+Do not let the lack of pump hardware stall the entire roadmap. The dose-response half needs the
+pump; the passive-drydown-model half does not.
 
 ## Phase 1 — Known-input irrigation
 
@@ -131,7 +139,8 @@ Tasks:
 
 Success criterion:
 
-> The system can apply a known dose and observe a usable EC/moisture response without depending on manual watering inference.
+> The system can apply a known dose and observe a usable EC/moisture response without depending on
+> manual watering inference.
 
 ## Phase 1b — Passive model sharpening
 
@@ -151,7 +160,8 @@ Tasks:
 
 Success criterion:
 
-> The model predicts relative drydown pressure better than simple ET₀/VPD alone, while clearly marking what is only balcony-pot calibration.
+> The model predicts relative drydown pressure better than simple ET₀/VPD alone, while clearly
+> marking what is only balcony-pot calibration.
 
 ## Phase 2 — Sparse calibration
 
@@ -201,7 +211,8 @@ Tasks:
 
 Success criterion:
 
-> Non-Pi photos can be tagged to growing units/zones with useful precision and tolerable review effort.
+> Non-Pi photos can be tagged to growing units/zones with useful precision and tolerable review
+> effort.
 
 ## Phase 4 — Manual requested photos
 
@@ -227,7 +238,8 @@ Tasks:
 
 Success criterion:
 
-> A human can provide occasional photos, and the system turns them into useful plant/zone context without routine manual logs.
+> A human can provide occasional photos, and the system turns them into useful plant/zone context
+> without routine manual logs.
 
 ## Phase 5 — Bounded automation
 
@@ -315,7 +327,8 @@ The next useful work should concentrate on two parallel tracks:
    - run small non-Pi tagging validation
    - build confirmed reference corpus
 
-The important discipline: do not wait for perfect AI before doing irrigation, and do not wait for pump hardware before improving the model and tagging pipeline.
+The important discipline: do not wait for perfect AI before doing irrigation, and do not wait for
+pump hardware before improving the model and tagging pipeline.
 
 ## Goal
 
@@ -328,4 +341,5 @@ few probes + microclimate sensors + forecast/rain + sun-map + canopy/context + k
 → bounded automation
 ```
 
-The strategic win is not a garden gadget. It is making serious, high-quality, climate-constrained edible growing operationally possible beyond balcony scale.
+The strategic win is not a garden gadget. It is making serious, high-quality, climate-constrained
+edible growing operationally possible beyond balcony scale.

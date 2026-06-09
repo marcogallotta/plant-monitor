@@ -3,25 +3,33 @@
 _Focused working doc for the irrigation track._
 
 - For nursery direction, crop priorities, and scaling context, see [`nursery.md`](nursery.md).
-- For camera monitoring, manual-photo tagging, identity/event detection, and AI tagging, see [`vision-tagging.md`](vision-tagging.md).
+- For camera monitoring, manual-photo tagging, identity/event detection, and AI tagging, see
+  [`vision-tagging.md`](vision-tagging.md).
 
-This doc owns: irrigation strategy, sparse sensing, water-balance modelling, probe calibration, pump/dosing control, and irrigation-specific camera context.
+This doc owns: irrigation strategy, sparse sensing, water-balance modelling, probe calibration,
+pump/dosing control, and irrigation-specific camera context.
 
-This doc does **not** own: nursery strategy, general AI tagging, camera pipeline internals, database schema, prompts, or historical narration.
+This doc does **not** own: nursery strategy, general AI tagging, camera pipeline internals, database
+schema, prompts, or historical narration.
 
 ## Product thesis
 
-Watering is the one cost that scales almost linearly with plant count and does **not** compress much with skill.
+Watering is the one cost that scales almost linearly with plant count and does **not** compress much
+with skill.
 
-Sowing is seasonal. Selection improves with experience. Cooking can batch. But watering is daily, non-deferrable, per-plant/per-zone, and grows with area.
+Sowing is seasonal. Selection improves with experience. Cooking can batch. But watering is daily,
+non-deferrable, per-plant/per-zone, and grows with area.
 
-Twice-daily hand-watering is fine on the balcony. At ~100 m² it becomes hours of labour. Across multiple sites it becomes structurally impossible.
+Twice-daily hand-watering is fine on the balcony. At ~100 m² it becomes hours of labour. Across
+multiple sites it becomes structurally impossible.
 
-So the primary product is not "plant watching". It is a **closed-loop irrigation controller** that lets the nursery scale on infrastructure instead of hands.
+So the primary product is not "plant watching". It is a **closed-loop irrigation controller** that
+lets the nursery scale on infrastructure instead of hands.
 
 ## Architecture for scale
 
-The system must avoid per-plant infrastructure. The economics only work if sensing and vision are sparse.
+The system must avoid per-plant infrastructure. The economics only work if sensing and vision are
+sparse.
 
 ### Probes calibrate; they do not continuously sense every zone
 
@@ -41,17 +49,22 @@ Then many similar zones can run from:
 - known pump dosing
 - occasional probe checks
 
-The target is **a handful of probes for calibration and drift anchors**, not one probe per plant or every zone.
+The target is **a handful of probes for calibration and drift anchors**, not one probe per plant or
+every zone.
 
 ### Cameras calibrate context; they do not drive basic watering
 
 Camera input is useful, but irrigation should not depend on continuous vision.
 
-At architecture level, camera/tagging is an occasional context source: sun exposure, canopy/crop stage, and major state changes. The concrete irrigation roles are detailed below in [Camera / tagging role for irrigation](#camera--tagging-role-for-irrigation).
+At architecture level, camera/tagging is an occasional context source: sun exposure, canopy/crop
+stage, and major state changes. The concrete irrigation roles are detailed below in
+[Camera / tagging role for irrigation](#camera--tagging-role-for-irrigation).
 
 The scalable stack is:
 
-`few probes + few microclimate sensors + forecast/rain input + static sun-map + coarse canopy/state + known dosing + balance model`
+```text
+few probes + few microclimate sensors + forecast/rain input + static sun-map + coarse canopy/state + known dosing + balance model
+```
 
 ## Current live model vs target model
 
@@ -62,7 +75,9 @@ Current working pieces:
 - forecast/archive integration
 - live ET₀ calculation
 - VPD from local temperature/RH sensors
-- per-region sun-hours from camera **(preliminary)** — `sun_hours.py` is a prototype pending multi-day / full-arc validation (the 2026-06-09 check); `water_balance_live.py` flags its sun-fraction as partial-day
+- per-region sun-hours from camera **(preliminary)** — `sun_hours.py` is a prototype pending
+  multi-day / full-arc validation (the 2026-06-09 check); `water_balance_live.py` flags its
+  sun-fraction as partial-day
 - `demand_mm = ET₀ × Kc × sun-fraction`
 - watering-event inference from EC + soil-moisture response
 - first soil drydown validation on the Cilantro Flower Care probe
@@ -85,7 +100,8 @@ Where:
 - **Ks(moisture)** is the water-stress/supply-limitation factor: drydown slows as soil dries.
 - **ET₀** is the portable reference-demand forecast used for forward planning.
 
-The model does not need perfect biological accuracy. It needs good enough per-zone dosing decisions with conservative safety limits.
+The model does not need perfect biological accuracy. It needs good enough per-zone dosing decisions
+with conservative safety limits.
 
 ## Validated state as of 2026-06-08
 
@@ -107,7 +123,8 @@ The model does not need perfect biological accuracy. It needs good enough per-zo
 
 ### Evidence
 
-On the one instrumented pot, Cilantro Flower Care, 14 days, 12 drydown segments between watering events:
+On the one instrumented pot, Cilantro Flower Care, 14 days, 12 drydown segments between watering
+events:
 
 - drydown rate vs air temperature: Spearman **+0.49**
 - drydown rate vs VPD: Spearman **+0.71**
@@ -150,9 +167,11 @@ A practical calibration loop:
 6. Estimate infiltration, retention, and response lag.
 7. Reuse the learned coefficient for similar zones.
 8. Keep one or a few probes as drift anchors.
-9. Recalibrate when soil, container/bed type, crop density, season, or irrigation hardware changes materially.
+9. Recalibrate when soil, container/bed type, crop density, season, or irrigation hardware changes
+   materially.
 
-Important: **ground beds need their own calibration**. Balcony pot `k` is not portable to ground because soil depth, drainage, rooting volume, and retention are different.
+Important: **ground beds need their own calibration**. Balcony pot `k` is not portable to ground
+because soil depth, drainage, rooting volume, and retention are different.
 
 ## Camera / tagging role for irrigation
 
@@ -171,11 +190,13 @@ This can often be treated as a calibration task:
 - refresh when layout changes or season materially changes
 - do not require continuous camera coverage
 
-A fixed Pi camera can help on the balcony or a small greenhouse. It probably will not scale cleanly to larger plots or multiple sites.
+A fixed Pi camera can help on the balcony or a small greenhouse. It probably will not scale cleanly
+to larger plots or multiple sites.
 
 ### 2. Occasional canopy / crop-stage context
 
-A bare seeded bed, seedlings, moderate canopy, and heavy leaf canopy do not have the same water demand under the same weather.
+A bare seeded bed, seedlings, moderate canopy, and heavy leaf canopy do not have the same water
+demand under the same weather.
 
 The model only needs coarse buckets:
 
@@ -187,7 +208,9 @@ The model only needs coarse buckets:
 
 This can come from overhead images, closeups, manual photos, or manual correction.
 
-For larger areas, the likely scalable approach is **requested manual photos**: ask for a photo of a bed, zone, tray, or plant group when the model needs context. That only works if tagging can identify:
+For larger areas, the likely scalable approach is **requested manual photos**: ask for a photo of a
+bed, zone, tray, or plant group when the model needs context. That only works if tagging can
+identify:
 
 - bed / zone / tray / plant group
 - crop or crop mix
@@ -197,7 +220,12 @@ For larger areas, the likely scalable approach is **requested manual photos**: a
 
 So tagging is a support layer for irrigation context, not the core irrigation sensor.
 
-**Irrigation consequence of a move (this doc owns it):** when a zone/pot is flagged *moved* (the detection itself lives in vision-tagging.md), irrigation must **drop that zone's camera sun-fraction until it is re-acquired** — otherwise the demand calc is contaminated by the *vacated spot's* sun. Concretely the chillis: after their sun-driven afternoon move to the West window, their old overhead tag reads the empty sunny spot, not the plant, so their camera sun-fraction is currently contaminated.
+**Irrigation consequence of a move (this doc owns it):** when a zone/pot is flagged _moved_ (the
+detection itself lives in vision-tagging.md), irrigation must **drop that zone's camera sun-fraction
+until it is re-acquired** — otherwise the demand calc is contaminated by the _vacated spot's_ sun.
+Concretely the chillis: after their sun-driven afternoon move to the West window, their old overhead
+tag reads the empty sunny spot, not the plant, so their camera sun-fraction is currently
+contaminated.
 
 ## Control and safety principles
 
@@ -214,7 +242,8 @@ Before auto-pump becomes trusted, the doc should preserve these constraints.
 - Manual corrections should be occasional, not required for normal operation.
 - Known dosing should replace inferred human watering as soon as practical.
 
-The first auto-pump target is not "fully autonomous garden". It is controlled known-input experiments:
+The first auto-pump target is not "fully autonomous garden". It is controlled known-input
+experiments:
 
 `sense → dose → measure response → adjust`
 
@@ -229,7 +258,8 @@ Uses `X-Api-Key`.
 Endpoints:
 
 - `GET /openmeteo/weather?start_ts&end_ts`
-  - includes weather demand and rain inputs, including Open-Meteo rain / showers variables used as water-balance supply
+  - includes weather demand and rain inputs, including Open-Meteo rain / showers variables used as
+    water-balance supply
 - `GET /sensors`
 - `GET /sensors/{id}/readings?start_ts&end_ts&max_points`
 - `GET /sensors/latest`
@@ -307,4 +337,6 @@ The core loop is:
 sense → dose → observe → adjust
 ```
 
-The strategic win is sparse calibrated irrigation: a system where a few probes, occasional visual context, known dosing, and a weather-driven model can control many plants/zones without daily manual watering labour.
+The strategic win is sparse calibrated irrigation: a system where a few probes, occasional visual
+context, known dosing, and a weather-driven model can control many plants/zones without daily manual
+watering labour.

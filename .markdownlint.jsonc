@@ -1,0 +1,8 @@
+{
+  // Prose wraps at 100 cols so the raw files stay readable in an editor.
+  // Code blocks and tables are exempt: long identifiers and table rows
+  // can't be broken and shouldn't be penalised.
+  "MD013": { "line_length": 100, "code_blocks": false, "tables": false },
+  // Table pipe padding/alignment is cosmetic and renders identically on GitHub.
+  "MD060": false
+}
