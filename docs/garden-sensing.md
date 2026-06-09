@@ -123,17 +123,83 @@ how occasional handheld shots become a sensing stream without fixed cameras ever
 This is the scalable replacement for fixed-camera coverage, and the bridge to Phase 4 of the
 roadmap (manual requested photos).
 
-## Minimum viable garden sensing loop
+## Capture: cadence, modes & tooling
 
-The smallest end-to-end loop that makes the design executable:
+### Cadence — confidence decay, not a fixed schedule (and not "never")
 
-1. Put large human-readable labels (`B1`, `B3`, …) on beds.
-2. Take an initial overview photo per bed, location bound at capture.
-3. Register expected crop patches/rows against the map.
-4. When planting/transplanting changes, take a marked update photo.
-5. On each visit, take requested overview photos for stale/uncertain zones.
-6. The system outputs localization, canopy/surface state, and an optional kind distribution.
-7. Irrigation uses those outputs as context, not as direct commands.
+The control loop runs continuously on probes + VPD + forecast + dosing; photos only refresh slow
+context. So capture is driven by **per-zone confidence decay**, not a calendar:
+
+```text
+zone state: canopy_bucket, surface_state, last_observed_at, confidence
+confidence decays with: crop speed (fast leafy >> slow woody), elapsed time,
+                        weather shocks (heat/rain), recent change events
+→ request a photo when a zone's confidence drops, or an event is suspected
+```
+
+Indicative cadence (aligned to crop-scouting norms; piggybacks on visits you already make):
+
+- newly sown / transplanted: higher, until established
+- fast leafy / succession beds: ~weekly while active
+- slow herbs / perennials / stable beds: ~every 2–4 weeks
+- after extreme weather or an irrigation anomaly: an extra check
+
+The system learns normal growth curves and lowers _routine_ cadence over time, but it must keep
+_verifying_: it will never learn away failed germination, pests, heat/rain shock, weeds on bare
+soil, a blocked emitter, or an unmarked harvest. So **"low cadence," never "none."**
+
+### What photos are FOR (don't make irrigation pay cooking's cost)
+
+| Use | Photo detail needed |
+| --- | --- |
+| irrigation | coarse zone overview (bucket) |
+| crop map | marked overview / change photo |
+| condition / problem | targeted closeup |
+| cooking availability | closeup / manual check |
+
+Irrigation needs coarse zone context; condition/cooking needs detail. Keep them separate so the
+routine irrigation sweep stays cheap.
+
+### Capture modes (build simplest first)
+
+1. **Ad-hoc bound capture** (foundation): "photograph B3" → confirm/scan bed → 1–3 photos → metadata
+   stored.
+2. **Worklist** (the scaling path): "today: B3 overview, PROP-2, the bed you sowed Tuesday."
+3. **Change/event capture** (critical): "I sowed / transplanted / harvested-out B3" → photo + event
+   type. Without this the map silently rots.
+4. **Per-bed mini-video** (later): tap B3, record 5–10 s, backend picks the best frames — redundancy
+   without full-walk segmentation complexity.
+5. **Full walkthrough video** (last, if ever): seductive but adds motion blur, frame selection,
+   segmentation, storage/upload, and provenance problems. Defer until the data model is proven.
+
+A walkthrough / oblique video yields **buckets only** — green-cover % is camera- and angle-dependent,
+so a casual sweep cannot produce a calibrated cover number.
+
+### Tooling — configure, don't build (yet)
+
+- **Capture app:** don't write an Android app first. [Epicollect5](https://five.epicollect.net/)
+  (Oxford; free, offline, custom forms, photo/video + **barcode**, CSV/JSON export) or ODK /
+  KoboCollect already do bound capture + worklist-style forms. Prove the data model + review loop
+  with a configured form; build custom only if friction demands it.
+- **QR on labels:** a QR/barcode on each bed label gives reliable **scan-to-bind** location (scanned
+  up close, unlike detecting a marker in a wide canopy shot) — alongside the big human-readable text.
+- **Canopy read:** [Canopeo](https://apps.apple.com/us/app/canopeo/id929640529) (Oklahoma State;
+  free) is a validated fractional-green-cover reference. Use it as the method reference and an
+  _upgrade path_: a deliberate **downward (~1.5 m nadir)** shot per zone when a calibrated cover
+  number is wanted. Routine oblique photos stay bucket-level — camera/angle dependence is exactly
+  why we don't trust a handheld %.
+
+### Build order
+
+1. Define `site → bed → zone → patch`.
+2. Make big human-readable labels (+ optional QR).
+3. Ad-hoc bound capture (mandatory bed/zone binding) — via a configured Epicollect5 / ODK form.
+4. Worklist capture.
+5. Planting / change event capture.
+6. Canopy / surface bucket review (backend).
+7. Confidence decay + staleness-driven requests.
+8. Per-bed mini-video frame extraction (later).
+9. Full walkthrough video (only if needed).
 
 ## Three per-photo outputs — keep them separate
 
@@ -209,13 +275,18 @@ Answered:
   Localization is now **capture-time binding** (primary) + large human-readable labels (backup) +
   fiducials optional. This _downgrades_ what was the biggest risk: localization no longer depends on
   reading a clean fiducial from a messy photo.
+- **Cadence:** not daily, not "never" — **confidence-decay driven** (~weekly for active leafy,
+  ~2–4 weeks stable, higher at establishment); piggybacks on visits. The learning loop lowers
+  _routine_ checks but never removes _verification_.
+- **Build vs configure:** prototype capture with **Epicollect5 / ODK**, don't write an app first.
+- **Video:** later mode (per-bed mini-video first; full walkthrough last), buckets only.
 
 Still open:
 
-- **Label production:** a durable, weatherproof way to print/mount big human-readable codes — a
-  procurement/making detail now, not an architecture risk.
+- **Label production:** a durable, weatherproof way to print/mount big human-readable codes (+ QR) —
+  a procurement/making detail now, not an architecture risk.
 - Where exactly the ~40 categories fall across the 3–5 demand classes (needs the crop plan).
-- Capture cadence for an off-grid / visited-every-few-days site.
+- Capture cadence for an off-grid / visited-every-few-days site (lower bound on staleness).
 
 ## Do not re-open (settled decisions)
 
