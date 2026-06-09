@@ -208,6 +208,26 @@ _STEM_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{6}Z$")
 _SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_-]+\.jpg$")
 
 
+def _resolve_photo_file(filename: str, db: Session) -> tuple[Photo, Path]:
+    """Validate filename, look up the DB row, and return (photo, resolved_path).
+
+    Raises HTTPException on any failure so callers get consistent error responses.
+    """
+    if not _SAFE_FILENAME_RE.match(filename):
+        raise HTTPException(status_code=422, detail="invalid filename format")
+    photo = db.query(Photo).filter_by(filename=filename).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="photo not found")
+    file_path = Path(photo.storage_path).resolve()
+    try:
+        file_path.relative_to(PHOTOS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="photo not found")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="photo file not found on disk")
+    return photo, file_path
+
+
 @app.post("/locations", response_model=LocationOut, status_code=201)
 def create_location(body: LocationCreate, db: Session = Depends(get_db)):
     loc = Location(name=body.name, description=body.description)
@@ -799,18 +819,7 @@ def export_photos(ids: str, db: Session = Depends(get_db)):
 
 @app.get("/photos/{filename}/thumbnail")
 def photo_thumbnail(filename: str, size: int = Query(400, ge=1, le=1600), oriented: bool = False, db: Session = Depends(get_db)):
-    if not _SAFE_FILENAME_RE.match(filename):
-        raise HTTPException(status_code=422, detail="invalid filename format")
-    photo = db.query(Photo).filter_by(filename=filename).first()
-    if not photo:
-        raise HTTPException(status_code=404, detail="photo not found")
-    file_path = Path(photo.storage_path).resolve()
-    try:
-        file_path.relative_to(PHOTOS_DIR.resolve())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="photo not found")
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="photo file not found on disk")
+    photo, file_path = _resolve_photo_file(filename, db)
 
     rot = photo.rotation if oriented else 0
     cache_path = THUMBS_DIR / f"{size}" / f"{rot}_{filename}"
@@ -836,21 +845,7 @@ def photo_thumbnail(filename: str, size: int = Query(400, ge=1, le=1600), orient
 
 @app.get("/photos/{filename}")
 def serve_photo(filename: str, oriented: bool = False, db: Session = Depends(get_db)):
-    if not _SAFE_FILENAME_RE.match(filename):
-        raise HTTPException(status_code=422, detail="invalid filename format")
-
-    photo = db.query(Photo).filter_by(filename=filename).first()
-    if not photo:
-        raise HTTPException(status_code=404, detail="photo not found")
-
-    file_path = Path(photo.storage_path).resolve()
-    try:
-        file_path.relative_to(PHOTOS_DIR.resolve())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="photo not found")
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="photo file not found on disk")
+    photo, file_path = _resolve_photo_file(filename, db)
 
     # `oriented=1` bakes the stored rotation into the returned pixels so consumers that
     # bypass the dashboard's CSS rotation (e.g. dragging a thumbnail into a browser tab)
