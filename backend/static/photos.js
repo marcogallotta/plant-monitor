@@ -366,7 +366,7 @@ export async function gridRotate(e, photoId, delta) {
 }
 
 function flickerFps() {
-  return parseInt(document.getElementById('flicker-speed').value, 10);
+  return Math.max(1, parseInt(document.getElementById('flicker-speed').value, 10) || 1);
 }
 
 function updateFlickerFps() {
