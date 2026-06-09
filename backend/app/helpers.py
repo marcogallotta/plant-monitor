@@ -28,13 +28,14 @@ def _normalise_label_name(name: str) -> str:
     return re.sub(r"\s+", "_", name.strip().lower())
 
 
-def _generate_thumbnail(file_path: Path, size: int, transpose=None, quality: int = 80) -> bytes:
-    """Open image, optionally rotate, resize to size×size, return JPEG bytes."""
+def _generate_thumbnail(file_path: Path, size: Optional[int] = None, transpose=None, quality: int = 80) -> bytes:
+    """Open image, optionally rotate, optionally resize to size×size, return JPEG bytes."""
     with Image.open(file_path) as im:
         if transpose:
             im = im.transpose(transpose)
         im = im.convert("RGB")
-        im.thumbnail((size, size))
+        if size is not None:
+            im.thumbnail((size, size))
         buf = BytesIO()
         im.save(buf, format="JPEG", quality=quality)
         return buf.getvalue()

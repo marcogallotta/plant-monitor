@@ -799,11 +799,7 @@ def export_photos(ids: str, db: Session = Depends(get_db)):
             transpose = ROTATION_TRANSPOSE.get(photo.rotation)
             if transpose is not None:
                 try:
-                    with Image.open(file_path) as im:
-                        rotated = im.transpose(transpose).convert("RGB")
-                        img_buf = BytesIO()
-                        rotated.save(img_buf, format="JPEG", quality=90)
-                    zf.writestr(photo.filename, img_buf.getvalue())
+                    zf.writestr(photo.filename, _generate_thumbnail(file_path, transpose=transpose, quality=90))
                 except (UnidentifiedImageError, OSError):
                     continue
             else:
@@ -849,16 +845,9 @@ def serve_photo(filename: str, oriented: bool = False, db: Session = Depends(get
     transpose = ROTATION_TRANSPOSE.get(photo.rotation) if oriented else None
     if transpose is not None:
         try:
-            with Image.open(file_path) as im:
-                rotated = im.transpose(transpose).convert("RGB")
-                buf = BytesIO()
-                rotated.save(buf, format="JPEG", quality=90)
+            data = _generate_thumbnail(file_path, transpose=transpose, quality=90)
         except (UnidentifiedImageError, OSError) as exc:
             raise HTTPException(status_code=422, detail="could not decode image") from exc
-        return Response(
-            content=buf.getvalue(),
-            media_type="image/jpeg",
-            headers={"Cache-Control": "private, max-age=31536000"},
-        )
+        return Response(content=data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000"})
 
     return FileResponse(file_path)
