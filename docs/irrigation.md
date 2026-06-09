@@ -162,12 +162,11 @@ research. Implication: estimate **cover + stage**, not plant identity or biomass
   - `watering_detector.py`
   - watering-event detection from EC + moisture fusion
   - auto-pump/valves are the planned unlock
-  - **Site update pending (pre-site):** the candidate plot reportedly has **pressurised mains
-    water**. If so the "unlock" is likely **solenoid valves on a pressurised/gravity-fed line, not a
-    pump** —
-    simpler, and it removes the pump from the critical path. Confirm when the site lands and adjust
-    the build order (a pump may be unnecessary). The control logic (known dose → measure response) is
-    unchanged; only the actuator changes.
+  - **Open question (pre-site, UNCONFIRMED):** _if_ the plot turns out to have pressurised water,
+    the "unlock" might be **solenoid valves on a pressurised line rather than a pump** — simpler, no
+    pump to source. This is a hypothesis to check when the site lands, not a known fact; **the pump
+    stays the working assumption until confirmed.** Either way the control logic (known dose →
+    measure response) is unchanged; only the actuator differs.
 
 ### Evidence — VPD→drydown is qualitative, NOT a stable fitted coefficient (revised 2026-06-09)
 
