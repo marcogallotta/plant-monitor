@@ -237,8 +237,7 @@ def assistant_photo_vision_context(photo_id: int, db: Session = Depends(get_db))
             img.thumbnail((256, 256))
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=75)
-            import base64 as _b64
-            thumbnail_data_url = "data:image/jpeg;base64," + _b64.b64encode(buf.getvalue()).decode()
+            thumbnail_data_url = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
         except Exception:
             pass
     return PhotoVisionContext(

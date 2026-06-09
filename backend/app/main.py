@@ -27,7 +27,7 @@ from .database import get_db
 from .exif import read_exif_captured_at
 logger = logging.getLogger(__name__)
 
-from .helpers import EVENT_LOAD_OPTIONS, ROTATION_TRANSPOSE, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _photo_out
+from .helpers import EVENT_LOAD_OPTIONS, ROTATION_TRANSPOSE, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _normalise_label_name, _photo_out
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
@@ -678,7 +678,7 @@ def list_labels(db: Session = Depends(get_db)):
 
 @app.post("/labels", response_model=LabelOut, status_code=201)
 def create_label(body: LabelCreate, response: Response, db: Session = Depends(get_db)):
-    name = re.sub(r"\s+", "_", body.name.strip().lower())
+    name = _normalise_label_name(body.name)
     if not name:
         raise HTTPException(status_code=422, detail="name must not be empty")
     existing = db.query(Label).filter_by(name=name).first()

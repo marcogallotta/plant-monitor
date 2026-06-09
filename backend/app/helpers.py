@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,10 @@ ROTATION_TRANSPOSE = {
 logger = logging.getLogger(__name__)
 
 THUMBS_DIR = Path("data/thumbs")
+
+
+def _normalise_label_name(name: str) -> str:
+    return re.sub(r"\s+", "_", name.strip().lower())
 
 
 def _invalidate_thumb_cache(filename: str) -> None:

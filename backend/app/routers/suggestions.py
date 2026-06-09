@@ -1,14 +1,17 @@
-import re
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
+
+# scripts/ sits two levels above this file's package root (backend/app/routers/ -> backend/app/ -> backend/ -> repo root)
+_REPO_ROOT = str(Path(__file__).parents[3])
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..helpers import _delete_photo
+from ..helpers import _delete_photo, _normalise_label_name
 from ..models import GrowingUnit, Label, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel
 from ..schemas import SuggestionOut
 
@@ -57,7 +60,7 @@ def _suggestion_out(s: PhotoAiSuggestion, photo: Photo) -> SuggestionOut:
 
 
 def _find_or_create_label(name: str, db: Session) -> Label:
-    normalised = re.sub(r"\s+", "_", name.strip().lower())
+    normalised = _normalise_label_name(name)
     label = db.query(Label).filter_by(name=normalised).first()
     if not label:
         label = Label(name=normalised)
@@ -90,7 +93,8 @@ def ingest_suggestions(
     db: Session = Depends(get_db),
 ):
     # reuse the script's validation + insert logic
-    sys.path.insert(0, "/app")
+    if _REPO_ROOT not in sys.path:
+        sys.path.insert(0, _REPO_ROOT)
     try:
         from scripts.ingest_suggestions import IngestError, ingest_rows
     except ImportError:
