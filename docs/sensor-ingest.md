@@ -183,7 +183,7 @@ Added to `app/routers/sensors.py`. Accepts a JSON array:
 
 All four reading fields are optional (Flower Care history entries always carry all four, but the
 schema stays lenient for future sensors). `recorded_at` must carry a UTC offset — a naive datetime
-returns 400. The endpoint normalises all timestamps to UTC before inserting.
+returns 422 (Pydantic validation error). The endpoint normalises all timestamps to UTC before inserting.
 
 Auth: existing `INGEST_API_TOKEN` bearer — same token the camera uploader uses. No new secret
 needed.
@@ -253,6 +253,13 @@ WantedBy=timers.target
 
 `Persistent=true` means a missed run (Pi was off) fires once on next boot rather than being
 skipped. `OnCalendar=*:05` — five minutes past the hour, after the camera capture at `:00`.
+
+Prerequisites (`pi` user must be in the `bluetooth` group; BlueZ must be running):
+
+```sh
+sudo usermod -aG bluetooth pi
+sudo systemctl enable --now bluetooth
+```
 
 Install (same pattern as `plant-capture`):
 

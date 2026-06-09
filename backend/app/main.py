@@ -69,12 +69,13 @@ async def auth_middleware(request: Request, call_next):
     # external monitors can poll them (they leak only a capture timestamp).
     if path.startswith("/assistant") or path.startswith("/health/"):
         return await call_next(request)
-    # Pi camera ingest: dedicated bearer token, scoped to photo upload only.
+    # Pi ingest: dedicated bearer token covering photo upload and sensor ingest.
     ingest_token = os.environ.get("INGEST_API_TOKEN", "")
-    if ingest_token and request.method == "POST" and path == "/photos":
+    if ingest_token and request.method == "POST" and path in ("/photos", "/sensors/ingest"):
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], ingest_token):
             return await call_next(request)
+        return JSONResponse({"detail": "authentication required"}, status_code=401)
     password = os.environ.get("DASHBOARD_PASSWORD", "")
     if not password:
         return await call_next(request)

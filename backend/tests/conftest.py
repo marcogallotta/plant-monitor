@@ -44,7 +44,8 @@ def clean_tables(engine):
     with engine.connect() as conn:
         conn.execute(text(
             "TRUNCATE TABLE photo_notes, photo_growing_units, photo_labels, event_photos, "
-            "event_growing_units, events, photos, growing_units, locations, labels "
+            "event_growing_units, events, photos, growing_units, locations, labels, "
+            "sensor_readings "
             "RESTART IDENTITY CASCADE"
         ))
         conn.execute(

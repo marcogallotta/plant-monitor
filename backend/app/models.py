@@ -198,3 +198,20 @@ class PhotoNote(Base):
     y2: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class SensorReading(Base):
+    __tablename__ = "sensor_readings"
+    __table_args__ = (
+        UniqueConstraint("mac", "recorded_at", name="sensor_readings_mac_recorded_at_uniq"),
+        Index("sensor_readings_recorded_at_idx", "recorded_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mac: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    temperature_c: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lux: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    moisture_pct: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    conductivity_us_cm: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
