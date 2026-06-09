@@ -9,4 +9,4 @@ User=pi
 WorkingDirectory=/home/pi/plant-monitoring
 EnvironmentFile=/home/pi/plant-monitoring/.env
 ExecStart=/home/pi/plant-monitoring/.venv/bin/python \
-    /home/pi/plant-monitoring/pi/xiaomi_ingest.py
+    /home/pi/plant-monitoring/xiaomi_ingest.py

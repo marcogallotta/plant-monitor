@@ -379,7 +379,7 @@ Both are excluded from the dashboard's session auth (the middleware lets `/assis
 a trimmed OpenAPI doc containing only the `/assistant/*` paths, which is what the external GPT
 action consumes.
 
-## Sensor proxy
+## Sensor proxy — SwitchBot microclimate
 
 `app/sensors.py` contains a `SensorState` class that reads through to an external sensor API (the
 `esp32-home-display` server). Configuration comes from three env vars:
@@ -406,6 +406,58 @@ Two proxy endpoints (in `app/routers/sensors.py`; the `SensorState` client itsel
 
 The dashboard renders a compact sensor strip (top of page, auto-loaded at boot) and sensor context
 in the photo modal (loaded per-photo). Both are implemented in `static/sensors.js`.
+
+---
+
+## Flower Care sensor ingest
+
+Soil readings (temperature, lux, moisture, conductivity) from Xiaomi Flower Care sensors are
+collected on the Pi via BLE and stored locally in the `sensor_readings` table. This path is entirely
+separate from the SwitchBot proxy — `app/sensors.py` is unchanged.
+
+### DB — `sensor_readings`
+
+Migration `0016`. Columns: `id`, `mac`, `name`, `recorded_at` (TIMESTAMPTZ, UTC), `temperature_c`,
+`lux`, `moisture_pct`, `conductivity_us_cm`. Unique index on `(mac, recorded_at)`. `recorded_at` is
+the wall-clock UTC time derived from the device epoch at read time, not an ingest timestamp.
+
+### Pi script — `pi/xiaomi_ingest.py`
+
+Runs hourly on the Pi via `plant-xiaomi.timer` (`OnCalendar=*:05`). On each run:
+
+1. Flushes any locally queued rows from previous failed POSTs.
+2. Connects to each configured sensor via BLE (10 s timeout), reads history entries since
+   `last_sync_ts`, converts device-epoch timestamps to UTC wall time.
+3. POSTs new rows to `POST /sensors/ingest` in chunks of 200.
+4. On any 2xx response, advances `last_sync_ts` per MAC to the max `recorded_at` in the batch.
+   State is written to `~/.local/state/plant-monitoring/xiaomi_state.json`. Failed POSTs queue
+   rows to `xiaomi_queue.jsonl` for the next run.
+
+Configuration (Pi `.env`):
+
+| Var                  | Example                                          |
+| -------------------- | ------------------------------------------------ |
+| `XIAOMI_SENSORS`     | `[{"mac":"5C:85:7E:14:43:45","name":"Cilantro"}]` |
+| `XIAOMI_BACKEND_URL` | `http://10.141.108.230:8001`                     |
+| `INGEST_API_TOKEN`   | _(same token as photo upload)_                   |
+
+### Ingest endpoint — `POST /sensors/ingest`
+
+Accepts a JSON array of readings. Auth: `INGEST_API_TOKEN` bearer (same token as `POST /photos`).
+Upsert: `INSERT … ON CONFLICT (mac, recorded_at) DO NOTHING`. Returns `{"inserted": N, "skipped": N}`.
+`recorded_at` must carry a UTC offset — a naive datetime returns 422.
+
+### Read endpoints
+
+Both accept either the `INGEST_API_TOKEN` bearer **or** a dashboard session cookie (dual auth: the
+middleware lets a valid ingest bearer through, otherwise falls back to session auth).
+
+- `GET /sensors/flower-care/latest` — one row per distinct MAC (most recent), with a `stale: true`
+  flag when `recorded_at` is older than 90 minutes (1.5× the ingest interval). Stale sensors stay
+  in the list rather than dropping off.
+- `GET /sensors/flower-care/{mac}/readings?start_ts=…&end_ts=…` — all readings for one MAC in a
+  time window, ordered by `recorded_at`. Both params are optional; offset-aware timestamps only
+  (naive returns 422).
 
 ---
 

@@ -1,6 +1,6 @@
 # Sensor ingest — Xiaomi Flower Care on the Pi
 
-_Status: design, not yet built._
+_Status: Stages 1 and 2 complete (write path + read endpoints). Stage 3 (script repoint) pending._
 
 Adds Flower Care soil-sensor data collection to this repo, running entirely on the Pi Zero 2W.
 The `esp32-home-display` stack is left untouched. This is additive: the existing SwitchBot
