@@ -60,7 +60,7 @@ def read_exif_captured_at(source: ExifSource):
     try:
         src = BytesIO(bytes(source)) if isinstance(source, (bytes, bytearray)) else source
         with Image.open(src) as opened:
-            exif = opened._getexif()
+            exif = opened.getexif()
         if not exif:
             return None
 
