@@ -108,15 +108,11 @@ class PhotoListOut(BaseModel):
     total: int
 
 
-class NoteCreate(BaseModel):
-    note_text: Optional[str] = None
-    growing_unit_id: Optional[int] = None
-    x: float
-    y: float
+class _NoteCoordsMixin(BaseModel):
     x2: Optional[float] = None
     y2: Optional[float] = None
 
-    @field_validator("x", "y", "x2", "y2")
+    @field_validator("x", "y", "x2", "y2", check_fields=False)
     @classmethod
     def must_be_normalized(cls, v: Optional[float]) -> Optional[float]:
         if v is not None and not 0.0 <= v <= 1.0:
@@ -124,10 +120,17 @@ class NoteCreate(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def x2_y2_must_be_paired(self) -> "NoteCreate":
+    def x2_y2_must_be_paired(self):
         if (self.x2 is None) != (self.y2 is None):
             raise ValueError("x2 and y2 must both be provided or both omitted")
         return self
+
+
+class NoteCreate(_NoteCoordsMixin):
+    note_text: Optional[str] = None
+    growing_unit_id: Optional[int] = None
+    x: float
+    y: float
 
     @model_validator(mode="after")
     def text_or_unit_required(self) -> "NoteCreate":
@@ -136,26 +139,11 @@ class NoteCreate(BaseModel):
         return self
 
 
-class NoteUpdate(BaseModel):
+class NoteUpdate(_NoteCoordsMixin):
     note_text: Optional[str] = None
     growing_unit_id: Optional[int] = None
     x: Optional[float] = None
     y: Optional[float] = None
-    x2: Optional[float] = None
-    y2: Optional[float] = None
-
-    @field_validator("x", "y", "x2", "y2")
-    @classmethod
-    def must_be_normalized(cls, v: Optional[float]) -> Optional[float]:
-        if v is not None and not 0.0 <= v <= 1.0:
-            raise ValueError("must be between 0.0 and 1.0")
-        return v
-
-    @model_validator(mode="after")
-    def x2_y2_must_be_paired(self) -> "NoteUpdate":
-        if (self.x2 is None) != (self.y2 is None):
-            raise ValueError("x2 and y2 must both be provided or both omitted")
-        return self
 
 
 class NoteOut(BaseModel):
