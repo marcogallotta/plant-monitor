@@ -30,7 +30,7 @@ CAVEATS:
     seasonally. (This is the value of auto-detecting vs hand-mapping once.)
   * PROTOTYPE: validated on a handful of labels over one morning; the per-region
     SUN-HOURS profile is the next build (full-day arc + several clear days).
-See docs/ai-tagging-design.md.
+See docs/vision-tagging.md.
 
     .venv/bin/python scripts/sun_shade.py 'data/photos/2026-06-08T0[4-9]*Z.jpg' 'data/photos/2026-06-08T100000Z.jpg'
 """

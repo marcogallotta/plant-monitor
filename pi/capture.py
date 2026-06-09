@@ -37,7 +37,7 @@ def _capture_plate(camera: Camera, n: int) -> tuple[bytes, dict | None]:
     metadata, e.g. FakeCamera).
 
     Averaging a short burst (same light, no real change) cancels foliage sway,
-    which a single frame can't (see docs/ai-tagging-design.md). A MEAN is used
+    which a single frame can't (see docs/vision-tagging.md). A MEAN is used
     rather than a median because it streams: each frame is decoded, added to a
     running accumulator, and discarded — so nothing is staged to the SD card
     (no flash wear beyond the final plate) and peak RAM stays well under the

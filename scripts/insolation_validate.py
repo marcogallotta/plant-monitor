@@ -13,7 +13,7 @@ camera's own whole-frame Lux. Result (2026-06-08, 04-10Z): radiometric tracks th
 solar arc at Spearman +0.96..+1.00 across three open-sun patches; naive is
 flat/anti (-0.36..+0.54). => insolation-from-camera is VIABLE on open-sun targets;
 net-shaded regions use the canopy-integrating region-average. See
-docs/ai-tagging-design.md "insolation".
+docs/vision-tagging.md "insolation".
 
 Caveat: picamLux itself derives from exposure*gain (mild circularity), but three
 patches agree and picamLux ~= Flower-Care lux in the clean morning regime.

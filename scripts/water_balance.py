@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Per-plant water-balance JOIN — combine the demand-side pieces into a daily
 per-plant water demand + a heat-stress flag. This is "the join" (the last open
-step of the demand side; see docs/ai-tagging-design.md "Demand side").
+step of the demand side; see docs/vision-tagging.md "Demand side").
 
   demand_mm[unit] = ET0            (forecast — scripts/forecast_et0.py)
                   × Kc            (per-species crop coefficient, FAO-56 Table 12)

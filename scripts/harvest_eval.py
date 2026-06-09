@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Per-region TIME-SERIES harvest/wilt detector (supersedes the pairwise version).
 
-Governing principle (docs/ai-tagging-design.md): a single before/after pair is the
+Governing principle (docs/vision-tagging.md): a single before/after pair is the
 wrong primitive — a 50 g harvest is near-invisible in one noisy pair but obvious in
 the SEQUENCE ("flat, flat, flat, step, stays down"). So per region we build a time
 series and look for a PERSISTENT STEP, which also separates the two confounds the

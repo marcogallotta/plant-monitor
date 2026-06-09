@@ -3,7 +3,7 @@
 _Focused working doc for the irrigation track._
 
 - For nursery direction, crop priorities, and scaling context, see [`nursery.md`](nursery.md).
-- For camera monitoring, manual-photo tagging, identity/event detection, and AI tagging, see [`ai-tagging-design.md`](ai-tagging-design.md).
+- For camera monitoring, manual-photo tagging, identity/event detection, and AI tagging, see [`vision-tagging.md`](vision-tagging.md).
 
 This doc owns: irrigation strategy, sparse sensing, water-balance modelling, probe calibration, pump/dosing control, and irrigation-specific camera context.
 
@@ -197,7 +197,7 @@ For larger areas, the likely scalable approach is **requested manual photos**: a
 
 So tagging is a support layer for irrigation context, not the core irrigation sensor.
 
-**Irrigation consequence of a move (this doc owns it):** when a zone/pot is flagged *moved* (the detection itself lives in ai-tagging-design.md), irrigation must **drop that zone's camera sun-fraction until it is re-acquired** — otherwise the demand calc is contaminated by the *vacated spot's* sun. Concretely the chillis: after their sun-driven afternoon move to the West window, their old overhead tag reads the empty sunny spot, not the plant, so their camera sun-fraction is currently contaminated.
+**Irrigation consequence of a move (this doc owns it):** when a zone/pot is flagged *moved* (the detection itself lives in vision-tagging.md), irrigation must **drop that zone's camera sun-fraction until it is re-acquired** — otherwise the demand calc is contaminated by the *vacated spot's* sun. Concretely the chillis: after their sun-driven afternoon move to the West window, their old overhead tag reads the empty sunny spot, not the plant, so their camera sun-fraction is currently contaminated.
 
 ## Control and safety principles
 

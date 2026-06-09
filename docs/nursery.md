@@ -5,7 +5,7 @@ _A short orientation for the plant-growing direction behind this project._
 This doc explains **why** the automation work matters and what nursery direction it supports.
 
 - For irrigation control, water-balance modelling, sparse sensing, canopy/context inputs, and pump design, see [`irrigation.md`](irrigation.md).
-- For camera monitoring, plant identity, event detection, manual-photo tagging, and AI tagging, see [`ai-tagging-design.md`](ai-tagging-design.md).
+- For camera monitoring, plant identity, event detection, manual-photo tagging, and AI tagging, see [`vision-tagging.md`](vision-tagging.md).
 
 This doc owns: nursery direction, crop prioritisation, scaling assumptions, and why irrigation/automation is strategically important.
 

@@ -19,7 +19,7 @@ rather than hand-maps once.
 
 PROTOTYPE / preliminary: validated tooling, but the standing profile needs the
 full daytime arc (frames still accrue past midday) over multiple clear days.
-See docs/ai-tagging-design.md ("per-region sun/shade", "water-balance estimator").
+See docs/vision-tagging.md ("per-region sun/shade", "water-balance estimator").
 
   .venv/bin/python scripts/sun_hours.py 'data/photos/2026-06-08T*Z.jpg'
   .venv/bin/python scripts/sun_hours.py 'data/photos/2026-06-0[678]T*Z.jpg'   # multi-day

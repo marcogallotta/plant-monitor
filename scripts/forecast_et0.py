@@ -17,7 +17,7 @@ source) rather than RH.
 
 This is the fetch half of the demand adapter; the per-plant join (ET0 x Kc x
 camera sun-fraction, VPD per micro-climate) lands once region<->sensor mapping is
-wired. See docs/ai-tagging-design.md "water-balance estimator".
+wired. See docs/vision-tagging.md "water-balance estimator".
 """
 import os, sys, argparse
 from collections import defaultdict

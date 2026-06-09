@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Demand side of the per-plant water-balance model: evaporative demand from
 weather, ready to wire to the Open-Meteo forecast + the SwitchBot temp/humidity
-sensors once SENSOR_API_URL is fixed (see docs/ai-tagging-design.md "Forecast
+sensors once SENSOR_API_URL is fixed (see docs/vision-tagging.md "Forecast
 source already exists" / "water-balance estimator").
 
 Pure functions, no I/O — fed either live forecast rows or sensor readings. Two

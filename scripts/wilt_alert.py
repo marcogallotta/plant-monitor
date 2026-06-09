@@ -21,7 +21,7 @@ WHY PROTOTYPE / not production:
     it natively and may be the better home for wilt confirmation.
 The real detector needs a per-region MULTI-DAY DIURNAL BASELINE (each region's normal
 greenness-by-hour) to flag a midday dip exceeding the region's own variation — the
-plate-days now accruing feed exactly that. See docs/ai-tagging-design.md.
+plate-days now accruing feed exactly that. See docs/vision-tagging.md.
 
     .venv/bin/python scripts/wilt_alert.py 'data/photos/2026-06-07T0[7-9]*Z.jpg' 'data/photos/2026-06-07T1[0-5]*Z.jpg'
 """

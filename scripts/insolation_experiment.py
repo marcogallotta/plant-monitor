@@ -16,7 +16,7 @@ luminance does NOT measure insolation, because:
   2. saved frames carry NO exposure EXIF (plate re-encoded from numpy strips it),
      so auto-exposure can't be normalised out post-hoc;
   3. the lux reference is a dappled-shade POINT sensor swinging x128 hour-to-hour.
-See docs/ai-tagging-design.md "Insolation ... TESTED ... FALSIFIED" for the path
+See docs/vision-tagging.md "Insolation ... TESTED ... FALSIFIED" for the path
 forward (log ExposureTime/AnalogueGain at capture, or detect sun-vs-shadow by
 spatial pattern instead of mean brightness).
 

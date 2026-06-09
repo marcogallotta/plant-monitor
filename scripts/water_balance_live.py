@@ -18,7 +18,7 @@ sun_fraction = per-region sun-hours / the captured daylight arc (so it's the
 fraction of OBSERVED daylight in direct sun). Partial arc ⇒ preliminary — the
 full-day arc completes in the evening. Chillis use the West sensor (their
 sun-driven afternoon move; their overhead tag only covers the morning — see
-docs/ai-tagging-design.md). Demand = ET0 × Kc × sun_fraction.
+docs/vision-tagging.md). Demand = ET0 × Kc × sun_fraction.
 """
 import os, sys, glob, argparse
 import cv2
