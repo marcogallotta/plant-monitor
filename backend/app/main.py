@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
@@ -850,7 +851,8 @@ def photo_thumbnail(filename: str, size: int = Query(400, ge=1, le=1600), orient
             im = im.convert("RGB")
             im.thumbnail((size, size))
             cache_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = cache_path.with_suffix(f".{os.getpid()}.tmp")
+            with tempfile.NamedTemporaryFile(dir=cache_path.parent, suffix=".tmp", delete=False) as f:
+                tmp = Path(f.name)
             im.save(tmp, format="JPEG", quality=80)
             tmp.rename(cache_path)
     except (UnidentifiedImageError, OSError) as exc:
