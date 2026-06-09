@@ -13,7 +13,7 @@ for this first check).
 Runs in the backend container (esp32 reachable there):
     docker compose run --rm backend python scripts/soil_drydown.py
 """
-import os, sys
+import os, sys, json
 from datetime import datetime
 import httpx
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,7 +21,10 @@ import scripts.water_demand as wd
 import scripts.forecast_et0 as fe
 import scripts.watering_detector as wdet
 
-PROBE_ID = "3ee7f8a3-9811-45ce-8296-c909a104952b"   # Cilantro Flower Care (moisture/temp/light/EC)
+# Flower Care now comes from the in-repo backend (Pi BLE ingest -> sensor_readings),
+# keyed by MAC from XIAOMI_SENSORS. The railing SwitchBot (ambient RH for VPD) and the
+# weather feed still come from the esp32 server via SENSOR_API_URL.
+FLOWER_CARE_API_URL = os.environ.get("FLOWER_CARE_API_URL", "http://backend:8000")
 SOUTH_ID = "1be4c2d4-988c-40c4-8b22-3304f352c3dc"   # railing SwitchBot -> ambient RH for VPD
 MIN_SEG_HOURS = 6.0       # ignore tiny segments
 MIN_DROP = 2.0            # need a real decline to estimate a rate
@@ -29,12 +32,37 @@ START, END = "2026-05-25T00:00:00Z", "2026-06-10T00:00:00Z"
 
 
 def fetch(sensor_id, start, end, n=5000):
+    """esp32 server (SwitchBot ambient RH + weather) — by sensor UUID."""
     url = os.environ.get("SENSOR_API_URL", ""); key = os.environ.get("SENSOR_API_KEY", "")
     with httpx.Client(base_url=url, headers={"X-Api-Key": key}, verify=False, timeout=20) as c:
         r = c.get(f"/sensors/{sensor_id}/readings",
                   params={"start_ts": start, "end_ts": end, "max_points": n})
         r.raise_for_status()
         return r.json()
+
+
+def cilantro_mac():
+    """Cilantro Flower Care MAC from XIAOMI_SENSORS (name match, else first entry)."""
+    sensors = json.loads(os.environ.get("XIAOMI_SENSORS", "[]"))
+    for s in sensors:
+        if (s.get("name") or "").lower().startswith("cilantro"):
+            return s["mac"]
+    return sensors[0]["mac"] if sensors else None
+
+
+def fetch_flowercare(mac, start, end):
+    """Clean Flower Care history from the in-repo backend (Pi ingest). Normalises the
+    new row shape (recorded_at, lux) to the legacy names the rest of this script uses
+    (timestamp, light_lux)."""
+    token = os.environ.get("INGEST_API_TOKEN", "")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    with httpx.Client(base_url=FLOWER_CARE_API_URL, headers=headers, timeout=30) as c:
+        r = c.get(f"/sensors/flower-care/{mac}/readings",
+                  params={"start_ts": start, "end_ts": end})
+        r.raise_for_status()
+    return [{"timestamp": x["recorded_at"], "moisture_pct": x["moisture_pct"],
+             "temperature_c": x["temperature_c"], "light_lux": x["lux"],
+             "conductivity_us_cm": x["conductivity_us_cm"]} for x in r.json()]
 
 
 def _ts(r):
@@ -142,11 +170,17 @@ def ks_intervals(t, m, vpd, segs):
 
 
 def main():
-    rows = fetch(PROBE_ID, START, END)
+    mac = cilantro_mac()
+    if not mac:
+        sys.exit("no Cilantro MAC in XIAOMI_SENSORS")
+    rows = fetch_flowercare(mac, START, END)
     rows = [r for r in rows if r.get("moisture_pct") is not None
             and r.get("temperature_c") is not None and r.get("light_lux") is not None
             and r.get("conductivity_us_cm") is not None]
     rows = sorted(rows, key=lambda r: r["timestamp"])
+    if not rows:
+        sys.exit(f"no Flower Care readings {START[:10]}..{END[:10]} from {FLOWER_CARE_API_URL} "
+                 "(Pi ingest may not have backfilled yet — migrate-and-wait)")
     t = [_ts(r) for r in rows]
     ts_str = [r["timestamp"] for r in rows]
     m = [float(r["moisture_pct"]) for r in rows]
