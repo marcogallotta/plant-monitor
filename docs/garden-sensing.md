@@ -4,7 +4,7 @@ _Status: design sketch, written 2026-06-09, **before** the garden site lands (~S
 Nothing here is built yet. The point is to design the coordinate system, localization, capture
 workflow, and per-photo outputs now, so September is execution and not improvisation._
 
-This doc owns the **garden-scale sensing design**: how a mostly-handheld, marker-anchored photo
+This doc owns the **garden-scale sensing design**: how a mostly-handheld, location-tagged photo
 stream becomes irrigation-relevant context for a ~100 m² ground garden.
 
 - The irrigation model it feeds (zone demand, dual-`Kc`, sparse probes, `Ks`) lives in
@@ -24,7 +24,7 @@ The balcony is research input, not the target. The garden inverts most of the ha
 | layout | movable pots, sun-chased | plants stay put |
 | sensing | fixed overhead Pi, dense | no fixed overhead; sparse handheld photos |
 | main dynamic | pots move / get rearranged | "a new plant / a changed zone" against a static map |
-| identity | by overhead position | by physical marker + map |
+| identity | by overhead position | by capture-time binding + label + map |
 
 So the garden problem reduces to: **localize a handheld photo to a zone, read its canopy, and note
 change** — against an otherwise static layout. The irrigation unit is the **zone / bed-section, not
@@ -54,54 +54,49 @@ or one map zone split across crop patches. Decide the mapping at the site, not n
 Maps onto existing data: today's `location_id` (balcony positions) generalises to the
 site/bed/zone hierarchy; `growing_unit` stays the planting handle and gains a zone parent.
 
-## Localization = physical markers + a garden map (NOT pixel-recognition)
+## Localization = capture-time binding + human-readable labels (NOT clever markers)
 
-Cheap physical anchors beat clever vision. Bed labels / row stakes carry **AprilTag or ArUco**
-fiducials; a small map table resolves `tag_id → site/bed/zone`.
+The robust way to know where a photo was taken is to **say so when taking it**, not to recover it
+from pixels. Three layers, most-to-least reliable (resolved 2026-06-09):
 
-A handheld photo localizes **priors-first**, the same shape as the tagging method:
+1. **Capture-time binding (primary, the backbone).** Pick/type the target before shooting — e.g.
+   `Bed 3 / sage mother-stock / 2026-05-12`. The requested-photo workflow already names the target
+   ("Bed 3 overview"), so the response _is_ Bed 3; a one-tap "I'm at bed 3" covers spontaneous
+   shots. **No computer vision needed.**
+2. **Large human-readable labels (visual backup).** Big black-on-white codes a human _and_ OCR can
+   read in a messy photo — `B3`, plus a smaller `Sage / mother-stock / planted 2026`. They degrade
+   gracefully: a smudged or angled "B3" is still legible where a fiducial's binary pattern is not.
+3. **Fiducials (optional bonus).** AprilTag/ArUco only on clean dedicated "reference" shots when
+   precise pose/scale is wanted — never the core layer. They decode reliably only when clean, ~40+
+   px, focused, near-frontal; mud / glare / occlusion / small-in-frame (the garden norm) break them,
+   so durability and detectability are the _same_ problem. Don't depend on them.
 
-```text
-detected marker  →  bed/zone        (the anchor)
-+ garden map     →  neighbours / layout
-+ expected crop mix for that zone + timestamp + nearest prior state
-→ localization with a confidence, NOT a pixel guess
-```
+Priors then finish the job, same shape as the tagging method — combining declared-or-read location,
+the garden map, expected crop mix, timestamp, and nearest prior state into a zone with a confidence,
+never a pixel guess. **Bed-level is the target granularity.** Closeups inherit their location from a
+paired
+overview in the same visit (markerless self-localization of a leaf shot is unreliable). Crop-mix
+identity is a secondary consistency check that narrows _which_ zone — it helps locate, not water.
 
-- **Marker scheme:** at minimum one anchor per **bed** (coarse bed-level ID is enough — see below);
-  encode the id in the tag; keep the `tag_id → location` map as first-class data (small,
-  human-editable).
-- **No marker in frame:** degrade gracefully — coarse position (user confirms "I'm at bed 3"), the
-  prior, and crop mix; or mark _location-unknown, ask_. Never silently guess a zone from pixels.
+### Label conventions (boring on purpose — boring labels survive)
 
-Markers + map are **primary**; crop mix / plant identity is **secondary** evidence — used for
-markerless shots, sanity checks, and ambiguity resolution, not as the main locator. This downgrades
-(not deletes) the balcony "plants as fingerprint of location" idea.
-
-### Localization is the design's main risk — de-risk it (resolved 2026-06-09)
-
-Two answers tightened this: outdoor marker durability is **doubtful**, and markerless self-
-localization of a closeup is **probably hard**. So don't depend on pristine fiducials or on a leaf
-photo locating itself. Instead:
-
-- **Aim for coarse BED-level localization, not precise within-bed pose.** The layout is static, so
-  knowing _which bed you're standing at_ + the map is most of the job. A durable bed marker — laser-
-  engraved/anodised metal or stamped tag, not printed plastic — plus user confirmation is robust and
-  cheap. Precise fiducial geometry (and any px↔cm scale) is a **bonus, not a requirement**.
-- **Closeups inherit location from a paired marked overview**, taken in the same visit, rather than
-  self-localizing. The overview carries the marker; the closeup borrows its zone.
-- **Identity helps locate** (not demand — see outputs): the crop mix narrows _which_ zone within a
-  bed when the marker is coarse or absent.
+- **Location labels:** short bed/area codes in big text — `B1`, `B3` (beds), `PROP-2`
+  (propagation), `M1` (mother-stock) — plus a smaller descriptive line. The code → `site/bed/zone`
+  map stays first-class, small, and human-editable.
+- **Plant / clone labels:** structured `CROP-VARIETY-NN` — `TAR-FR-01` (French tarragon clone 01),
+  `SAGE-BG-02` (broadleaf sage line 02), `MINT-MOR-01` (Moroccan mint line 01). These ride on the
+  `growing_unit` handle and double as the cooking/clone identity.
 
 ## Capture metadata (per photo) — matters more than the model
 
 The metadata is what makes a handheld shot into sensing. Per photo, capture:
 
 - **timestamp** (existing `captured_at`).
-- **site / bed / zone guess** + its **source** (marker / manual / gps) and confidence.
+- **site / bed / zone** + its **source** (declared-at-capture / label-OCR / manual / fiducial) and
+  confidence. Declared-at-capture is the common case.
 - **photo type:** overview / closeup / row / tray / problem / after-watering (extends `photo_type`).
 - **source:** requested vs spontaneous, + a link to the **capture request** that prompted it.
-- **scale:** px↔cm from a marker, when present.
+- **scale:** px↔cm from a fiducial, on the rare clean reference shot that carries one.
 - **camera meta:** as already captured for Pi frames.
 
 Extends the existing photo fields (`captured_at`, `location_id`, `photo_type`, `growing_unit_ids`)
@@ -132,8 +127,8 @@ roadmap (manual requested photos).
 
 The smallest end-to-end loop that makes the design executable:
 
-1. Put visible markers on beds/zones.
-2. Take an initial marked overview photo for each bed.
+1. Put large human-readable labels (`B1`, `B3`, …) on beds.
+2. Take an initial overview photo per bed, location bound at capture.
 3. Register expected crop patches/rows against the map.
 4. When planting/transplanting changes, take a marked update photo.
 5. On each visit, take requested overview photos for stale/uncertain zones.
@@ -193,8 +188,9 @@ classes" (≈3–5, matched to the probes).
 
 ## To decide / build before the site
 
-- Pick the marker family (AprilTag vs ArUco), tag size, and weatherproof print/mount.
-- Define the `tag_id → location` map table + id encoding.
+- Design the **human-readable label scheme** (bed codes + plant/clone codes above) and a durable,
+  weatherproof way to print/mount them; fiducials optional for reference shots only.
+- Define the `code → location` map table + capture-time location-binding UX.
 - Extend the location model to `site / bed / zone / patch`.
 - Minimal **capture-request** + **photo-metadata** schema (small, additive).
 - A coarse **canopy-BUCKET classifier** from a single handheld photo (reuse priors-first; bucket
@@ -209,19 +205,22 @@ Answered:
 - **Probe budget:** ≤3 total → calibrate demand _classes_, not zones (see above).
 - **Green-fraction:** not robust from handheld → **bucket only**, no percentage.
 - **Identity vs demand:** canopy drives demand; identity's role is **localization** help.
-- **Marker durability / markerless closeups:** both shaky → coarse bed-level durable markers + map +
-  user confirm; closeups inherit location from a paired overview (see Localization risk).
+- **Marker durability / markerless closeups:** both shaky → **don't lean on machine-vision markers.**
+  Localization is now **capture-time binding** (primary) + large human-readable labels (backup) +
+  fiducials optional. This _downgrades_ what was the biggest risk: localization no longer depends on
+  reading a clean fiducial from a messy photo.
 
 Still open:
 
-- **Durable-localization detail:** which durable bed marker (engraved metal? stamped? size?) and is
-  bed-level granularity actually enough in practice — _the design's biggest remaining risk._
+- **Label production:** a durable, weatherproof way to print/mount big human-readable codes — a
+  procurement/making detail now, not an architecture risk.
 - Where exactly the ~40 categories fall across the 3–5 demand classes (needs the crop plan).
 - Capture cadence for an off-grid / visited-every-few-days site.
 
 ## Do not re-open (settled decisions)
 
-- Localization is **markers + map**, not pixel-recognition.
+- Localization is **capture-time binding + human-readable labels + map**, not pixel-recognition and
+  not machine-vision fiducials as the core layer.
 - The irrigation unit is the **zone**, not the plant.
 - Vision outputs **canopy + a kind distribution**, never a forced single label.
 - **Variety is irrelevant** to water demand unless its `Kc` differs materially.
