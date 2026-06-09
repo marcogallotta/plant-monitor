@@ -96,12 +96,30 @@ Where:
 
 - **VPD** is the local instantaneous evaporative-demand driver from temperature + humidity.
 - **k** is the calibrated per-zone/soil depletion coefficient.
-- **canopy** is a coarse crop/leaf-area multiplier, equivalent in spirit to FAO-56 `Kc`.
+- **canopy** is a coarse **canopy-cover / transpiring-surface** multiplier — equivalent to FAO-56
+  `Kc`. NOT true leaf-mass/biomass (hard from casual RGB); cover is what irrigation needs and is
+  achievable. See "the demand model is solved agronomy" below.
 - **Ks(moisture)** is the water-stress/supply-limitation factor: drydown slows as soil dries.
 - **ET₀** is the portable reference-demand forecast used for forward planning.
 
 The model does not need perfect biological accuracy. It needs good enough per-zone dosing decisions
 with conservative safety limits.
+
+### The demand model is solved agronomy — adopt, don't invent (2026-06-08)
+
+Cross-checked: the canopy→demand path is established irrigation science, not something to invent.
+FAO-56's `ETc = Kc × ET₀` already folds crop type, **growth stage, and ground cover** into `Kc`. Use:
+
+```text
+zone_demand ≈ ET₀ × Kc(stage/cover) × Ks(moisture)            # single coefficient
+zone_demand ≈ ET₀ × (Kcb_canopy + Ke_bare_soil)               # FAO-56 DUAL coefficient
+```
+
+The **dual coefficient** is the better form for the garden: it splits canopy transpiration (`Kcb`)
+from bare-soil evaporation (`Ke`), which matters for **newly-sown / sparse beds** where soil
+evaporation dominates. `Kc` from **fraction-of-ground-cover + crop height** is a documented method,
+and **canopy-cover / LAI from RGB images** is established — so the camera term is a known build, not
+research. Implication: estimate **cover + stage**, not plant identity or biomass.
 
 ## Validated state as of 2026-06-08
 
@@ -291,6 +309,33 @@ Xiaomi **Flower Care** probe:
 - `sun_hours.py`: camera-derived sun-hours / exposure context
 
 `soil_drydown.py` and `water_demand.py` are numpy-free.
+
+## Garden scale — design before the site (~Sept/Oct 2026)
+
+The balcony is research input; the real target is the ground garden, where the problem is **different
+and simpler**: ground plants stay put (no sun-chasing / moving pots), there is no fixed overhead
+camera, and the dynamic is mostly "**detect a new plant**" against an otherwise static layout. Design
+these now so September isn't improvised:
+
+- **Coordinate system:** `site → bed → zone → patch/row → unit/group`. The irrigation unit is the
+  **zone/bed-section**, NOT "plant". Demand and valves are per-zone.
+- **Localization = physical markers + a garden map, NOT pixel-recognition.** Cheap bed labels / row
+  stakes / **AprilTag/ArUco anchors** beat clever vision. A handheld photo localizes via
+  `marker + map + expected crop mix + timestamp + nearest prior state` — priors-first, again. (This
+  retires the balcony "plants as the fingerprint of location" idea — markers are cheaper and surer.)
+- **Requested-photo workflow:** the system asks for _useful_ photos ("overview of Bed 2 from the
+  south end", "closeup of Zone 3 left half", "photo after watering"), not random ones — that's how
+  handheld shots become sensing.
+- **Capture metadata per photo:** timestamp, site, bed/zone guess, photo type (overview / closeup /
+  row / tray / problem), source, scale if available, requested-vs-spontaneous + linked capture
+  request. This metadata matters more than the model.
+- **Three separate per-photo outputs — don't let identity swallow the task:**
+  1. **localization** — which bed/zone/patch (from marker/map);
+  2. **canopy/surface** — bare / seedling / sparse / moderate / heavy + approx green fraction (the
+     demand signal — see the dual-Kc model above);
+  3. **identity** — a probability distribution over kind/group (variety only if its Kc differs
+     materially); store raw probabilities + whether the uncertainty actually changed demand, to learn
+     later if they're calibrated or decorative.
 
 ## Do not re-open these traps
 

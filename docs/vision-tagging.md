@@ -203,6 +203,24 @@ validation spend is needed before the real run.
 **Open before the real run:** transport + scope must fit the ~$4 prepaid budget — single-call ≈ 285
 photos; Batch API (~50% off) ≈ 560. Pick scope/transport _before_ spending.
 
+### Decision: DEFER the bulk archive run (2026-06-08, cross-checked)
+
+The method **direction is validated** (above) — NOT "solved" (calibration, the messy/seedling/
+multi-plant cases, and garden localization are unproven at n=17). But stepping back: the **balcony is
+research input, not the target — the garden is** (see irrigation.md "Garden scale"). Tagging all ~650
+balcony herbs is now _execution_ producing a **balcony-specific** corpus of limited garden transfer
+(the garden grows different/more crops, and pot-movement / fixed-Pi machinery don't apply there). So:
+
+- **Defer the bulk run; save the $4.** The transferable assets are banked: the priors-first
+  _method_, and the irrigation _model_ (universal physics — see irrigation.md).
+- **Keep a curated 50–100 reference subset** for _later_ (best closeup per recurring kind, seedlings,
+  canopy-stage, confusables) — not 650, not zero. Tag-as-you-go with the proven method; no upfront run.
+- **The point of tagging was never a catalogue** — it's to feed irrigation: a photo's automation
+  payload is **canopy/cover + a probability distribution over kind** (→ expected Kc), localized to a
+  zone. Variety is irrelevant to water demand; resolve it only where its Kc differs materially.
+- **Localization is markers + map, not pixel-recognition** (irrigation.md "Garden scale") — so the
+  vision job shrinks to canopy + a coarse kind distribution.
+
 ## Priors-first tagging model
 
 Identity comes from priors first. Vision confirms and reads condition.

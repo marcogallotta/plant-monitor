@@ -185,7 +185,16 @@ Success criterion:
 
 > A few probes can calibrate many similar zones well enough for practical watering decisions.
 
-## Phase 3 — Non-Pi photo recovery
+## Phase 3 — Non-Pi photo recovery — DEFERRED (2026-06-08)
+
+**Status: bulk run deferred.** The priors-first method was validated (blind A/B: kind-level 16/17,
+overconfident-wrong 3→0, fixed the lemongrass↔garlic-chives swap) — _direction_ proven, banked. But
+the balcony is research input, not the target; tagging all ~650 balcony herbs produces a
+balcony-specific corpus of limited garden transfer. **Defer the bulk run, save the $4**; later tag a
+curated **50–100** reference subset (recurring kinds, seedlings, canopy-stage, confusables),
+tag-as-you-go. The point was never a catalogue — it's irrigation: photo → canopy/cover + P(kind) →
+expected Kc, localized to a zone (variety is irrelevant to water demand). See vision-tagging.md
+"Decision: DEFER" and irrigation.md "Garden scale". The original plan below stays as reference.
 
 Goal: fix the photo-to-unit tagging blocker.
 
