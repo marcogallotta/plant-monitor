@@ -68,18 +68,30 @@ detected marker  →  bed/zone        (the anchor)
 → localization with a confidence, NOT a pixel guess
 ```
 
-- **Marker scheme:** at minimum one anchor per bed; optionally one per zone. Encode the id in the
-  tag; keep the `tag_id → location` map as first-class data (small, human-editable).
-- **Scale for free:** a known marker size gives px↔cm, so a marker in frame also yields a rough
-  green-fraction scale (feeds canopy cover).
-- **No marker in frame:** degrade gracefully — coarse GPS + user confirm + prior, or mark
-  _location-unknown, ask_. Never silently guess a zone from pixels.
+- **Marker scheme:** at minimum one anchor per **bed** (coarse bed-level ID is enough — see below);
+  encode the id in the tag; keep the `tag_id → location` map as first-class data (small,
+  human-editable).
+- **No marker in frame:** degrade gracefully — coarse position (user confirms "I'm at bed 3"), the
+  prior, and crop mix; or mark _location-unknown, ask_. Never silently guess a zone from pixels.
 
 Markers + map are **primary**; crop mix / plant identity is **secondary** evidence — used for
-markerless closeups, sanity checks, and ambiguity resolution, not as the main locator. This
-downgrades (not deletes) the balcony "plants as fingerprint of location" idea: markers are cheaper
-and surer and survive growth/harvest/lighting that defeat appearance-based matching, but the
-expected crop mix still earns its place as a consistency check.
+markerless shots, sanity checks, and ambiguity resolution, not as the main locator. This downgrades
+(not deletes) the balcony "plants as fingerprint of location" idea.
+
+### Localization is the design's main risk — de-risk it (resolved 2026-06-09)
+
+Two answers tightened this: outdoor marker durability is **doubtful**, and markerless self-
+localization of a closeup is **probably hard**. So don't depend on pristine fiducials or on a leaf
+photo locating itself. Instead:
+
+- **Aim for coarse BED-level localization, not precise within-bed pose.** The layout is static, so
+  knowing _which bed you're standing at_ + the map is most of the job. A durable bed marker — laser-
+  engraved/anodised metal or stamped tag, not printed plastic — plus user confirmation is robust and
+  cheap. Precise fiducial geometry (and any px↔cm scale) is a **bonus, not a requirement**.
+- **Closeups inherit location from a paired marked overview**, taken in the same visit, rather than
+  self-localizing. The overview carries the marker; the closeup borrows its zone.
+- **Identity helps locate** (not demand — see outputs): the crop mix narrows _which_ zone within a
+  bed when the marker is coarse or absent.
 
 ## Capture metadata (per photo) — matters more than the model
 
@@ -135,36 +147,49 @@ on its own, each with its own confidence:
 
 1. **Localization** — which bed/zone/patch, from marker + map (above).
 2. **Canopy / surface state** — the demand signal. Two parts:
-   - _canopy bucket:_ `bare → seedling → sparse → moderate → heavy` + an approximate green fraction.
+   - _canopy bucket:_ `bare → seedling → sparse → moderate → heavy`. **Bucket only — do NOT emit a
+     green-fraction percentage.** Handheld RGB isn't robust enough (perspective, occlusion, angle,
+     lighting), confirmed 2026-06-09; a fake `fc` percentage is exactly the kind of false precision
+     to avoid. The bucket maps to a _representative_ `fc` via `COVER_FC`, not a measured one.
    - _surface state:_ bare soil / mulch / wet-looking / crusted-dry / newly-sown-germinating / weed
-     cover / residue / shade cloth — this drives the bare-soil evaporation term `Ke`, which the
-     canopy bucket alone misses.
+     cover / residue / shade cloth — drives the bare-soil evaporation term `Ke`, which the canopy
+     bucket alone misses.
    Maps onto the dual-`Kc` hook already built: bucket → `COVER_FC` → `fc` → `(Kcb, Ke)` via
-   `water_balance.dual_coeffs`, with surface state informing `Ke`. **Caveat:** a handheld oblique
-   photo gives a _bucketed/approximate_ canopy signal, not a measured ground-cover percentage —
-   perspective, occlusion, angle, and lighting all bite. Marker scale helps but does not solve them.
-   Treat `fc` as approximate unless the photo follows a defined capture pose.
+   `water_balance.dual_coeffs`, with surface state informing `Ke`.
 3. **Identity** — a **probability distribution over kind / group**, never a forced single label.
-   Kind is _secondary to canopy_ for immediate demand, but not irrelevant: it sets the default
-   `Kcb`/stage prior and the staleness cadence (fast leafy vs slow woody). Variety only when its `Kc`
-   differs materially (mostly it doesn't). Store the raw probabilities _and_ whether that uncertainty
-   actually changed the demand number — so we can later learn whether the identity read is calibrated
-   or merely decorative.
+   Its primary value is **localization, not demand** (confirmed 2026-06-09): for watering, canopy
+   alone drives the number; identity's job is to help pin _which zone_ a marker-coarse or markerless
+   photo belongs to (the crop-mix consistency check above). It also sets the default staleness
+   cadence (fast leafy vs slow woody). Variety only matters when its `Kc` differs materially (rare).
 
 ## How it feeds irrigation
 
 ```text
-photo →  zone            (marker + map)
+photo →  zone            (marker + map; kind dist helps locate)
       →  canopy bucket   → fc → (Kcb + Ke)      (water_balance.dual_coeffs)
-      →  kind dist       (mostly irrelevant to water demand)
 
-zone demand ≈ ET₀ × (Kcb + Ke) × sun_fraction(zone) × Ks(zone)
+zone demand ≈ ET₀ × (Kcb + Ke) × sun_fraction(zone) × Ks(class)
 ```
 
-Sparse probes calibrate each zone's `k` (and recalibrate per ground-bed soil — balcony `k` does not
-transfer); canopy reads from requested photos update `Kcb`; markers keep zone identity stable. This
-design supplies exactly the **per-zone canopy / `kr` source the live dual-`Kc` model currently
-lacks** (see irrigation.md "Wired" note).
+Canopy reads from requested photos update `Kcb`; markers + map keep zone identity stable. This
+design supplies exactly the **per-zone canopy source the live dual-`Kc` model currently lacks** (see
+irrigation.md "Wired" note).
+
+### Probe budget forces classes, not per-zone calibration (2026-06-09)
+
+Hard constraint: the budget is **1–2 more** waterproof probes (~€30 each), so **≤3 total** for the
+whole garden — far fewer than zones. So probes cannot calibrate per zone. Instead:
+
+- Collapse the ~**40 plant categories** into a **handful of demand classes** (e.g. thirsty-leafy /
+  moderate-herb / woody-low-demand / seedling-or-bare), keyed on water demand + soil + exposure, NOT
+  on species. The dual-`Kc` model already makes variety irrelevant, so this is cheap.
+- The 2–3 probes calibrate the **representative class × soil**, and act as rotating drift anchors —
+  moved to whatever class/zone is least trusted, not pinned one-per-zone.
+- Every other zone runs on weather + VPD + canopy bucket + known dosing, **borrowing** its class's
+  `k`. This is the sparse-calibration thesis pushed to its limit by the probe ceiling.
+
+So "how many zones" is a layout/plumbing question (many), decoupled from "how many calibration
+classes" (≈3–5, matched to the probes).
 
 ## To decide / build before the site
 
@@ -172,20 +197,26 @@ lacks** (see irrigation.md "Wired" note).
 - Define the `tag_id → location` map table + id encoding.
 - Extend the location model to `site / bed / zone / patch`.
 - Minimal **capture-request** + **photo-metadata** schema (small, additive).
-- A coarse **canopy-bucket estimator** from a single handheld photo (reuse priors-first; coarse is
-  fine — irrigation only needs the bucket + rough green fraction).
+- A coarse **canopy-BUCKET classifier** from a single handheld photo (reuse priors-first; bucket
+  only, no green-fraction percentage).
+- Define the **~3–5 demand classes** (× soil) the 2–3 probes will calibrate.
 - Zone granularity + valve mapping (couples to the pump/valve track — Phase 1).
 
-## Open questions
+## Resolved (2026-06-09) and what remains
 
-- Zone size / how many zones for ~100 m²? (Sets probe count, valve count, request load.)
-- Marker durability outdoors — UV, mud, frost, glare on the fiducial?
-- One marker per bed enough, or per zone, for reliable localization at useful angles?
-- Localizing a **closeup with no marker in frame** — scale + which zone, from prior + neighbours?
-- Is coarse green-fraction from a handheld RGB photo robust to angle/lighting, or does it need the
-  marker scale + a fixed-ish capture pose?
-- How much does the kind-distribution actually move demand — i.e. is storing identity worth it
-  beyond canopy, or is canopy + zone enough for watering?
+Answered:
+
+- **Probe budget:** ≤3 total → calibrate demand _classes_, not zones (see above).
+- **Green-fraction:** not robust from handheld → **bucket only**, no percentage.
+- **Identity vs demand:** canopy drives demand; identity's role is **localization** help.
+- **Marker durability / markerless closeups:** both shaky → coarse bed-level durable markers + map +
+  user confirm; closeups inherit location from a paired overview (see Localization risk).
+
+Still open:
+
+- **Durable-localization detail:** which durable bed marker (engraved metal? stamped? size?) and is
+  bed-level granularity actually enough in practice — _the design's biggest remaining risk._
+- Where exactly the ~40 categories fall across the 3–5 demand classes (needs the crop plan).
 - Capture cadence for an off-grid / visited-every-few-days site.
 
 ## Do not re-open (settled decisions)
