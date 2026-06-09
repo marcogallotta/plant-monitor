@@ -9,11 +9,27 @@ Notes for contributors. Covers non-obvious design decisions, test isolation mech
 ```
 backend/    # FastAPI app, Alembic migrations, static dashboard, tests
 pi/         # camera capture, upload, and cleanup scripts
+scripts/    # maintenance, the stabilization worker, and research experiments
 data/       # image files on disk (gitignored)
 docs/       # design docs and this file
 ```
 
 `backend/app/` holds the FastAPI app and ORM models. `backend/alembic/` holds migrations. `backend/static/` is the no-build-step dashboard (HTML + ES modules). `backend/tests/` has all backend tests.
+
+`scripts/` mixes a few things: maintenance one-offs (`fix_timestamps.py`, `fix_content_hashes.py`, `seed.py`), the stabilization worker (`compute_stabilization.py` + `stabilize_core.py`), the AI-tagging pipeline (`ingest_suggestions.py` and friends), and a large set of irrigation/sun-hours research experiments. The research scripts are documented where the work lives — [irrigation.md](irrigation.md) and [vision-tagging.md](vision-tagging.md) — not here; this file only covers the ones wired into the app or the test/ops loop.
+
+### App module layout
+
+`main.py` owns the photo CRUD/upload endpoints, the auth middleware, and the health checks. Three concerns are split out into routers under `app/routers/` and registered via `include_router` in `main.py`:
+
+| Module | Prefix | Covers |
+|--------|--------|--------|
+| `routers/assistant.py` | `/assistant` | Read-only assistant API (+ a small unauthenticated public router) |
+| `routers/sensors.py` | `/sensors` | Sensor proxy endpoints (the `SensorState` client itself stays in `app/sensors.py`) |
+| `routers/suggestions.py` | `/suggestions` | AI tag-suggestion review queue |
+| `camera_import.py` | `/camera-import` | SD/card scan + import |
+
+`helpers.py` holds the response serializers (`_photo_out`, `_event_out`) and the shared `_filtered_photo_query` / eager-load options used across endpoints — anything that builds a `PhotoOut`/`EventOut` goes through there so the shape stays consistent.
 
 ---
 
@@ -52,9 +68,36 @@ The column has a `server_default=func.now()` for insert, but there is no `onupda
 
 `PUT /notes/{note_id}` uses `model_fields_set` to apply updates, so sending `x2: null, y2: null` explicitly clears an existing rectangle. Fields omitted from the request body are left unchanged. The `x2_y2_must_be_paired` validator on `NoteUpdate` catches the case where the request body itself provides only one as non-null. The endpoint additionally checks the resulting note state after applying updates — so sending `x2: null` alone against a note that already has both set is also rejected, even though the request body has both as null (one explicit, one defaulted).
 
+### Notes can tag a growing unit
+
+`photo_notes.growing_unit_id` (migration `0013`, FK with `ON DELETE SET NULL`) lets a note point a region of a photo at a specific plant — "this is the basil." A note must have **`note_text`, a `growing_unit_id`, or both**: the create path enforces it on `NoteCreate`, and the update path re-checks the *resulting* state (the proposed unit defaults to the note's current value when omitted) so an edit can't strip a note down to neither.
+
 ---
 
-## Photo upload flow
+## Auth and access
+
+The app is internet-exposed (Tailscale Funnel), so `main.py` adds an `auth_middleware` in front of everything. Three audiences, three mechanisms:
+
+- **Dashboard (humans):** session-cookie auth. When `DASHBOARD_PASSWORD` is set, unauthenticated requests are redirected to `/login` (HTML navigations) or get a plain `401` (fetch/XHR — deliberately **no** `WWW-Authenticate` header, so the browser doesn't show its native popup). `POST /login` checks the password with `secrets.compare_digest` and sets `session["authed"]`; `POST /logout` (POST-only, so a third-party `<img>` can't force a logout) clears it. The session is signed by `SESSION_SECRET` via Starlette's `SessionMiddleware` — and if `DASHBOARD_PASSWORD` is set while `SESSION_SECRET` is **not**, the app refuses to start (a random per-restart key would silently invalidate every login). With no `DASHBOARD_PASSWORD`, auth is off entirely (dev/tests) and an ephemeral key is used.
+- **Pi ingest:** `POST /photos` accepts a dedicated `INGEST_API_TOKEN` bearer, scoped to that one route, so the Pi never holds the dashboard password.
+- **Assistant API:** its own `ASSISTANT_API_TOKEN` bearer (see [Assistant API](#assistant-api)); the middleware lets `/assistant*` through and the router enforces the token itself.
+
+`SessionMiddleware` is added **last** so it runs **outermost** — `request.session` must be populated before `auth_middleware` reads it.
+
+### Health checks
+
+`/health/*` is public (the middleware whitelists it) so a dumb external monitor can poll it; the only thing it leaks is a capture timestamp.
+
+- `GET /health/live` — liveness only ("the app is up"); says nothing about ingest.
+- `GET /health/captures` — dead-man's switch for the Pi capture→upload chain. Returns `503` (status code alone is enough to alert on) when the newest `source="pi"` photo is older than `CAPTURE_STALE_MINUTES` (default 90).
+
+### Thumbnail cache
+
+`THUMBS_DIR` (`data/thumbs/`) caches generated thumbnails at `{size}/{rot}_{filename}` — `size` is a subdirectory and the filename is prefixed by the baked-in rotation, so the oriented and raw variants don't collide. Any write path that changes how a photo renders (e.g. rotation) must call `_invalidate_thumb_cache(filename)`, which `rglob`s `*_{filename}` and unlinks every cached size/rotation for that file.
+
+---
+
+## Photos
 
 `POST /photos` accepts a multipart upload with two fields: `image` (`.jpg`) and `metadata` (`.json`).
 
@@ -75,9 +118,9 @@ After files are on disk, `_upsert_photo_record()` creates the DB row if one does
 
 ### Exporting photos as a zip
 
-`GET /photos/export?ids=1,2,3` streams a single `photos.zip` of the requested photos. `ids` is a comma-separated list — each part must be numeric (422 otherwise), and an empty list is rejected. Photos whose `storage_path` resolves outside `PHOTOS_DIR` are skipped (path-traversal guard via `Path.relative_to`), as are missing files and undecodable images.
+`GET /photos/export?ids=1,2,3` streams a single `photos.zip` of the requested photos. `ids` is a comma-separated list — each part must be numeric (422 otherwise), and an empty list is rejected. Photos whose `storage_path` resolves outside `PHOTOS_DIR` are skipped (path-traversal guard via `Path.relative_to`), as are missing files.
 
-Rotation is **baked in**: if `photo.rotation` is non-zero the image is re-encoded through Pillow (`_ROTATION_TRANSPOSE` maps stored rotation → `Image.Transpose`) and saved as JPEG at quality 90; otherwise the original file is written verbatim.
+Rotation is **baked in**: if `photo.rotation` is non-zero the image is re-encoded through Pillow (`_ROTATION_TRANSPOSE` maps stored rotation → `Image.Transpose`) and saved as JPEG at quality 90; otherwise the original file is written verbatim. Note the decode only happens on the rotated path — an undecodable file is skipped (caught `UnidentifiedImageError`/`OSError`) only if it needed rotating; a `rotation == 0` file is copied in byte-for-byte without a decode.
 
 The route is registered **before** `GET /photos/{filename}` so FastAPI does not match `export` as a filename. Keep it above that handler if you reorder routes.
 
@@ -114,7 +157,7 @@ The route is registered **before** `GET /photos/{filename}` so FastAPI does not 
 
 ### Photo classification
 
-`PUT /photos/{photo_id}` updates `photo_type`, `location_id`, `rotation`, and/or `growing_unit_ids`. Growing unit assignments are replaced wholesale: the endpoint deletes all existing `PhotoGrowingUnit` rows for the photo then inserts the new set. Only fields present in the request body are touched (Pydantic `model_fields_set`).
+`PUT /photos/{photo_id}` updates `photo_type`, `location_id`, `rotation`, and/or `growing_unit_ids`. `photo_type`/`location_id`/`rotation` are touched only when present in the request body (Pydantic `model_fields_set`), so an explicit `null` clears them. `growing_unit_ids` is different: it's gated by a plain `is not None` check, so when present it replaces the assignments wholesale (delete all `PhotoGrowingUnit` rows for the photo, then insert the new set), and an explicit `null` is treated the same as omitting it — left unchanged, not cleared.
 
 ### Batch classification
 
@@ -126,17 +169,23 @@ The gallery select bar drives this: the `Set type` / `Set location` / `+ Unit` /
 
 `DELETE /photos/{photo_id}` removes a photo and all dependent rows (notes, labels, growing unit assignments, event associations) in a single transaction, then attempts to delete the image and metadata files from disk. File deletion is best-effort — an `OSError` is logged but does not fail the request (the DB row is already gone). Returns 204 on success.
 
-### Locations and growing units
+---
+
+## Locations and growing units
 
 Standard CRUD via `/locations` and `/growing-units`. Both support `GET` (list), `POST` (create), `GET /{id}`, and `PUT /{id}`. `GrowingUnit` has rich optional fields (`species`, `variety`, `source`, `started_at`, `notes`, `current_location_id`) that are all nullable.
 
-### Events
+---
 
-`POST /events` creates a garden event. `event_type` must be one of the values in `CARE_ACTION_TYPES` (`fed_liquid`, `fed_worm_castings`, `watered`, `harvested`, `potted_up`, `other`) — the backend enforces this with a 422 on unknown values. Optional associations: `location_id`, `growing_unit_ids` (many-to-many via `event_growing_units`), `photo_ids` (many-to-many via `event_photos`). `event_at` defaults to `now()` if omitted. `GET /events` returns all events ordered by `event_at` descending.
+## Events
 
-### Labels
+`POST /events` creates a garden event. `event_type` must be one of the values in `CARE_ACTION_TYPES` (`fed_liquid`, `fed_worm_castings`, `watered`, `harvested`, `potted_up`, `propagated`, `other`) — the backend enforces this with a 422 on unknown values. Optional associations: `location_id`, `growing_unit_ids` (many-to-many via `event_growing_units`), `photo_ids` (many-to-many via `event_photos`). `event_at` defaults to `now()` if omitted. `GET /events` returns all events ordered by `event_at` descending.
 
-`GET /labels` returns all labels ordered by usage count descending, then by name — so frequently-used labels float to the top. Labels are seeded by migration `0006_labels.py` with six common values (`watered`, `fed_liquid`, `fed_worm_castings`, `harvested`, `potted_up`, `other`). `label.name` has a unique constraint.
+---
+
+## Labels
+
+`GET /labels` returns all labels ordered by usage count descending, then by name — so frequently-used labels float to the top. `0006_labels.py` first seeded six care-action labels, but `0007_replace_seeded_labels.py` swapped those out for seven **observation** labels (`aphids`, `yellowing`, `mildew`, `damage`, `new_growth`, `recovery`, `watch`) — care actions are now Events, not labels. The conftest `clean_tables` fixture re-inserts this same seven-label set after each test. `label.name` has a unique constraint.
 
 `POST /labels` creates a new label. The name is normalised to lowercase snake_case (whitespace → `_`). If a label with the normalised name already exists the endpoint returns it with 200 (idempotent). Returns the created label with 201.
 
@@ -146,11 +195,30 @@ Standard CRUD via `/locations` and `/growing-units`. Both support `GET` (list), 
 
 `GET /photos` includes `labels: [{id, name}]` on every photo via a join in `_photo_out()`. The frontend loads all labels once at boot via `GET /labels` (stored in `state.allLabels`) and renders them as chip buttons in the modal. Clicking a chip calls `toggleLabel(labelId)` which POSTs or DELETEs the assignment and updates local state without a full photo reload.
 
-### Assistant API
+---
 
-`/assistant/*` is a read-only sub-router protected by a Bearer token from the `ASSISTANT_API_TOKEN` env var. It exposes `GET /assistant/summary`, `/assistant/photos`, `/assistant/photos/{id}`, `/assistant/photos/{id}/context`, `/assistant/photos/{id}/thumbnail`, `/assistant/growing-units`, `/assistant/growing-units/{id}/context`, `/assistant/locations`, `/assistant/events`, and `/assistant/unclassified`. The thumbnail endpoint resizes to 256×256 via Pillow and returns JPEG bytes. A simple in-process rate limiter allows 60 requests per 60-second window per token.
+## AI tag suggestions
 
-### Sensor proxy
+Vision models propose tags (plant identity, photo type, rotation, observation labels) for unclassified photos; a human reviews them in the dashboard. The model work and prompt design live in [vision-tagging.md](vision-tagging.md) — this section is only the backend contract.
+
+- **Storage:** `PhotoAiSuggestion` (migrations `0010`/`0011`). One row per suggestion, FK to `photos`. It carries the model's proposal (`suggested_plant_id`/`suggested_plant_name`, `suggested_photo_type`, `suggested_rotation`, `suggested_labels`, an optional region `x/y/x2/y2`, `confidence`, a free-text `question` + `suggested_options`, `observation`), plus review state (`status`, `edited_*`, `reviewed_at`). `status` is one of `pending`/`accepted`/`edited`/`rejected`/`deleted` (CHECK-constrained).
+- **Ingest:** the pipeline writes rows by calling `ingest_rows()` from `scripts/ingest_suggestions.py`. `POST /suggestions/ingest` is a thin HTTP wrapper around that same function (imported at request time so the script stays the single source of validation) — so batch results land identically whether ingested in-process or over HTTP.
+- **Review:** `GET /suggestions?status=pending` lists the queue (oldest first). `PATCH /suggestions/{id}` resolves one with an `action`:
+  - `accept` — applies the suggestion to the photo (sets `photo_type`/`rotation`, links the suggested or named growing unit, adds labels). Inline `edited_*` overrides are honored and flip the status to `edited` instead of `accepted`.
+  - `reject` — marks the suggestion rejected, leaves the photo untouched.
+  - `deleted` — the photo itself is junk: deletes the photo and all its dependents (same cascade as `DELETE /photos/{id}`), best-effort unlinks the files, and marks the suggestion `deleted`.
+
+Accept resolves a plant by id when the model matched an existing unit, otherwise by case-insensitive name match, creating the `GrowingUnit` if none exists — so a confidently-named-but-new plant still lands as a real unit.
+
+---
+
+## Assistant API
+
+`app/routers/assistant.py` defines a read-only API under `/assistant`, protected by a Bearer token from the `ASSISTANT_API_TOKEN` env var. It exposes `GET /assistant/summary`, `/assistant/photos`, `/assistant/photos/{id}`, `/assistant/photos/{id}/context`, `/assistant/photos/{id}/vision-context`, `/assistant/photos/{id}/thumbnail`, `/assistant/growing-units`, `/assistant/growing-units/{id}/context`, `/assistant/locations`, `/assistant/events`, `/assistant/unclassified`, and `/assistant/contact-sheet`. The thumbnail endpoint resizes to 256×256 via Pillow and returns JPEG bytes. A simple in-process rate limiter allows 60 requests per 60-second window per token.
+
+The token-protected `router` ships alongside a tiny unauthenticated `_public_router` (also `/assistant`, registered separately in `main.py`): it serves `GET /assistant/photos/{filename}` as raw image bytes so a tool consuming the API can render image URLs without juggling the bearer token. Both are excluded from the dashboard's session auth (the middleware lets `/assistant*` through — see [Auth and access](#auth-and-access)). `GET /assistant-openapi.json` (top-level, in `main.py`) emits a trimmed OpenAPI doc containing only the `/assistant/*` paths, which is what the external GPT action consumes.
+
+## Sensor proxy
 
 `app/sensors.py` contains a `SensorState` class that reads through to an external sensor API (the `esp32-home-display` server). Configuration comes from three env vars:
 
@@ -164,7 +232,7 @@ If `SENSOR_API_URL` is not set (or `SENSOR_SENSORS` is invalid JSON), `get_state
 
 `SensorState` resolves MACs → sensor UUIDs lazily via `GET /sensors` on the upstream API and caches the result. It uses `verify=False` for TLS (self-signed cert on LAN).
 
-Two proxy endpoints:
+Two proxy endpoints (in `app/routers/sensors.py`; the `SensorState` client itself stays in `app/sensors.py`):
 
 - `GET /sensors/latest` — latest temp/humidity/staleness for each configured sensor.
 - `GET /sensors/photos/{photo_id}` — readings ±60 min around `photo.captured_at`, one entry per configured sensor.
@@ -219,7 +287,7 @@ After each test, truncates all data tables with `RESTART IDENTITY CASCADE`, then
 
 **`isolated_photos_dir` (autouse, function-scoped)**
 
-Patches `app.main.PHOTOS_DIR` to a `tmp_path` for each test. Prevents test photos from accumulating under `data/photos/` and stops tests from seeing each other's files.
+Patches `PHOTOS_DIR` to a `tmp_path` for each test — in all three modules that hold their own reference (`app.main`, `app.camera_import`, `app.routers.assistant`). Prevents test photos from accumulating under `data/photos/` and stops tests from seeing each other's files.
 
 **`client` (function-scoped)**
 
@@ -403,7 +471,7 @@ The Pi mount drifts, so timelapse/compare are stabilized by warping each frame o
 
 ## Adding a new stage
 
-1. Add the sub-stage to `docs/design-stage2.md` (or the relevant design doc).
+1. Capture the design in the relevant doc (`docs/roadmap.md`, or a feature doc like [irrigation.md](irrigation.md) / [vision-tagging.md](vision-tagging.md)).
 2. Write failing tests first.
 3. Write the migration if schema changes are needed (`alembic revision -m "…"`).
 4. Implement the feature.
