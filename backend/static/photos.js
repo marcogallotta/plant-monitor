@@ -242,6 +242,33 @@ export function selectB(e, idx) {
   renderGrid();
 }
 
+export function jumpB(photoId) {
+  const photo = state.allPhotos.find(p => p.id === photoId);
+  if (photo) { state.photoB = photo; updateCompare(); renderGrid(); }
+}
+
+function _renderJumps() {
+  const el = document.getElementById('compare-jumps');
+  if (!el) return;
+  if (!state.photoA) { el.style.display = 'none'; return; }
+  const aMs = new Date(state.photoA.captured_at).getTime();
+  const DAY = 86400000;
+  const chips = [];
+  for (const [label, days] of [['−7d', -7], ['−1d', -1], ['+1d', 1], ['+7d', 7]]) {
+    const target = aMs + days * DAY;
+    let best = null, bestDelta = Infinity;
+    for (const p of state.allPhotos) {
+      const d = Math.abs(new Date(p.captured_at).getTime() - target);
+      if (d < bestDelta) { bestDelta = d; best = p; }
+    }
+    if (best && best.id !== state.photoA.id && bestDelta < 2 * DAY) chips.push({ label, photo: best });
+  }
+  if (!chips.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<span style="color:#888;font-size:0.85em">Set B → </span>' +
+    chips.map(c => `<button class="qchip" onclick="jumpB(${c.photo.id})">${c.label}</button>`).join('');
+}
+
 function stabBadge(photo) {
   if (parseStab(photo)) return '';
   const s = photo.stab_status;
@@ -270,6 +297,7 @@ function updateCompare() {
     document.getElementById('cap-b').innerHTML = formatDate(state.photoB.captured_at) + stabBadge(state.photoB);
   }
 
+  _renderJumps();
   document.getElementById('btn-toggle').disabled = !ready;
   document.getElementById('btn-auto').disabled   = !ready;
 
