@@ -242,6 +242,13 @@ export function selectB(e, idx) {
   renderGrid();
 }
 
+function stabBadge(photo) {
+  if (parseStab(photo)) return '';
+  const s = photo.stab_status;
+  const label = s === 'night' ? 'night' : s === 'low_quality' ? 'low quality' : s === 'pending' ? 'stab pending' : 'no stab';
+  return ' <span style="color:#a66;font-size:0.75em">(' + label + ')</span>';
+}
+
 function updateCompare() {
   const ready = state.photoA && state.photoB;
 
@@ -251,7 +258,7 @@ function updateCompare() {
     img.src = state.photoA.url;
     img.style.display = 'block';
     img.style.transform = 'rotate(' + (state.photoA.rotation || 0) + 'deg)';
-    document.getElementById('cap-a').textContent = formatDate(state.photoA.captured_at);
+    document.getElementById('cap-a').innerHTML = formatDate(state.photoA.captured_at) + stabBadge(state.photoA);
   }
 
   if (state.photoB) {
@@ -260,7 +267,7 @@ function updateCompare() {
     img.src = state.photoB.url;
     img.style.display = 'block';
     img.style.transform = 'rotate(' + (state.photoB.rotation || 0) + 'deg)';
-    document.getElementById('cap-b').textContent = formatDate(state.photoB.captured_at);
+    document.getElementById('cap-b').innerHTML = formatDate(state.photoB.captured_at) + stabBadge(state.photoB);
   }
 
   document.getElementById('btn-toggle').disabled = !ready;
