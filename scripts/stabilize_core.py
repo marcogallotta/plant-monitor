@@ -29,12 +29,15 @@ FINAL_STATUSES = {"registered", "anchor", "night", "low_quality", "failed"}
 WORK_WIDTH = 1600          # registration resolution; matrix is in these px
 NIGHT_LUMA = 40            # mean 8-bit luminance below this = a night shot
 WIDEN = 3                  # daytime neighbours to try when a hop fails
-RESID_GATE_FRAC = 0.02     # drop a frame still misaligned by >this fraction of width
+RESID_GATE_FRAC = 0.04     # drop a frame still misaligned by >this fraction of width
+                           # (was 0.02; raised because 2-day chain drift lands at ~2-4%
+                           # while cross-night cluster mis-registrations land at 7%+,
+                           # so 4% is the safe midpoint between the two populations)
 
 # Bump on algorithm changes that DON'T alter the tunables below (e.g. a change to
 # the registration/gate logic). Combined with the tunables + reference into the
 # per-frame fingerprint so stale matrices auto-invalidate on any material change.
-ALGO_REV = 1
+ALGO_REV = 3
 
 
 def fingerprint(reference_name, work_width=WORK_WIDTH, night_luma=NIGHT_LUMA,
@@ -156,14 +159,19 @@ def compute_transforms(paths, reference_name, work_width=WORK_WIDTH,
     day = [i for i in range(n) if is_day[i]]
     a = day.index(anchor)
 
+    gate_px = resid_gate_frac * ref_w
+
     def anchor_frame(i, cand_positions):
         for pos in cand_positions:
             j = day[pos]
             if M[j] is None:
                 continue
             Mi, hi, gi = fr.register_pair(gray(j), gray(i))  # i -> j
-            if fr.plausible(Mi, hi, gi):
-                return fr.compose(M[j], Mi)
+            if not fr.plausible(Mi, hi, gi):
+                continue
+            composed = fr.compose(M[j], Mi)
+            if residual_to_ref(gray(anchor), gray(i), composed, ref_w, ref_h) <= gate_px:
+                return composed
         return None
 
     def register(p, cand_positions):       # only frames without a matrix yet
@@ -180,15 +188,6 @@ def compute_transforms(paths, reference_name, work_width=WORK_WIDTH,
         register(p, [p - k for k in range(1, widen + 1) if p - k >= a])
     for p in range(a - 1, -1, -1):         # backward in time
         register(p, [p + k for k in range(1, widen + 1) if p + k < len(day)])
-
-    # Quality gate: drop freshly-computed frames that still land far off the
-    # reference (prior-reused frames were already gated in their own run).
-    gate_px = resid_gate_frac * ref_w
-    for i in day:
-        if not computed[i]:
-            continue
-        if residual_to_ref(gray(anchor), gray(i), M[i], ref_w, ref_h) > gate_px:
-            M[i], status[i] = None, "low_quality"
 
     return [{"path": paths[i], "luma": _cache.get(i, (None, None, None))[2],
              "status": status[i], "matrix": M[i], "version": version,

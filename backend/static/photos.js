@@ -247,26 +247,48 @@ export function jumpB(photoId) {
   if (photo) { state.photoB = photo; updateCompare(); renderGrid(); }
 }
 
+function _nearestStabbed(targetMs, excludeId) {
+  let best = null, bestDelta = Infinity;
+  for (const p of state.allPhotos) {
+    if (p.id === excludeId || !parseStab(p)) continue;
+    const d = Math.abs(new Date(p.captured_at).getTime() - targetMs);
+    if (d < bestDelta) { bestDelta = d; best = p; }
+  }
+  return { photo: best, delta: bestDelta };
+}
+
 function _renderJumps() {
   const el = document.getElementById('compare-jumps');
   if (!el) return;
   if (!state.photoA) { el.style.display = 'none'; return; }
+
   const aMs = new Date(state.photoA.captured_at).getTime();
   const DAY = 86400000;
-  const chips = [];
-  for (const [label, days] of [['−7d', -7], ['−1d', -1], ['+1d', 1], ['+7d', 7]]) {
-    const target = aMs + days * DAY;
-    let best = null, bestDelta = Infinity;
-    for (const p of state.allPhotos) {
-      const d = Math.abs(new Date(p.captured_at).getTime() - target);
-      if (d < bestDelta) { bestDelta = d; best = p; }
-    }
-    if (best && best.id !== state.photoA.id && bestDelta < 2 * DAY) chips.push({ label, photo: best });
+  const lines = [];
+
+  // Warn if A has no stab and suggest the nearest photo that does.
+  if (!parseStab(state.photoA)) {
+    const { photo: alt } = _nearestStabbed(aMs, state.photoA.id);
+    const altBtn = alt ? ` <button class="qchip" onclick="(function(){state.photoA=state.allPhotos.find(p=>p.id===${alt.id});updateCompare();renderGrid();})()" style="border-color:#fa8">use ${formatDate(alt.captured_at)} instead</button>` : '';
+    lines.push(`<span style="color:#fa8;font-size:0.85em">⚠ A has no stabilization — comparison will jump.${altBtn}</span>`);
   }
-  if (!chips.length) { el.style.display = 'none'; return; }
+
+  // Jump chips: only suggest photos that have a stab matrix.
+  const chips = [];
+  const chipHtml = [];
+  for (const [label, days] of [['−7d', -7], ['−1d', -1], ['+1d', 1], ['+7d', 7]]) {
+    const { photo: best, delta } = _nearestStabbed(aMs + days * DAY, state.photoA.id);
+    if (best && delta < 4 * 3600000) {
+      chipHtml.push(`<button class="qchip" onclick="jumpB(${best.id})">${label}</button>`);
+    } else {
+      chipHtml.push(`<button class="qchip" disabled style="opacity:0.35;cursor:default" title="no stabilized photo at this offset">${label}</button>`);
+    }
+  }
+  lines.push('<span style="color:#888;font-size:0.85em">Set B → </span>' + chipHtml.join(''));
+
+  if (!lines.length) { el.style.display = 'none'; return; }
   el.style.display = '';
-  el.innerHTML = '<span style="color:#888;font-size:0.85em">Set B → </span>' +
-    chips.map(c => `<button class="qchip" onclick="jumpB(${c.photo.id})">${c.label}</button>`).join('');
+  el.innerHTML = lines.join('<br>');
 }
 
 function stabBadge(photo) {
@@ -279,35 +301,31 @@ function stabBadge(photo) {
 function updateCompare() {
   const ready = state.photoA && state.photoB;
 
+  // Compute crop first so slot canvases and flicker use the same region.
+  const stabs = ready ? [parseStab(state.photoA), parseStab(state.photoB)] : [];
+  const canStab = stabs.length === 2 && stabs.every(Boolean);
+  flickerCrop = canStab ? commonCrop(stabs) : { x0: 0, y0: 0, x1: 1, y1: 1 };
+
   if (state.photoA) {
     document.getElementById('slot-a-empty').style.display = 'none';
-    const img = document.getElementById('img-a');
-    img.src = state.photoA.url;
-    img.style.display = 'block';
-    img.style.transform = 'rotate(' + (state.photoA.rotation || 0) + 'deg)';
     document.getElementById('cap-a').innerHTML = formatDate(state.photoA.captured_at) + stabBadge(state.photoA);
+    renderFrame(document.getElementById('img-a'), document.getElementById('canvas-a'),
+      state.photoA, flickerCrop, { stabilize: canStab });
   }
 
   if (state.photoB) {
     document.getElementById('slot-b-empty').style.display = 'none';
-    const img = document.getElementById('img-b');
-    img.src = state.photoB.url;
-    img.style.display = 'block';
-    img.style.transform = 'rotate(' + (state.photoB.rotation || 0) + 'deg)';
     document.getElementById('cap-b').innerHTML = formatDate(state.photoB.captured_at) + stabBadge(state.photoB);
+    renderFrame(document.getElementById('img-b'), document.getElementById('canvas-b'),
+      state.photoB, flickerCrop, { stabilize: canStab });
   }
 
   _renderJumps();
   document.getElementById('btn-toggle').disabled = !ready;
   document.getElementById('btn-auto').disabled   = !ready;
 
-  // Stabilization aligns A and B onto a common frame so the change pops; only
-  // offer it when both carry a transform, and crop to their shared region.
-  const stabs = ready ? [parseStab(state.photoA), parseStab(state.photoB)] : [];
-  const canStab = stabs.length === 2 && stabs.every(Boolean);
   const stabLbl = document.getElementById('flicker-stab-label');
   if (stabLbl) stabLbl.style.display = canStab ? '' : 'none';
-  flickerCrop = canStab ? commonCrop(stabs) : { x0: 0, y0: 0, x1: 1, y1: 1 };
 
   updateFlickerFps();
 }
