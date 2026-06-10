@@ -66,16 +66,16 @@ describe('canvasTransform', () => {
 
   it('identity at native res + full crop just scales source to canvas', () => {
     const stab = { m: IDENTITY, refW: 1600, refH: 900 };
-    const [a, b, c, d, e, f] = canvasTransform(stab, full, 1600, 800, 450);
+    const [a, b, c, d, e, f] = canvasTransform(stab, full, 1600, 900, 800, 450);
     expect(a).toBeCloseTo(0.5, 6); // 800/1600
     expect(d).toBeCloseTo(0.5, 6); // 450/900
     expect([b, c, e, f]).toEqual([0, 0, 0, 0]);
   });
 
-  it('rescales the matrix when the served image is downscaled (s2r)', () => {
-    // Source served at 800px wide, reference space is 1600 -> s2r = 2.
+  it('rescales the matrix when the served image is downscaled (sx/sy)', () => {
+    // Source served at 800x450 (half res), reference space is 1600x900 -> sx=sy=2.
     const stab = { m: IDENTITY, refW: 1600, refH: 900 };
-    const [a] = canvasTransform(stab, full, 800, 1600, 900);
+    const [a] = canvasTransform(stab, full, 800, 450, 1600, 900);
     expect(a).toBeCloseTo(2, 6); // (1600/1600)*(1600/800)
   });
 
@@ -85,8 +85,25 @@ describe('canvasTransform', () => {
     const crop = { x0: 0.1, y0: 0, x1: 1, y1: 1 };
     // cropW=0.9 -> canvas covers 0.9*1600=1440 ref px across cw.
     const cw = 1440, ch = 900;
-    const [, , , , e] = canvasTransform(stab, crop, 1600, cw, ch);
+    const [, , , , e] = canvasTransform(stab, crop, 1600, 900, cw, ch);
     // kx = 1440/(1600*0.9) = 1 ; e = kx*m02 - x0*cw/cropW = 160 - 0.1*1440/0.9 = 0.
     expect(e).toBeCloseTo(0, 6);
+  });
+
+  it('uses separate X/Y scales when source aspect differs from reference', () => {
+    // Reference is 1600x900 (16:9). Served image is 900x1600 (9:16, as if rotated).
+    // sx = 1600/900, sy = 900/1600. A pure-Y translation of 160 ref-px (m12=160)
+    // should scale by sy only, not sx. With the old single-s2r bug both axes used
+    // sx=1600/900, making the Y offset wrong by a factor of (sx/sy) = (1600/900)^2.
+    const stab = { m: [1, 0, 0, 0, 1, 160], refW: 1600, refH: 900 };
+    const cw = 1600, ch = 900;
+    const sx = 1600 / 900, sy = 900 / 1600;
+    // kx = 1600/(1600*1) = 1, ky = 900/(900*1) = 1
+    // f = ky * m12 - 0 = 1 * 160 = 160  (correct, regardless of scale — translation
+    // is already in reference px, only the linear terms need per-axis scaling)
+    // The real check: coefficient d = ky * m11 * sy = 1 * 1 * sy = 900/1600
+    // With old code it would be ky * m11 * sx = 1600/900 — wrong.
+    const [, , , d] = canvasTransform(stab, { x0: 0, y0: 0, x1: 1, y1: 1 }, 900, 1600, cw, ch);
+    expect(d).toBeCloseTo(sy, 6);
   });
 });

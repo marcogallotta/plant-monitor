@@ -56,20 +56,23 @@ export function commonCrop(stabs) {
 }
 
 // The canvas setTransform tuple [a,b,c,d,e,f] that draws a source image (drawn at
-// 0,0, natural width `naturalW`) stabilized and cropped into a `cw`x`ch` canvas.
-// Composes: source px -> reference px (matrix, rescaled for the served variant)
-// -> normalised -> crop window -> canvas px. Exact (per-axis), so it's correct at
-// any canvas size and any served image resolution.
-export function canvasTransform({ m, refW, refH }, crop, naturalW, cw, ch) {
+// 0,0, natural size naturalW x naturalH) stabilized and cropped into a cw x ch canvas.
+// Composes: source px -> reference px (matrix, rescaled per-axis for the served variant)
+// -> normalised -> crop window -> canvas px. Separate X/Y scale factors are required
+// because served images can have a different aspect ratio from the reference (e.g. a
+// rotated or resized variant). Using only the width scale for Y (the previous approach)
+// causes vertical misalignment whenever the two frames differ in height.
+export function canvasTransform({ m, refW, refH }, crop, naturalW, naturalH, cw, ch) {
   const [m00, m01, m02, m10, m11, m12] = m;
-  const s2r = refW / naturalW;                 // source px -> reference px
+  const sx = refW / naturalW;                  // source X px -> reference X px
+  const sy = refH / naturalH;                  // source Y px -> reference Y px
   const cropW = crop.x1 - crop.x0, cropH = crop.y1 - crop.y0;
   const kx = cw / (refW * cropW), ky = ch / (refH * cropH);
   return [
-    kx * m00 * s2r,                            // a
-    ky * m10 * s2r,                            // b
-    kx * m01 * s2r,                            // c
-    ky * m11 * s2r,                            // d
+    kx * m00 * sx,                             // a
+    ky * m10 * sx,                             // b
+    kx * m01 * sy,                             // c
+    ky * m11 * sy,                             // d
     kx * m02 - crop.x0 * cw / cropW,           // e
     ky * m12 - crop.y0 * ch / cropH,           // f
   ];
@@ -88,7 +91,7 @@ export function drawStabilized(canvas, img, stab, crop, dispW = 1100) {
   canvas.height = ch;
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, cw, ch);
-  const [a, b, c, d, e, f] = canvasTransform(stab, crop, img.naturalWidth, cw, ch);
+  const [a, b, c, d, e, f] = canvasTransform(stab, crop, img.naturalWidth, img.naturalHeight, cw, ch);
   ctx.setTransform(a, b, c, d, e, f);
   ctx.drawImage(img, 0, 0);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
