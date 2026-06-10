@@ -30,7 +30,7 @@ class SensorReadingIn(BaseModel):
     def require_timezone(cls, v: datetime) -> datetime:
         if v.tzinfo is None:
             raise ValueError("recorded_at must include a UTC offset")
-        return v.astimezone(timezone.utc)
+        return v.astimezone(timezone.utc).replace(second=0, microsecond=0)
 
 
 @router.post("/ingest")
