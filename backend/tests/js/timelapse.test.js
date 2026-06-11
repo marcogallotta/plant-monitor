@@ -3,10 +3,12 @@ import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vite
 let tlInit, tlPrev, tlNext, tlPlayPause;
 let state;
 
+// Newest-first, matching the API's captured_at DESC order.
+// tlFrames() reverses this so frame 0 = oldest (a.jpg) and playback is chronological.
 const PHOTOS = [
-  {id: 1, url: '/photos/a.jpg', captured_at: '2026-01-01T10:00:00Z'},
-  {id: 2, url: '/photos/b.jpg', captured_at: '2026-01-02T10:00:00Z'},
   {id: 3, url: '/photos/c.jpg', captured_at: '2026-01-03T10:00:00Z'},
+  {id: 2, url: '/photos/b.jpg', captured_at: '2026-01-02T10:00:00Z'},
+  {id: 1, url: '/photos/a.jpg', captured_at: '2026-01-01T10:00:00Z'},
 ];
 
 beforeAll(async () => {
@@ -61,7 +63,7 @@ describe('tlInit', () => {
     tlInit();
     expect(document.getElementById('tl-empty').style.display).toBe('none');
     expect(document.getElementById('tl-img').style.display).toBe('block');
-    expect(document.getElementById('tl-img').src).toContain(PHOTOS[0].url);
+    expect(document.getElementById('tl-img').src).toContain(PHOTOS[2].url); // oldest = first chronological frame
     expect(document.getElementById('tl-prev').disabled).toBe(false);
     expect(document.getElementById('tl-play').disabled).toBe(false);
     expect(document.getElementById('tl-next').disabled).toBe(false);

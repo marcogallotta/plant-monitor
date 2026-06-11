@@ -17,7 +17,8 @@ function tlStabOn() {
 // Computed on demand so it can never go stale against state.allPhotos.
 function tlFrames() {
   const stab = state.allPhotos.filter(p => parseStab(p));
-  return stab.length ? stab : state.allPhotos;
+  const frames = stab.length ? stab : state.allPhotos;
+  return [...frames].reverse();
 }
 
 export function tlInit() {
