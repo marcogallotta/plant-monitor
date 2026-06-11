@@ -438,8 +438,25 @@ Configuration (Pi `.env`):
 | Var                  | Example                                          |
 | -------------------- | ------------------------------------------------ |
 | `XIAOMI_SENSORS`     | `[{"mac":"5C:85:7E:14:43:45","name":"Cilantro"}]` |
-| `XIAOMI_BACKEND_URL` | `http://10.141.108.230:8001`                     |
+| `XIAOMI_BACKEND_URL` | `http://laptop.local:8001`                       |
 | `INGEST_API_TOKEN`   | _(same token as photo upload)_                   |
+
+Pi-side setup (one-time, run as `marco` on `plantpi`):
+
+```sh
+# 1. Create .env with the vars above at ~/plant-monitoring/.env
+# 2. Create venv and install deps
+python3 -m venv ~/plant-monitoring/.venv
+~/plant-monitoring/.venv/bin/pip install httpx bleak
+# 3. Install and enable the systemd user timer
+mkdir -p ~/.config/systemd/user
+cp pi/systemd/plant-xiaomi.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now plant-xiaomi.timer
+```
+
+State is kept in `~/.local/state/plant-monitoring/xiaomi_state.json` (last sync timestamp per MAC).
+Failed POSTs are queued to `xiaomi_queue.jsonl` in the same directory and flushed on the next run.
 
 ### Ingest endpoint — `POST /sensors/ingest`
 
