@@ -1,9 +1,11 @@
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
+from sqlalchemy import func, literal
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -100,17 +102,58 @@ def flower_care_readings(
     mac: str,
     start_ts: Optional[datetime] = Query(default=None),
     end_ts: Optional[datetime] = Query(default=None),
+    max_points: Optional[int] = Query(default=None, ge=1),
     db: Session = Depends(get_db),
 ):
     if start_ts is not None and start_ts.tzinfo is None:
         raise HTTPException(status_code=422, detail="start_ts must include a UTC offset")
     if end_ts is not None and end_ts.tzinfo is None:
         raise HTTPException(status_code=422, detail="end_ts must include a UTC offset")
+    if max_points is not None and (start_ts is None or end_ts is None):
+        raise HTTPException(status_code=422, detail="max_points requires both start_ts and end_ts")
+
+    start_utc = start_ts.astimezone(timezone.utc) if start_ts is not None else None
+    end_utc = end_ts.astimezone(timezone.utc) if end_ts is not None else None
+
+    if max_points is not None:
+        total_secs = (end_utc - start_utc).total_seconds()
+        bucket_width = max(1, math.ceil(total_secs / max_points))
+
+        epoch_secs = func.extract("epoch", SensorReading.recorded_at - literal(start_utc))
+        bucket_expr = func.floor(epoch_secs / bucket_width)
+        rn = func.row_number().over(
+            partition_by=bucket_expr,
+            order_by=SensorReading.recorded_at.desc(),
+        ).label("rn")
+
+        subq = (
+            db.query(SensorReading, rn)
+            .filter(SensorReading.mac == mac)
+            .filter(SensorReading.recorded_at >= start_utc)
+            .filter(SensorReading.recorded_at <= end_utc)
+            .subquery()
+        )
+        rows = (
+            db.query(
+                subq.c.mac,
+                subq.c.name,
+                subq.c.recorded_at,
+                subq.c.temperature_c,
+                subq.c.lux,
+                subq.c.moisture_pct,
+                subq.c.conductivity_us_cm,
+            )
+            .filter(subq.c.rn == 1)
+            .order_by(subq.c.recorded_at)
+            .all()
+        )
+        return [_reading_out(r) for r in rows]
+
     q = db.query(SensorReading).filter(SensorReading.mac == mac)
-    if start_ts is not None:
-        q = q.filter(SensorReading.recorded_at >= start_ts.astimezone(timezone.utc))
-    if end_ts is not None:
-        q = q.filter(SensorReading.recorded_at <= end_ts.astimezone(timezone.utc))
+    if start_utc is not None:
+        q = q.filter(SensorReading.recorded_at >= start_utc)
+    if end_utc is not None:
+        q = q.filter(SensorReading.recorded_at <= end_utc)
     rows = q.order_by(SensorReading.recorded_at).all()
     return [_reading_out(r) for r in rows]
 

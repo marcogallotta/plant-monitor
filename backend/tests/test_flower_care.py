@@ -214,3 +214,35 @@ class TestFlowerCareReadings:
         _ingest(client, [_row(offset_minutes=5)])
         data = client.get(f"/sensors/flower-care/{MAC_A}/readings").json()
         assert "stale" not in data[0]
+
+    def test_max_points_without_timestamps_returns_422(self, client):
+        resp = client.get(f"/sensors/flower-care/{MAC_A}/readings?max_points=5")
+        assert resp.status_code == 422
+
+    def test_max_points_zero_returns_422(self, client):
+        start = _iso(_ts(120))
+        end = _iso(_ts(0))
+        resp = client.get(
+            f"/sensors/flower-care/{MAC_A}/readings?start_ts={start}&end_ts={end}&max_points=0"
+        )
+        assert resp.status_code == 422
+
+    def test_max_points_downsamples_spread_across_window(self, client):
+        # 9 readings evenly spread: 10, 20, 30, 40, 50, 60, 70, 80, 90 minutes ago
+        _ingest(client, [_row(mac=MAC_A, offset_minutes=i * 10) for i in range(1, 10)])
+        start = _iso(_ts(95))
+        end = _iso(_ts(5))
+        resp = client.get(
+            f"/sensors/flower-care/{MAC_A}/readings?start_ts={start}&end_ts={end}&max_points=3"
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert 1 <= len(data) <= 3
+        # Oldest returned reading must be from early in the window (not just the newest cluster).
+        # With 3 buckets over ~90 min, the oldest bucket covers ~0-30 min from start_ts (~65-95
+        # min ago). The newest bucket covers ~60-90 min from start_ts (~5-35 min ago).
+        # So the spread between oldest and newest returned row must exceed 30 minutes.
+        timestamps = sorted(data, key=lambda r: r["recorded_at"])
+        oldest_dt = datetime.fromisoformat(timestamps[0]["recorded_at"])
+        newest_dt = datetime.fromisoformat(timestamps[-1]["recorded_at"])
+        assert (newest_dt - oldest_dt).total_seconds() > 30 * 60
