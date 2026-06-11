@@ -67,7 +67,7 @@ async def auth_middleware(request: Request, call_next):
     path = request.url.path
     # Assistant API has its own bearer auth; health checks are public so
     # external monitors can poll them (they leak only a capture timestamp).
-    if path.startswith("/assistant") or path.startswith("/health/"):
+    if path.startswith("/assistant") or path.startswith("/health/") or path in ("/openapi.json", "/docs", "/redoc"):
         return await call_next(request)
     # Pi ingest: dedicated bearer token covering photo upload and sensor ingest.
     ingest_token = os.environ.get("INGEST_API_TOKEN", "")
