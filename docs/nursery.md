@@ -15,8 +15,8 @@ scaling lever.
 
 This doc does **not** own: irrigation formulas, pump hardware, camera pipelines, database schema,
 prompts, or implementation sequence. It is also **not** the canonical source for business strategy
-or crop selection — those live in [`nursery-north-star.md`](nursery-north-star.md) (thesis, moat,
-go-to-market) and [`plant-selection.md`](plant-selection.md) (per-crop calls). This doc summarises
+or crop selection — those live in `nursery-north-star.md` (thesis, moat,
+go-to-market) and `plant-selection.md` (per-crop calls) in the nursery repo. This doc summarises
 them only as far as they drive software choices; if it ever disagrees with those, they win.
 
 ## Who / what
@@ -58,7 +58,7 @@ growable here at all. The harder the crop, the more the control loop earns its k
 
 To be precise about what the difficulty is _not_: it is **not** the business moat. The moat is the
 **culinary signal** — knowing which plant, why, and for what dish, backed by real cooking (see
-[`nursery-north-star.md`](nursery-north-star.md) §3, Gap B). The claim that hard-to-grow = a
+`nursery-north-star.md` §3, Gap B — nursery repo). The claim that hard-to-grow = a
 standalone edge is currently unproven and deliberately not front-loaded. For the software the
 relevant truth is narrower and solid: these crops are demanding, so the sensing-and-dosing loop has
 to be good.
