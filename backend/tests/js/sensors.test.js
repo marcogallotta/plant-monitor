@@ -90,15 +90,6 @@ describe('loadSensorStrip', () => {
 // ── loadPhotoSensorContext ────────────────────────────────
 
 describe('loadPhotoSensorContext', () => {
-  it('leaves container empty when not available', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([
-      {url: '/sensors/photos/5', body: {available: false, sensors: []}},
-    ]));
-    state.currentPhotoId = 5;
-    await loadPhotoSensorContext(5);
-    expect(document.getElementById('modal-sensor-context').innerHTML).toBe('');
-  });
-
   it('returns early without rendering when photo changed during request', async () => {
     vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/photos/1', body: {
       available: true,

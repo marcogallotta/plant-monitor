@@ -1,4 +1,3 @@
-import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -9,9 +8,6 @@ from sqlalchemy import func, literal
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
-
-from .. import sensors as sensor_service
 from ..database import get_db
 from ..models import Photo, SensorReading
 
@@ -192,46 +188,33 @@ def meter_latest(db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/latest")
-def sensor_latest():
-    state = sensor_service.get_state()
-    if state is None:
-        return {"available": False, "sensors": []}
-    try:
-        return {"available": True, "sensors": state.latest()}
-    except Exception:
-        logger.warning("sensor latest() failed", exc_info=True)
-        return {"available": False, "sensors": []}
-
-
 @router.get("/photos/{photo_id}")
 def sensor_photo_context(photo_id: int, db: Session = Depends(get_db)):
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if photo is None:
         raise HTTPException(status_code=404, detail="photo not found")
-    state = sensor_service.get_state()
-    if state is None:
-        return {"available": False, "sensors": []}
     ts = photo.captured_at
-    if ts is not None and ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
     if ts is None:
         return {"available": True, "sensors": []}
-    try:
-        id_map = state.resolve_ids()
-    except Exception:
-        logger.warning("sensor resolve_ids() failed", exc_info=True)
-        return {"available": False, "sensors": []}
-    out = []
-    for sensor_cfg in state.sensors:
-        mac = sensor_cfg["mac"]
-        sensor_id = id_map.get(mac)
-        if sensor_id is None:
-            continue
-        try:
-            readings = state.readings_around(sensor_id, ts)
-        except Exception:
-            logger.warning("sensor readings_around() failed for %s", mac, exc_info=True)
-            readings = []
-        out.append({"name": sensor_cfg["name"], "readings": readings})
-    return {"available": True, "sensors": out}
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    window = timedelta(minutes=60)
+    readings = (
+        db.query(SensorReading)
+        .filter(SensorReading.humidity_pct.isnot(None))
+        .filter(SensorReading.recorded_at >= ts - window)
+        .filter(SensorReading.recorded_at <= ts + window)
+        .order_by(SensorReading.mac, SensorReading.recorded_at)
+        .all()
+    )
+    by_mac: dict = {}
+    for r in readings:
+        if r.mac not in by_mac:
+            by_mac[r.mac] = {"name": r.name, "readings": []}
+        by_mac[r.mac]["name"] = r.name  # keep latest name as readings are ordered asc
+        by_mac[r.mac]["readings"].append({
+            "timestamp": r.recorded_at.isoformat(),
+            "temperature_c": r.temperature_c,
+            "humidity_pct": r.humidity_pct,
+        })
+    return {"available": True, "sensors": list(by_mac.values())}

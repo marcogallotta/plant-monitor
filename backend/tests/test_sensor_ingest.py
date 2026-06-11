@@ -198,3 +198,112 @@ class TestMeterLatest:
         data = {r["mac"]: r for r in resp.json()}
         assert data["SB:00:00:00:00:01"]["stale"] is False
         assert data["SB:00:00:00:00:02"]["stale"] is True
+
+
+class TestSensorPhotoContext:
+    def _sb_row(self, mac, ts):
+        return _row(mac=mac, recorded_at=ts, humidity_pct=65.0,
+                    lux=None, moisture_pct=None, conductivity_us_cm=None)
+
+    def _make_photo(self, db_session, captured_at, suffix="0"):
+        from app.models import Photo
+        photo = Photo(
+            filename=f"2026-01-01T{suffix}.jpg",
+            storage_path=f"/tmp/ctx{suffix}.jpg",
+            metadata_path=f"/tmp/ctx{suffix}.json",
+            captured_at=captured_at,
+            source="pi",
+        )
+        db_session.add(photo)
+        db_session.commit()
+        return photo
+
+    def test_404_for_missing_photo(self, client):
+        resp = client.get("/sensors/photos/99999")
+        assert resp.status_code == 404
+
+    def test_empty_when_no_readings_in_window(self, client, db_session):
+        from datetime import datetime, timezone
+        photo = self._make_photo(db_session, datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc), "A")
+        resp = client.get(f"/sensors/photos/{photo.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["available"] is True
+        assert data["sensors"] == []
+
+    def test_returns_readings_in_window(self, client, db_session):
+        from datetime import datetime, timezone
+        photo_ts = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        photo = self._make_photo(db_session, photo_ts, "B")
+        inside = self._sb_row("SB:01:00:00:00:01", "2026-01-01T11:30:00Z")
+        assert client.post("/sensors/ingest", json=[inside], headers=_headers()).status_code == 200
+
+        resp = client.get(f"/sensors/photos/{photo.id}")
+        data = resp.json()
+        assert data["available"] is True
+        assert len(data["sensors"]) == 1
+        assert data["sensors"][0]["readings"][0]["temperature_c"] == pytest.approx(21.5)
+
+    def test_excludes_readings_outside_window(self, client, db_session):
+        from datetime import datetime, timezone
+        photo_ts = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        photo = self._make_photo(db_session, photo_ts, "C")
+        outside = self._sb_row("SB:01:00:00:00:02", "2026-01-01T10:59:00Z")  # >61 min before
+        assert client.post("/sensors/ingest", json=[outside], headers=_headers()).status_code == 200
+
+        resp = client.get(f"/sensors/photos/{photo.id}")
+        data = resp.json()
+        assert data["sensors"] == []
+
+    def test_excludes_flower_care_rows(self, client, db_session):
+        from datetime import datetime, timezone
+        photo_ts = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        photo = self._make_photo(db_session, photo_ts, "D")
+        fc = _row(mac="FC:01:00:00:00:01", recorded_at="2026-01-01T12:00:00Z")
+        assert client.post("/sensors/ingest", json=[fc], headers=_headers()).status_code == 200
+
+        resp = client.get(f"/sensors/photos/{photo.id}")
+        assert resp.json()["sensors"] == []
+
+    def test_groups_by_sensor(self, client, db_session):
+        from datetime import datetime, timezone
+        photo_ts = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        photo = self._make_photo(db_session, photo_ts, "E")
+        rows = [
+            self._sb_row("SB:01:00:00:00:03", "2026-01-01T11:30:00Z"),
+            self._sb_row("SB:01:00:00:00:04", "2026-01-01T12:00:00Z"),
+        ]
+        assert client.post("/sensors/ingest", json=rows, headers=_headers()).status_code == 200
+
+        resp = client.get(f"/sensors/photos/{photo.id}")
+        data = resp.json()
+        assert data["available"] is True
+        assert len(data["sensors"]) == 2
+
+    def test_naive_captured_at_treated_as_utc(self, client, db_session):
+        from datetime import datetime
+        photo = self._make_photo(db_session, datetime(2026, 1, 1, 12, 0, 0), "F")
+        inside = self._sb_row("SB:01:00:00:00:05", "2026-01-01T12:00:00Z")
+        assert client.post("/sensors/ingest", json=[inside], headers=_headers()).status_code == 200
+
+        resp = client.get(f"/sensors/photos/{photo.id}")
+        assert resp.json()["available"] is True
+
+    def test_renamed_sensor_produces_one_group_not_two(self, client, db_session):
+        from datetime import datetime, timezone
+        photo_ts = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        photo = self._make_photo(db_session, photo_ts, "G")
+        old_name = _row(mac="SB:01:00:00:00:06", name="Old Name",
+                        recorded_at="2026-01-01T11:30:00Z", humidity_pct=60.0,
+                        lux=None, moisture_pct=None, conductivity_us_cm=None)
+        new_name = _row(mac="SB:01:00:00:00:06", name="New Name",
+                        recorded_at="2026-01-01T12:00:00Z", humidity_pct=62.0,
+                        lux=None, moisture_pct=None, conductivity_us_cm=None)
+        assert client.post("/sensors/ingest", json=[old_name, new_name], headers=_headers()).status_code == 200
+
+        resp = client.get(f"/sensors/photos/{photo.id}")
+        data = resp.json()
+        assert len(data["sensors"]) == 1
+        assert data["sensors"][0]["name"] == "New Name"
+        assert len(data["sensors"][0]["readings"]) == 2
+        assert len(resp.json()["sensors"]) == 1

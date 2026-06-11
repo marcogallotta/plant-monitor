@@ -32,7 +32,6 @@ export async function loadPhotoSensorContext(photoId) {
   try {
     const data = await getSensorPhotoContext(photoId);
     if (state.currentPhotoId !== photoId) return;  // photo changed while request was in flight
-    if (!data.available) return;
     const sensors = data.sensors.filter(function(s) { return s.readings && s.readings.length; });
     if (!sensors.length) return;
     const header = document.createElement('div');
