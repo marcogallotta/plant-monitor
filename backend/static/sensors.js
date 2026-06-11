@@ -1,4 +1,4 @@
-import { getSensorLatest, getSensorPhotoContext } from './api.js';
+import { getMeterLatest, getSensorPhotoContext } from './api.js';
 import { state } from './state.js';
 
 function fmt(val, decimals) {
@@ -9,10 +9,10 @@ export async function loadSensorStrip() {
   const strip = document.getElementById('sensor-strip');
   if (!strip) return;
   try {
-    const data = await getSensorLatest();
-    if (!data.available || !data.sensors.length) { strip.innerHTML = ''; return; }
+    const sensors = await getMeterLatest();
+    if (!sensors.length) { strip.innerHTML = ''; return; }
     strip.innerHTML = '';
-    data.sensors.forEach(function(s) {
+    sensors.forEach(function(s) {
       const item = document.createElement('span');
       item.className = 'sensor-item' + (s.stale ? ' sensor-stale' : '');
       item.textContent = s.name + ': ' + fmt(s.temperature_c, 1) + '°C ' + fmt(s.humidity_pct, 0) + '%';
