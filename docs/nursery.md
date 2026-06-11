@@ -9,11 +9,15 @@ This doc explains **why** the automation work matters and what nursery direction
 - For camera monitoring, plant identity, event detection, manual-photo tagging, and AI tagging, see
   [`vision-tagging.md`](vision-tagging.md).
 
-This doc owns: nursery direction, crop prioritisation, scaling assumptions, and why
-irrigation/automation is strategically important.
+This doc owns: the **strategic rationale that shapes software decisions** — nursery direction,
+scaling assumptions, crop buckets as they affect automation, and why irrigation/automation is the
+scaling lever.
 
 This doc does **not** own: irrigation formulas, pump hardware, camera pipelines, database schema,
-prompts, or implementation sequence.
+prompts, or implementation sequence. It is also **not** the canonical source for business strategy
+or crop selection — those live in [`nursery-north-star.md`](nursery-north-star.md) (thesis, moat,
+go-to-market) and [`plant-selection.md`](plant-selection.md) (per-crop calls). This doc summarises
+them only as far as they drive software choices; if it ever disagrees with those, they win.
 
 ## Who / what
 
@@ -45,12 +49,19 @@ today is often the **gap to close**, not evidence of low demand.
 Current cooking already relies on inferior local substitutes. That is both the demand signal and the
 quality-gap thesis.
 
-### The moat is the hard part
+### Why the crops are hard — and why that drives the software
 
 The interesting crops are warm-tender, short-season, quality-gap crops that are hard to grow well
-and hard to source well in northern Italy.
+and hard to source well in northern Italy. **That difficulty is the reason the automation matters:**
+reliable propagation, contained heat, and quality-preserving irrigation are what make these crops
+growable here at all. The harder the crop, the more the control loop earns its keep.
 
-If they were easy, there would be no edge.
+To be precise about what the difficulty is _not_: it is **not** the business moat. The moat is the
+**culinary signal** — knowing which plant, why, and for what dish, backed by real cooking (see
+[`nursery-north-star.md`](nursery-north-star.md) §3, Gap B). The claim that hard-to-grow = a
+standalone edge is currently unproven and deliberately not front-loaded. For the software the
+relevant truth is narrower and solid: these crops are demanding, so the sensing-and-dosing loop has
+to be good.
 
 ### Quality-first, cooking-led
 
@@ -59,11 +70,11 @@ whether they materially improve the food, not by novelty alone.
 
 ## Crop buckets
 
-| Bucket                                       | Examples                                                                | Gate                                                | Why it matters                                          |
-| -------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
-| **Warm-tender annuals**                      | chillies, aubergine, Southeast Asian / Chinese / Japanese crops         | contained-heat propagation skill + heated enclosure | Main R&D moat; high quality gap in northern Italy       |
-| **Leafy / veg succession**                   | cilantro, parsley, dill, mint, salad veg                                | area + resowing rhythm                              | Proven demand now; currently rationed and shop-topped   |
-| **Slow perennials / woody / immobile crops** | rhubarb, citrus, figs, curry leaf, Sichuan peppercorn, galangal, wasabi | tenure / permanence                                 | Valuable later, but deferred until non-temporary ground |
+| Bucket                                       | Examples                                                        | Gate                                                | Why it matters                                          |
+| -------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
+| **Warm-tender annuals**                      | chillies, aubergine, Southeast Asian / Chinese / Japanese crops | contained-heat propagation skill + heated enclosure | Main R&D lane; high quality gap in northern Italy       |
+| **Leafy / veg succession**                   | cilantro, parsley, dill, mint, salad veg                        | area + resowing rhythm                              | Proven demand now; currently rationed and shop-topped   |
+| **Slow perennials / woody / immobile crops** | citrus, figs, curry leaf, Sichuan peppercorn, galangal, wasabi  | tenure / permanence                                 | Valuable later, but deferred until non-temporary ground |
 
 The practical priority is:
 
