@@ -13,7 +13,7 @@ vi.mock('@/utils.js', () => ({ populateSelect: vi.fn() }));
 vi.mock('@/photos.js', () => ({
   loadPhotos: mockFn(),
   applyFilter: vi.fn(), clearFilter: vi.fn(), loadMorePhotos: vi.fn(),
-  selectA: vi.fn(), selectB: vi.fn(),
+  selectA: vi.fn(), selectB: vi.fn(), jumpB: vi.fn(),
   flickerToggle: vi.fn(), flickerAuto: vi.fn(), stopAuto: vi.fn(), gridRotate: vi.fn(), gridDelete: vi.fn(),
   renderQuickChips: vi.fn(),
   readFiltersFromHash: vi.fn(),

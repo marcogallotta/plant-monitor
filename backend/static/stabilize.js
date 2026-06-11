@@ -114,7 +114,7 @@ const _latestRender = new WeakMap();
 export function renderFrame(imgEl, canvasEl, photo, crop, opts = {}) {
   const { stabilize = true, rotation = photo.rotation || 0, url = photo.url } = opts;
   const stab = (stabilize && canvasEl) ? parseStab(photo) : null;
-  const rot = rotation ? `rotate(${rotation}deg)` : '';
+  const rot = `rotate(${rotation}deg)`;
 
   const showRaw = () => {
     if (imgEl.dataset.frameUrl !== url) { imgEl.src = url; imgEl.dataset.frameUrl = url; }
