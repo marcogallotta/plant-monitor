@@ -126,3 +126,75 @@ class TestIngestUpsert:
         ]
         resp = client.post("/sensors/ingest", json=rows, headers=_headers())
         assert resp.json()["inserted"] == 2
+
+    def test_accepts_humidity_pct(self, client):
+        row = _row(humidity_pct=65.0, lux=None, moisture_pct=None, conductivity_us_cm=None)
+        resp = client.post("/sensors/ingest", json=[row], headers=_headers())
+        assert resp.status_code == 200
+        assert resp.json()["inserted"] == 1
+
+
+class TestFlowerCareLatest:
+    def test_excludes_meter_rows(self, client):
+        fc_row = _row(mac="FC:00:00:00:00:01", recorded_at="2026-06-09T08:00:00Z")
+        sb_row = _row(mac="SB:00:00:00:00:01", recorded_at="2026-06-09T08:00:00Z",
+                      humidity_pct=65.0, lux=None, moisture_pct=None, conductivity_us_cm=None)
+        assert client.post("/sensors/ingest", json=[fc_row, sb_row], headers=_headers()).status_code == 200
+
+        resp = client.get("/sensors/flower-care/latest")
+        assert resp.status_code == 200
+        macs = [r["mac"] for r in resp.json()]
+        assert "FC:00:00:00:00:01" in macs
+        assert "SB:00:00:00:00:01" not in macs
+
+
+class TestMeterLatest:
+    def test_empty_when_no_meter_readings(self, client):
+        resp = client.get("/sensors/meter/latest")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_returns_meter_readings_only(self, client):
+        # Flower Care row (no humidity_pct)
+        fc_row = _row(mac="FC:00:00:00:00:01", recorded_at="2026-06-09T08:00:00Z")
+        assert client.post("/sensors/ingest", json=[fc_row], headers=_headers()).status_code == 200
+        # SwitchBot meter row (has humidity_pct)
+        sb_row = _row(mac="SB:00:00:00:00:01", recorded_at="2026-06-09T08:00:00Z",
+                      humidity_pct=65.0, lux=None, moisture_pct=None, conductivity_us_cm=None)
+        assert client.post("/sensors/ingest", json=[sb_row], headers=_headers()).status_code == 200
+
+        resp = client.get("/sensors/meter/latest")
+        assert resp.status_code == 200
+        data = resp.json()
+        macs = [r["mac"] for r in data]
+        assert "SB:00:00:00:00:01" in macs
+        assert "FC:00:00:00:00:01" not in macs
+
+    def test_returns_most_recent_per_mac(self, client):
+        old = _row(mac="SB:00:00:00:00:01", recorded_at="2026-06-09T07:00:00Z",
+                   humidity_pct=60.0, lux=None, moisture_pct=None, conductivity_us_cm=None)
+        new = _row(mac="SB:00:00:00:00:01", recorded_at="2026-06-09T08:00:00Z",
+                   humidity_pct=65.0, lux=None, moisture_pct=None, conductivity_us_cm=None)
+        assert client.post("/sensors/ingest", json=[old, new], headers=_headers()).status_code == 200
+
+        resp = client.get("/sensors/meter/latest")
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["humidity_pct"] == pytest.approx(65.0)
+        assert data[0]["recorded_at"].startswith("2026-06-09T08:00:00")
+
+    def test_stale_flag(self, client):
+        from datetime import datetime, timedelta, timezone
+        fresh_ts = (datetime.now(timezone.utc) - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        stale_ts = (datetime.now(timezone.utc) - timedelta(minutes=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        fresh = _row(mac="SB:00:00:00:00:01", recorded_at=fresh_ts,
+                     humidity_pct=65.0, lux=None, moisture_pct=None, conductivity_us_cm=None)
+        stale = _row(mac="SB:00:00:00:00:02", recorded_at=stale_ts,
+                     humidity_pct=70.0, lux=None, moisture_pct=None, conductivity_us_cm=None)
+        assert client.post("/sensors/ingest", json=[fresh, stale], headers=_headers()).status_code == 200
+
+        resp = client.get("/sensors/meter/latest")
+        data = {r["mac"]: r for r in resp.json()}
+        assert data["SB:00:00:00:00:01"]["stale"] is False
+        assert data["SB:00:00:00:00:02"]["stale"] is True

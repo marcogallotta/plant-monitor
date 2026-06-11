@@ -212,6 +212,7 @@ class SensorReading(Base):
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     temperature_c: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    humidity_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     lux: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     moisture_pct: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     conductivity_us_cm: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

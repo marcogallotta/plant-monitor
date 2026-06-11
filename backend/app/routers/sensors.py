@@ -23,6 +23,7 @@ class SensorReadingIn(BaseModel):
     name: Optional[str] = None
     recorded_at: datetime
     temperature_c: Optional[float] = None
+    humidity_pct: Optional[float] = None
     lux: Optional[int] = None
     moisture_pct: Optional[int] = None
     conductivity_us_cm: Optional[int] = None
@@ -46,6 +47,7 @@ def sensor_ingest(readings: list[SensorReadingIn], db: Session = Depends(get_db)
             "name": r.name,
             "recorded_at": r.recorded_at,
             "temperature_c": r.temperature_c,
+            "humidity_pct": r.humidity_pct,
             "lux": r.lux,
             "moisture_pct": r.moisture_pct,
             "conductivity_us_cm": r.conductivity_us_cm,
@@ -70,6 +72,11 @@ def sensor_ingest(readings: list[SensorReadingIn], db: Session = Depends(get_db)
 FLOWER_CARE_STALE_MINUTES = 90
 
 
+def _is_stale(recorded_at: datetime, cutoff: datetime) -> bool:
+    ts = recorded_at if recorded_at.tzinfo is not None else recorded_at.replace(tzinfo=timezone.utc)
+    return ts < cutoff
+
+
 def _reading_out(r: SensorReading, stale: Optional[bool] = None) -> dict:
     d = {
         "mac": r.mac,
@@ -90,11 +97,12 @@ def flower_care_latest(db: Session = Depends(get_db)):
     stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=FLOWER_CARE_STALE_MINUTES)
     rows = (
         db.query(SensorReading)
+        .filter(SensorReading.humidity_pct.is_(None))
         .distinct(SensorReading.mac)
         .order_by(SensorReading.mac, SensorReading.recorded_at.desc())
         .all()
     )
-    return [_reading_out(r, stale=r.recorded_at < stale_cutoff) for r in rows]
+    return [_reading_out(r, stale=_is_stale(r.recorded_at, stale_cutoff)) for r in rows]
 
 
 @router.get("/flower-care/{mac}/readings")
@@ -156,6 +164,32 @@ def flower_care_readings(
         q = q.filter(SensorReading.recorded_at <= end_utc)
     rows = q.order_by(SensorReading.recorded_at).all()
     return [_reading_out(r) for r in rows]
+
+
+METER_STALE_MINUTES = 30
+
+
+@router.get("/meter/latest")
+def meter_latest(db: Session = Depends(get_db)):
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=METER_STALE_MINUTES)
+    rows = (
+        db.query(SensorReading)
+        .filter(SensorReading.humidity_pct.isnot(None))
+        .distinct(SensorReading.mac)
+        .order_by(SensorReading.mac, SensorReading.recorded_at.desc())
+        .all()
+    )
+    return [
+        {
+            "mac": r.mac,
+            "name": r.name,
+            "recorded_at": r.recorded_at.isoformat(),
+            "temperature_c": r.temperature_c,
+            "humidity_pct": r.humidity_pct,
+            "stale": _is_stale(r.recorded_at, stale_cutoff),
+        }
+        for r in rows
+    ]
 
 
 @router.get("/latest")
