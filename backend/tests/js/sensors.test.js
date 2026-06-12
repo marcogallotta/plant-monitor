@@ -25,7 +25,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('loadSensorStrip', () => {
   it('clears strip when no sensors returned', async () => {
     vi.stubGlobal('fetch', makeFetchMock([
-      {url: '/sensors/meter/latest', body: []},
+      {url: '/v2/sensors/meter/latest', body: {sensors: [], retry_after_secs: 300}},
     ]));
     document.getElementById('sensor-strip').innerHTML = '<span>old</span>';
     await loadSensorStrip();
@@ -33,27 +33,27 @@ describe('loadSensorStrip', () => {
   });
 
   it('renders one item per sensor', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.5, humidity_pct: 55, stale: false},
       {name: 'North', temperature_c: 19.0, humidity_pct: 60, stale: false},
-    ]}]));
+    ]}}]));
     await loadSensorStrip();
     expect(document.getElementById('sensor-strip').querySelectorAll('.sensor-item').length).toBe(2);
   });
 
   it('formats temperature to 1 decimal and humidity to 0 decimals', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.567, humidity_pct: 55.9, stale: false},
-    ]}]));
+    ]}}]));
     await loadSensorStrip();
     const item = document.getElementById('sensor-strip').querySelector('.sensor-item');
     expect(item.textContent).toBe('South: 22.6°C 56%');
   });
 
   it('formats null readings as "?"', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: null, humidity_pct: null, stale: false},
-    ]}]));
+    ]}}]));
     await loadSensorStrip();
     const item = document.getElementById('sensor-strip').querySelector('.sensor-item');
     expect(item.textContent).toContain('?°C');
@@ -61,9 +61,9 @@ describe('loadSensorStrip', () => {
   });
 
   it('adds sensor-stale class and title for stale sensor', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.0, humidity_pct: 50, stale: true},
-    ]}]));
+    ]}}]));
     await loadSensorStrip();
     const item = document.getElementById('sensor-strip').querySelector('.sensor-item');
     expect(item.classList.contains('sensor-stale')).toBe(true);
@@ -71,9 +71,9 @@ describe('loadSensorStrip', () => {
   });
 
   it('does not add sensor-stale class for fresh sensor', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.0, humidity_pct: 50, stale: false},
-    ]}]));
+    ]}}]));
     await loadSensorStrip();
     const item = document.getElementById('sensor-strip').querySelector('.sensor-item');
     expect(item.classList.contains('sensor-stale')).toBe(false);

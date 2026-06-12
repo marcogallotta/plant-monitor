@@ -9,7 +9,7 @@ export async function loadSensorStrip() {
   const strip = document.getElementById('sensor-strip');
   if (!strip) return;
   try {
-    const sensors = await getMeterLatest();
+    const { sensors } = await getMeterLatest();
     if (!sensors.length) { strip.innerHTML = ''; return; }
     strip.innerHTML = '';
     sensors.forEach(function(s) {
