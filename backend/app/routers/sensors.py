@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Photo, SensorReading
+from ..sensor_registry import display_id, display_name, sensor_for_id
 
 router = APIRouter(prefix="/sensors")
 
@@ -75,6 +76,14 @@ def sensor_ingest(readings: list[SensorReadingIn], db: Session = Depends(get_db)
 
 
 FLOWER_CARE_STALE_MINUTES = 90
+METER_STALE_MINUTES = 30
+
+# TODO: tune these from sensor_ingest lag_secs log data once a few days have accumulated
+METER_INTERVAL_SECS = 15 * 60
+METER_PIPELINE_BUFFER_SECS = 90
+
+FLOWER_CARE_INTERVAL_SECS = 60 * 60
+FLOWER_CARE_PIPELINE_BUFFER_SECS = 120
 
 
 def _is_stale(recorded_at: datetime, cutoff: datetime) -> bool:
@@ -168,7 +177,85 @@ def _sensor_readings(mac: str, kind_filter, start_utc, end_utc, max_points, db: 
     return q.order_by(SensorReading.recorded_at).all()
 
 
-METER_STALE_MINUTES = 30
+def _next_tick_secs(interval_secs: int) -> int:
+    now_secs = datetime.now(timezone.utc).timestamp()
+    secs_into_interval = now_secs % interval_secs
+    return int(interval_secs - secs_into_interval)
+
+
+def _retry_after(interval_secs: int, buffer_secs: int) -> int:
+    return _next_tick_secs(interval_secs) + buffer_secs
+
+
+@router.get("/meter/latest")
+def meter_latest(db: Session = Depends(get_db)):
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=METER_STALE_MINUTES)
+    rows = (
+        db.query(SensorReading)
+        .filter(SensorReading.humidity_pct.isnot(None))
+        .distinct(SensorReading.mac)
+        .order_by(SensorReading.mac, SensorReading.recorded_at.desc())
+        .all()
+    )
+    sensors = [
+        {
+            "id": display_id(r.mac, r.name, "meter"),
+            "mac": r.mac,
+            "name": display_name(r.mac, r.name, "meter"),
+            "type": "meter",
+            "recorded_at": r.recorded_at.isoformat(),
+            "temperature_c": r.temperature_c,
+            "humidity_pct": r.humidity_pct,
+            "stale": _is_stale(r.recorded_at, stale_cutoff),
+        }
+        for r in rows
+    ]
+    return {
+        "sensors": sensors,
+        "retry_after_secs": _retry_after(METER_INTERVAL_SECS, METER_PIPELINE_BUFFER_SECS),
+    }
+
+
+@router.get("/flower-care/latest")
+def flower_care_latest(db: Session = Depends(get_db)):
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=FLOWER_CARE_STALE_MINUTES)
+    rows = (
+        db.query(SensorReading)
+        .filter(SensorReading.humidity_pct.is_(None))
+        .distinct(SensorReading.mac)
+        .order_by(SensorReading.mac, SensorReading.recorded_at.desc())
+        .all()
+    )
+    sensors = []
+    for r in rows:
+        row = _reading_out(r, stale=_is_stale(r.recorded_at, stale_cutoff))
+        row["id"] = display_id(r.mac, r.name, "flower-care")
+        row["name"] = display_name(r.mac, r.name, "flower-care")
+        row["type"] = "flower-care"
+        sensors.append(row)
+    return {
+        "sensors": sensors,
+        "retry_after_secs": _retry_after(FLOWER_CARE_INTERVAL_SECS, FLOWER_CARE_PIPELINE_BUFFER_SECS),
+    }
+
+
+@router.get("/{sensor_id}/readings")
+def sensor_readings(
+    sensor_id: str,
+    start_ts: datetime | None = Query(default=None),
+    end_ts: datetime | None = Query(default=None),
+    max_points: int | None = Query(default=None, ge=1),
+    db: Session = Depends(get_db),
+):
+    entry = sensor_for_id(sensor_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="sensor not found")
+    start_utc, end_utc = _validate_ts_params(start_ts, end_ts, max_points)
+    if entry.kind == "meter":
+        rows = _sensor_readings(entry.mac, SensorReading.humidity_pct.isnot(None), start_utc, end_utc, max_points, db)
+        return [_meter_reading_out(r) for r in rows]
+    rows = _sensor_readings(entry.mac, SensorReading.humidity_pct.is_(None), start_utc, end_utc, max_points, db)
+    return [_reading_out(r) for r in rows]
 
 
 @router.get("/photos/{photo_id}")
@@ -194,7 +281,7 @@ def sensor_photo_context(photo_id: int, db: Session = Depends(get_db)):
     for r in readings:
         if r.mac not in by_mac:
             by_mac[r.mac] = {"name": r.name, "readings": []}
-        by_mac[r.mac]["name"] = r.name  # keep latest name as readings are ordered asc
+        by_mac[r.mac]["name"] = r.name
         by_mac[r.mac]["readings"].append({
             "timestamp": r.recorded_at.isoformat(),
             "temperature_c": r.temperature_c,
