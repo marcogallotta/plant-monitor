@@ -13,10 +13,11 @@ photo-to-plant tagging** (the camera as context for watering decisions). See
 ## Architecture
 
 ```text
-Raspberry Pi Zero 2W + Camera + Flower Care sensor
+Raspberry Pi Zero 2W + Camera + Flower Care + SwitchBot Meter sensors
         |
         | HTTP upload (photo + metadata JSON)
-        | POST /sensors/ingest  (Flower Care history via BLE, hourly)
+        | POST /sensors/ingest  (Flower Care BLE history, hourly)
+        | POST /sensors/ingest  (SwitchBot Meter BLE live readings, every 15 min)
         v
 FastAPI backend + Postgres (laptop)
         |
@@ -25,8 +26,9 @@ FastAPI backend + Postgres (laptop)
         |                      AI tag suggestions, sensor_readings)
         +--> /               (password-protected dashboard)
         +--> /assistant/*    (token-protected read-only API, e.g. for a ChatGPT action)
-        +--> /sensors/latest              (SwitchBot microclimate proxy)
-        +--> /sensors/flower-care/latest  (Flower Care — one row per sensor)
+        +--> /sensors/meter/latest            (SwitchBot Meter — one row per sensor)
+        +--> /sensors/meter/{mac}/readings    (time-windowed history)
+        +--> /sensors/flower-care/latest      (Flower Care — one row per sensor)
         +--> /sensors/flower-care/{mac}/readings  (time-windowed history)
 ```
 
@@ -115,6 +117,7 @@ pi/
   upload.py             # upload to backend with retry
   cleanup.py            # prune old local photos after 7 days
   xiaomi_ingest.py      # Flower Care BLE history read + ingest to backend (hourly timer)
+  switchbot_ingest.py   # SwitchBot Meter passive BLE scan + ingest to backend (15-min timer)
 
 scripts/                # maintenance (seed.py, fix_timestamps.py), the stabilization
                         # worker, the AI-tagging pipeline, and irrigation research

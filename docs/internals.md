@@ -379,10 +379,63 @@ Both are excluded from the dashboard's session auth (the middleware lets `/assis
 a trimmed OpenAPI doc containing only the `/assistant/*` paths, which is what the external GPT
 action consumes.
 
-## Sensor proxy — SwitchBot microclimate
+## SwitchBot Meter ingest
 
-`app/sensors.py` contains a `SensorState` class that reads through to an external sensor API (the
-`esp32-home-display` server). Configuration comes from three env vars:
+Temperature and humidity from SwitchBot Meter sensors are stored in the `sensor_readings` table
+(same table as Flower Care, distinguished by `humidity_pct IS NOT NULL`). Two ingest paths exist:
+
+### Pi script — `pi/switchbot_ingest.py`
+
+Passive BLE scan every 15 minutes via `plant-switchbot.timer` (`OnCalendar=*:00/15`). On each run
+it scans for up to 15 seconds, decodes manufacturer data (MANUFACTURER_ID `2409`) to extract
+`temperature_c` and `humidity_pct`, and POSTs to `POST /sensors/ingest`. Failed POSTs are queued
+to `~/.local/state/plant-monitoring/switchbot_queue.jsonl` and flushed on the next run.
+
+Configuration (Pi `.env`):
+
+| Var                  | Example                                                    |
+| -------------------- | ---------------------------------------------------------- |
+| `SWITCHBOT_SENSORS`  | `[{"mac":"D5:3A:42:86:2C:63","name":"South"},…]`           |
+| `XIAOMI_BACKEND_URL` | `http://laptop.local:8001`                                 |
+| `INGEST_API_TOKEN`   | _(same token as photo upload)_                             |
+
+Pi-side setup (one-time, run as `marco` on `plantpi` — IP `10.141.108.206`):
+
+```sh
+cp pi/systemd/plant-switchbot.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now plant-switchbot.timer
+```
+
+### Backfill script — `scripts/backfill_switchbot.py`
+
+One-shot script to pull the full reading history from the upstream `laptop.local:8000` API and
+ingest it into the local backend. Paginates backwards through `GET /sensors/{id}/readings`
+(100 rows per page, 0.5 s delay to avoid 429s) and posts in chunks of 200 to `POST /sensors/ingest`
+(idempotent — safe to re-run). Reads `SENSOR_API_URL`, `SENSOR_API_KEY`, `XIAOMI_BACKEND_URL`, and
+`INGEST_API_TOKEN` from `.env`.
+
+```sh
+python scripts/backfill_switchbot.py --dry-run   # fetch + count only
+python scripts/backfill_switchbot.py             # ingest for real
+```
+
+### Read endpoints
+
+- `GET /sensors/meter/latest` — one row per distinct MAC (most recent), with a `stale: true` flag
+  when `recorded_at` is older than 30 minutes (2× the ingest interval).
+- `GET /sensors/meter/{mac}/readings?start_ts=…&end_ts=…&max_points=N` — readings for one MAC in a
+  time window, with optional bucket downsampling.
+- `GET /sensors/photos/{photo_id}` — meter readings ±60 min around `photo.captured_at`, grouped by
+  MAC (used by the dashboard photo modal).
+
+---
+
+## Sensor proxy (legacy)
+
+`app/sensors.py` contains a `SensorState` class that reads through to the upstream
+`laptop.local:8000` API. It is used only by the legacy `GET /sensors/latest` endpoint (the
+dashboard sensor strip was rewired to use `/sensors/meter/latest` from the local DB). Configuration:
 
 | Var              | Example                                          |
 | ---------------- | ------------------------------------------------ |
@@ -390,36 +443,27 @@ action consumes.
 | `SENSOR_API_KEY` | `happydevilelephantsmoking`                      |
 | `SENSOR_SENSORS` | `[{"mac":"D5:3A:42:86:2C:63","name":"South"},…]` |
 
-If `SENSOR_API_URL` is not set (or `SENSOR_SENSORS` is invalid JSON), `get_state()` returns `None`
-and all sensor endpoints return `{"available": false, "sensors": []}` — the dashboard degrades
-gracefully with no errors.
-
 `SensorState` resolves MACs → sensor UUIDs lazily via `GET /sensors` on the upstream API and caches
-the result. It uses `verify=False` for TLS (self-signed cert on LAN).
-
-Two proxy endpoints (in `app/routers/sensors.py`; the `SensorState` client itself stays in
-`app/sensors.py`):
-
-- `GET /sensors/latest` — latest temp/humidity/staleness for each configured sensor.
-- `GET /sensors/photos/{photo_id}` — readings ±60 min around `photo.captured_at`, one entry per
-  configured sensor.
-
-The dashboard renders a compact sensor strip (top of page, auto-loaded at boot) and sensor context
-in the photo modal (loaded per-photo). Both are implemented in `static/sensors.js`.
+the result. It uses `verify=False` for TLS (self-signed cert on LAN). If `SENSOR_API_URL` is not
+set, `get_state()` returns `None` and the endpoint returns `{"available": false, "sensors": []}`.
 
 ---
 
 ## Flower Care sensor ingest
 
 Soil readings (temperature, lux, moisture, conductivity) from Xiaomi Flower Care sensors are
-collected on the Pi via BLE and stored locally in the `sensor_readings` table. This path is entirely
-separate from the SwitchBot proxy — `app/sensors.py` is unchanged.
+collected on the Pi via BLE and stored locally in the `sensor_readings` table.
 
 ### DB — `sensor_readings`
 
 Migration `0016`. Columns: `id`, `mac`, `name`, `recorded_at` (TIMESTAMPTZ, UTC), `temperature_c`,
-`lux`, `moisture_pct`, `conductivity_us_cm`. Unique index on `(mac, recorded_at)`. `recorded_at` is
-the wall-clock UTC time derived from the device epoch at read time, not an ingest timestamp.
+`lux`, `moisture_pct`, `conductivity_us_cm`, `humidity_pct` (nullable). Unique index on
+`(mac, recorded_at)`. `recorded_at` is the wall-clock UTC time derived from the device epoch at
+read time, not an ingest timestamp.
+
+Both Flower Care and SwitchBot Meter rows share this table. They are distinguished by
+`humidity_pct`: Flower Care rows leave it `NULL`; SwitchBot Meter rows set it. The read endpoints
+filter accordingly.
 
 ### Pi script — `pi/xiaomi_ingest.py`
 
@@ -464,7 +508,7 @@ Accepts a JSON array of readings. Auth: `INGEST_API_TOKEN` bearer (same token as
 Upsert: `INSERT … ON CONFLICT (mac, recorded_at) DO NOTHING`. Returns `{"inserted": N, "skipped": N}`.
 `recorded_at` must carry a UTC offset — a naive datetime returns 422.
 
-### Read endpoints
+### Flower Care read endpoints
 
 Both accept either the `INGEST_API_TOKEN` bearer **or** a dashboard session cookie (dual auth: the
 middleware lets a valid ingest bearer through, otherwise falls back to session auth).
