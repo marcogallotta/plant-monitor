@@ -45,6 +45,19 @@ def test_both_files_exist_after_response(client, isolated_photos_dir):
     assert (isolated_photos_dir / f"{VALID_STEM}.json").exists()
 
 
+def test_upload_removes_files_when_db_write_fails(client, isolated_photos_dir, monkeypatch):
+    def fail_upsert(*args, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr("app.main._upsert_photo_record", fail_upsert)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        _upload(client)
+
+    assert not (isolated_photos_dir / f"{VALID_STEM}.jpg").exists()
+    assert not (isolated_photos_dir / f"{VALID_STEM}.json").exists()
+
+
 # --- duplicate ---
 
 def test_full_duplicate_returns_200(client):

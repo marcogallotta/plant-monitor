@@ -415,8 +415,14 @@ async def upload_photo(
         meta_tmp.unlink(missing_ok=True)
         raise
 
-    _upsert_photo_record(db, stem, meta)
-    db.commit()
+    try:
+        _upsert_photo_record(db, stem, meta)
+        db.commit()
+    except Exception:
+        db.rollback()
+        image_path.unlink(missing_ok=True)
+        meta_path.unlink(missing_ok=True)
+        raise
     return {"status": "ok"}
 
 
