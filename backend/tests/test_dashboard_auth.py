@@ -126,3 +126,17 @@ def test_ingest_token_does_not_grant_access_to_other_routes(client, monkeypatch)
         follow_redirects=False,
     )
     assert resp.status_code == 401
+
+
+def test_ingest_token_grants_access_to_v2_sensor_reads(client, monkeypatch):
+    monkeypatch.setenv("INGEST_API_TOKEN", "pi-secret")
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "secret")
+
+    for path in ("/v2/sensors/meter/latest", "/v2/sensors/flower-care/latest"):
+        resp = client.get(
+            path,
+            headers={"Authorization": "Bearer pi-secret"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["sensors"] == []
