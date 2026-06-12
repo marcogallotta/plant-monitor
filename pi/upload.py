@@ -91,16 +91,30 @@ def run_upload(
     return failures
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
     import sys
 
+    if argv is None:
+        argv = sys.argv[1:]
+
     config = json.loads(Path("config.json").read_text())
-    capture_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("capture")
-    uploaded_dir = capture_dir.parent / "uploaded"
     token = config.get("api_token")
-    post_fn = (lambda u, s, i, m: _httpx_post(u, s, i, m, token=token)) if token else None
+    if not token:
+        print("upload: config.json missing required api_token", file=sys.stderr)
+        return 1
+
+    capture_dir = Path(argv[0]) if argv else Path("capture")
+    uploaded_dir = capture_dir.parent / "uploaded"
+    post_fn = lambda u, s, i, m: _httpx_post(u, s, i, m, token=token)
     failures = run_upload(capture_dir, uploaded_dir, config["backend_url"], post_fn=post_fn)
     if failures:
         # Non-zero exit so systemd marks plant-upload.service failed and the
         # failure is visible in `systemctl status` / `journalctl`.
-        sys.exit(1)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())

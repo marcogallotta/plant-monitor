@@ -1,7 +1,11 @@
 import json
+import sys
+import types
+
 import pytest
 from pathlib import Path
 
+import upload
 from upload import run_upload
 
 STEM = "2026-05-26T103000Z"
@@ -217,3 +221,59 @@ def test_post_fn_receives_correct_bytes(dirs):
     run_upload(capture, uploaded, "http://backend", post_fn=post_fn)
     assert received["image"] == b"REALIMGDATA"
     assert received["meta"]["filename"] == f"{STEM}.jpg"
+
+
+# --- HTTP auth / CLI path ---
+
+def test_httpx_post_sends_bearer_token(monkeypatch):
+    captured = {}
+
+    def post(url, files, headers, timeout):
+        captured["url"] = url
+        captured["headers"] = headers
+        captured["timeout"] = timeout
+        captured["files"] = files
+        return types.SimpleNamespace(status_code=200, text="ok")
+
+    monkeypatch.setitem(sys.modules, "httpx", types.SimpleNamespace(post=post))
+
+    assert upload._httpx_post("http://backend", STEM, b"IMG", b"{}", token="secret-token")
+    assert captured["url"] == "http://backend/photos"
+    assert captured["headers"] == {"Authorization": "Bearer secret-token"}
+    assert captured["timeout"] == 30
+
+
+def test_main_requires_api_token(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    Path("config.json").write_text(json.dumps({"backend_url": "http://backend"}))
+
+    assert upload.main(["capture"]) == 1
+    assert "api_token" in capsys.readouterr().err
+
+
+def test_main_passes_configured_api_token(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    capture = tmp_path / "capture"
+    capture.mkdir()
+    _write_pair(capture)
+    Path("config.json").write_text(
+        json.dumps({"backend_url": "http://backend", "api_token": "secret-token"})
+    )
+    received = {}
+
+    def post(url, stem, image_bytes, meta_bytes, token=None):
+        received["url"] = url
+        received["stem"] = stem
+        received["token"] = token
+        return True
+
+    monkeypatch.setattr(upload, "_httpx_post", post)
+
+    assert upload.main(["capture"]) == 0
+    assert received == {
+        "url": "http://backend",
+        "stem": STEM,
+        "token": "secret-token",
+    }
+    assert not (capture / f"{STEM}.jpg").exists()
+    assert (tmp_path / "uploaded" / f"{STEM}.jpg").exists()
