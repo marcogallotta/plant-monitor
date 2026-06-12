@@ -168,69 +168,7 @@ def _sensor_readings(mac: str, kind_filter, start_utc, end_utc, max_points, db: 
     return q.order_by(SensorReading.recorded_at).all()
 
 
-@router.get("/flower-care/latest")
-def flower_care_latest(db: Session = Depends(get_db)):
-    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=FLOWER_CARE_STALE_MINUTES)
-    rows = (
-        db.query(SensorReading)
-        .filter(SensorReading.humidity_pct.is_(None))
-        .distinct(SensorReading.mac)
-        .order_by(SensorReading.mac, SensorReading.recorded_at.desc())
-        .all()
-    )
-    return [_reading_out(r, stale=_is_stale(r.recorded_at, stale_cutoff)) for r in rows]
-
-
-@router.get("/flower-care/{mac}/readings")
-def flower_care_readings(
-    mac: str,
-    start_ts: Optional[datetime] = Query(default=None),
-    end_ts: Optional[datetime] = Query(default=None),
-    max_points: Optional[int] = Query(default=None, ge=1),
-    db: Session = Depends(get_db),
-):
-    start_utc, end_utc = _validate_ts_params(start_ts, end_ts, max_points)
-    rows = _sensor_readings(mac, SensorReading.humidity_pct.is_(None), start_utc, end_utc, max_points, db)
-    return [_reading_out(r) for r in rows]
-
-
-@router.get("/meter/{mac}/readings")
-def meter_readings(
-    mac: str,
-    start_ts: Optional[datetime] = Query(default=None),
-    end_ts: Optional[datetime] = Query(default=None),
-    max_points: Optional[int] = Query(default=None, ge=1),
-    db: Session = Depends(get_db),
-):
-    start_utc, end_utc = _validate_ts_params(start_ts, end_ts, max_points)
-    rows = _sensor_readings(mac, SensorReading.humidity_pct.isnot(None), start_utc, end_utc, max_points, db)
-    return [_meter_reading_out(r) for r in rows]
-
-
 METER_STALE_MINUTES = 30
-
-
-@router.get("/meter/latest")
-def meter_latest(db: Session = Depends(get_db)):
-    stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=METER_STALE_MINUTES)
-    rows = (
-        db.query(SensorReading)
-        .filter(SensorReading.humidity_pct.isnot(None))
-        .distinct(SensorReading.mac)
-        .order_by(SensorReading.mac, SensorReading.recorded_at.desc())
-        .all()
-    )
-    return [
-        {
-            "mac": r.mac,
-            "name": r.name,
-            "recorded_at": r.recorded_at.isoformat(),
-            "temperature_c": r.temperature_c,
-            "humidity_pct": r.humidity_pct,
-            "stale": _is_stale(r.recorded_at, stale_cutoff),
-        }
-        for r in rows
-    ]
 
 
 @router.get("/photos/{photo_id}")
