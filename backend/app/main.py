@@ -31,7 +31,7 @@ from .helpers import EVENT_LOAD_OPTIONS, ROTATION_TRANSPOSE, THUMBS_DIR, _delete
 from .models import Event, EventGrowingUnit, EventPhoto, GrowingUnit, Label, Location, Photo, PhotoAiSuggestion, PhotoGrowingUnit, PhotoLabel, PhotoNote
 from .routers.assistant import router as assistant_router, _public_router as assistant_public_router
 from .routers.sensors import router as sensors_router
-from .routers.sensors_v2 import router as sensors_v2_router
+from .routers.sensors_v2 import alias_router as sensors_alias_router, router as sensors_v2_router
 from .routers.suggestions import router as suggestions_router
 from .schemas import (
     VALID_ROTATIONS,
@@ -61,6 +61,7 @@ app.include_router(assistant_router)
 app.include_router(assistant_public_router)
 app.include_router(sensors_router)
 app.include_router(sensors_v2_router)
+app.include_router(sensors_alias_router)
 app.include_router(suggestions_router)
 
 

@@ -17,6 +17,7 @@ from .sensors import (
 from ..sensor_registry import display_id, display_name, sensor_for_id
 
 router = APIRouter(prefix="/v2/sensors")
+alias_router = APIRouter(prefix="/sensors")
 
 # TODO: tune these from sensor_ingest lag_secs log data once a few days have accumulated
 METER_INTERVAL_SECS = 15 * 60
@@ -38,6 +39,7 @@ def _retry_after(interval_secs: int, buffer_secs: int) -> int:
 
 
 @router.get("/meter/latest")
+@alias_router.get("/meter/latest")
 def meter_latest_v2(db: Session = Depends(get_db)):
     stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=METER_STALE_MINUTES)
     rows = (
@@ -67,6 +69,7 @@ def meter_latest_v2(db: Session = Depends(get_db)):
 
 
 @router.get("/flower-care/latest")
+@alias_router.get("/flower-care/latest")
 def flower_care_latest_v2(db: Session = Depends(get_db)):
     stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=FLOWER_CARE_STALE_MINUTES)
     rows = (
@@ -90,6 +93,7 @@ def flower_care_latest_v2(db: Session = Depends(get_db)):
 
 
 @router.get("/{sensor_id}/readings")
+@alias_router.get("/{sensor_id}/readings")
 def sensor_readings_v2(
     sensor_id: str,
     start_ts: datetime | None = Query(default=None),
