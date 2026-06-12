@@ -200,6 +200,115 @@ class TestMeterLatest:
         assert data["SB:00:00:00:00:02"]["stale"] is True
 
 
+class TestMeterReadings:
+    MAC = "SB:00:00:00:00:AA"
+
+    def _sb_row(self, ts, mac=None, humidity_pct=65.0, temperature_c=21.5):
+        return _row(
+            mac=mac or self.MAC,
+            recorded_at=ts,
+            humidity_pct=humidity_pct,
+            temperature_c=temperature_c,
+            lux=None,
+            moisture_pct=None,
+            conductivity_us_cm=None,
+        )
+
+    def test_accepts_correct_token(self, client):
+        resp = client.get(f"/sensors/meter/{self.MAC}/readings", headers=_headers())
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_returns_meter_rows_only(self, client):
+        fc = _row(mac=self.MAC, recorded_at="2026-06-09T08:00:00Z")
+        sb = self._sb_row("2026-06-09T09:00:00Z")
+        client.post("/sensors/ingest", json=[fc, sb], headers=_headers())
+        resp = client.get(f"/sensors/meter/{self.MAC}/readings", headers=_headers())
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["recorded_at"].startswith("2026-06-09T09:00:00")
+
+    def test_response_shape(self, client):
+        client.post("/sensors/ingest", json=[self._sb_row("2026-06-09T08:00:00Z")], headers=_headers())
+        resp = client.get(f"/sensors/meter/{self.MAC}/readings", headers=_headers())
+        row = resp.json()[0]
+        assert set(row.keys()) == {"mac", "name", "recorded_at", "temperature_c", "humidity_pct"}
+
+    def test_ordered_by_recorded_at(self, client):
+        rows = [self._sb_row(f"2026-06-09T0{h}:00:00Z") for h in (8, 10, 9)]
+        client.post("/sensors/ingest", json=rows, headers=_headers())
+        resp = client.get(f"/sensors/meter/{self.MAC}/readings", headers=_headers())
+        timestamps = [r["recorded_at"] for r in resp.json()]
+        assert timestamps == sorted(timestamps)
+
+    def test_start_ts_filter(self, client):
+        client.post("/sensors/ingest", json=[
+            self._sb_row("2026-06-09T07:00:00Z"),
+            self._sb_row("2026-06-09T09:00:00Z"),
+        ], headers=_headers())
+        resp = client.get(
+            f"/sensors/meter/{self.MAC}/readings?start_ts=2026-06-09T08:00:00Z",
+            headers=_headers(),
+        )
+        assert len(resp.json()) == 1
+
+    def test_end_ts_filter(self, client):
+        client.post("/sensors/ingest", json=[
+            self._sb_row("2026-06-09T07:00:00Z"),
+            self._sb_row("2026-06-09T09:00:00Z"),
+        ], headers=_headers())
+        resp = client.get(
+            f"/sensors/meter/{self.MAC}/readings?end_ts=2026-06-09T08:00:00Z",
+            headers=_headers(),
+        )
+        assert len(resp.json()) == 1
+
+    def test_rejects_naive_start_ts(self, client):
+        resp = client.get(
+            f"/sensors/meter/{self.MAC}/readings?start_ts=2026-06-09T08:00:00",
+            headers=_headers(),
+        )
+        assert resp.status_code == 422
+
+    def test_max_points_requires_both_ts(self, client):
+        resp = client.get(
+            f"/sensors/meter/{self.MAC}/readings?max_points=5&start_ts=2026-06-09T08:00:00Z",
+            headers=_headers(),
+        )
+        assert resp.status_code == 422
+
+    def test_max_points_buckets_window(self, client):
+        # 4 readings at 00-03h; window ends at 05:00 so no reading lands on the boundary
+        rows = [self._sb_row(f"2026-06-09T0{h}:00:00Z", temperature_c=float(h)) for h in range(4)]
+        client.post("/sensors/ingest", json=rows, headers=_headers())
+        resp = client.get(
+            f"/sensors/meter/{self.MAC}/readings"
+            "?start_ts=2026-06-09T00:00:00Z&end_ts=2026-06-09T05:00:00Z&max_points=2",
+            headers=_headers(),
+        )
+        data = resp.json()
+        assert len(data) <= 2
+        timestamps = [r["recorded_at"] for r in data]
+        assert timestamps == sorted(timestamps)
+
+    def test_max_points_spread_across_window(self, client):
+        # 9 readings at 00-08h; window ends at 09:00 so no reading lands on the boundary
+        rows = [
+            self._sb_row(f"2026-06-09T{h:02d}:00:00Z", temperature_c=float(h))
+            for h in range(9)
+        ]
+        client.post("/sensors/ingest", json=rows, headers=_headers())
+        resp = client.get(
+            f"/sensors/meter/{self.MAC}/readings"
+            "?start_ts=2026-06-09T00:00:00Z&end_ts=2026-06-09T09:00:00Z&max_points=3",
+            headers=_headers(),
+        )
+        data = resp.json()
+        assert len(data) <= 3
+        # first result must be near start of window, not clipped to the newest 3 rows
+        assert data[0]["recorded_at"] < "2026-06-09T03:00:00"
+
+
 class TestSensorPhotoContext:
     def _sb_row(self, mac, ts):
         return _row(mac=mac, recorded_at=ts, humidity_pct=65.0,

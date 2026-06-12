@@ -76,8 +76,8 @@ async def auth_middleware(request: Request, call_next):
         if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], ingest_token):
             return await call_next(request)
         return JSONResponse({"detail": "authentication required"}, status_code=401)
-    # Flower Care read endpoints: accept ingest bearer but fall through to session auth if absent.
-    if ingest_token and path.startswith("/sensors/flower-care"):
+    # Sensor read endpoints: accept ingest bearer but fall through to session auth if absent.
+    if ingest_token and (path.startswith("/sensors/flower-care") or path.startswith("/sensors/meter")):
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer ") and secrets.compare_digest(auth[7:], ingest_token):
             return await call_next(request)

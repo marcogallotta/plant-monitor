@@ -5,8 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=pi
-WorkingDirectory=/home/pi/plant-monitoring
-EnvironmentFile=/home/pi/plant-monitoring/.env
-ExecStart=/home/pi/plant-monitoring/.venv/bin/python \
-    /home/pi/plant-monitoring/switchbot_ingest.py
+WorkingDirectory=/home/marco/plant-monitoring
+EnvironmentFile=/home/marco/plant-monitoring/.env
+ExecStart=/home/marco/plant-monitoring/.venv/bin/python \
+    /home/marco/plant-monitoring/pi/switchbot_ingest.py
