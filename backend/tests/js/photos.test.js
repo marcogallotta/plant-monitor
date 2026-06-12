@@ -144,6 +144,43 @@ describe('renderGrid (via loadPhotos)', () => {
     expect(img.getAttribute('src')).toBe('/photos/g.jpg/thumbnail?size=400&oriented=1&v=90');
     expect(img.style.transform).toBe('');
   });
+
+  it('renders growing unit names from the API-shaped growing_units field', async () => {
+    const {getPhotos} = await import('@/api.js');
+    getPhotos.mockResolvedValueOnce({
+      photos: [{
+        id: 8,
+        url: '/photos/herb.jpg',
+        filename: 'herb.jpg',
+        captured_at: '2026-01-01T10:00:00Z',
+        rotation: 0,
+        growing_units: [{id: 1, name: 'Thai basil'}],
+      }],
+      total: 1,
+    });
+    await loadPhotos();
+    const caption = document.querySelector('#photo-grid .photo-card[data-id="8"] .caption');
+    expect(caption.textContent).toContain('Thai basil');
+  });
+
+  it('renders unit names as text, not HTML', async () => {
+    const {getPhotos} = await import('@/api.js');
+    getPhotos.mockResolvedValueOnce({
+      photos: [{
+        id: 9,
+        url: '/photos/herb.jpg',
+        filename: 'herb.jpg',
+        captured_at: '2026-01-01T10:00:00Z',
+        rotation: 0,
+        growing_units: [{id: 1, name: '<img src=x onerror=alert(1)>'}],
+      }],
+      total: 1,
+    });
+    await loadPhotos();
+    const caption = document.querySelector('#photo-grid .photo-card[data-id="9"] .caption');
+    expect(caption.textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(caption.querySelector('img')).toBeNull();
+  });
 });
 
 // ── clearFilter ───────────────────────────────────────────

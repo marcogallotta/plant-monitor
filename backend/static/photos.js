@@ -108,24 +108,66 @@ function buildCard(p, i) {
   card.className = 'photo-card' + (selectedIds.has(p.id) ? ' selected' : '');
   card.dataset.id = p.id;
   const ts = formatDate(p.captured_at);
-  const unitNames = (p.growing_unit_ids || [])
-    .map(id => { const u = state.allUnits.find(u => u.id === id); return u ? u.name : null; })
-    .filter(Boolean).join(', ');
+  const unitNames = photoUnitNames(p);
   const caption = unitNames ? ts + ' · ' + unitNames : ts;
+
   // Grid thumbnails use a resized variant (400px) with rotation baked in.
-  card.innerHTML =
-    '<img src="' + thumbnailUrl(p) + '" alt="' + p.filename + '" loading="lazy" onclick="openModal(' + i + ')">' +
-    '<div class="card-ab">' +
-      '<button class="sel-a' + (isA ? ' active' : '') + '" onclick="selectA(event,' + i + ')">A</button>' +
-      '<button class="sel-b' + (isB ? ' active' : '') + '" onclick="selectB(event,' + i + ')">B</button>' +
-    '</div>' +
-    '<div class="card-rot">' +
-      '<button onclick="gridRotate(event,' + p.id + ',-90)">↺</button>' +
-      '<button onclick="gridRotate(event,' + p.id + ',90)">↻</button>' +
-    '</div>' +
-    '<button class="card-del" onclick="gridDelete(event,' + p.id + ')" title="Delete photo">🗑</button>' +
-    '<div class="caption">' + caption + '</div>';
+  const img = document.createElement('img');
+  img.src = thumbnailUrl(p);
+  img.alt = p.filename;
+  img.loading = 'lazy';
+  img.addEventListener('click', () => window.openModal(i));
+  card.appendChild(img);
+
+  const ab = document.createElement('div');
+  ab.className = 'card-ab';
+  const selA = document.createElement('button');
+  selA.className = 'sel-a' + (isA ? ' active' : '');
+  selA.textContent = 'A';
+  selA.addEventListener('click', e => selectA(e, i));
+  const selB = document.createElement('button');
+  selB.className = 'sel-b' + (isB ? ' active' : '');
+  selB.textContent = 'B';
+  selB.addEventListener('click', e => selectB(e, i));
+  ab.append(selA, selB);
+  card.appendChild(ab);
+
+  const rot = document.createElement('div');
+  rot.className = 'card-rot';
+  const rotLeft = document.createElement('button');
+  rotLeft.textContent = '↺';
+  rotLeft.addEventListener('click', e => gridRotate(e, p.id, -90));
+  const rotRight = document.createElement('button');
+  rotRight.textContent = '↻';
+  rotRight.addEventListener('click', e => gridRotate(e, p.id, 90));
+  rot.append(rotLeft, rotRight);
+  card.appendChild(rot);
+
+  const del = document.createElement('button');
+  del.className = 'card-del';
+  del.title = 'Delete photo';
+  del.textContent = '🗑';
+  del.addEventListener('click', e => gridDelete(e, p.id));
+  card.appendChild(del);
+
+  const captionEl = document.createElement('div');
+  captionEl.className = 'caption';
+  captionEl.textContent = caption;
+  card.appendChild(captionEl);
+
   return card;
+}
+
+function photoUnitNames(photo) {
+  if (Array.isArray(photo.growing_units) && photo.growing_units.length) {
+    return photo.growing_units.map(u => u?.name).filter(Boolean).join(', ');
+  }
+  return (photo.growing_unit_ids || [])
+    .map(id => {
+      const u = state.allUnits.find(u => u.id === id);
+      return u ? u.name : null;
+    })
+    .filter(Boolean).join(', ');
 }
 
 function renderGrid() {
@@ -621,13 +663,7 @@ export async function copySheet() {
       const scale = Math.min(1, CELL / Math.max(bmp.width, bmp.height));
       const w = Math.round(bmp.width  * scale);
       const h = Math.round(bmp.height * scale);
-      const unitParts = (photo.growing_unit_ids || [])
-        .map(id => {
-          const u = state.allUnits.find(u => u.id === id);
-          if (!u) return null;
-          return u.variety ? u.name + ' (' + u.variety + ')' : u.name;
-        })
-        .filter(Boolean).join(', ');
+      const unitParts = photoUnitNames(photo);
       const label = (unitParts || '—') + '  ·  ' + formatDate(photo.captured_at);
       return { bmp, w, h, label };
     }));
