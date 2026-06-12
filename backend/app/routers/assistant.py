@@ -149,10 +149,12 @@ def assistant_list_photos(
     photo_type: Optional[str] = Query(None),
     location_id: Optional[int] = Query(None),
     growing_unit_id: Optional[int] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     q = _filtered_photo_query(db, start, end, source, photo_type, location_id, growing_unit_id)
-    return [_assistant_photo_out(p) for p in q.all()]
+    return [_assistant_photo_out(p) for p in q.offset(offset).limit(limit).all()]
 
 
 @router.get("/photos/{photo_id}/context", response_model=PhotoContext)

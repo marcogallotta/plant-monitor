@@ -141,6 +141,15 @@ def test_assistant_photos_returns_photos(client, db_session):
     assert data[0]["filename"] == "2026-05-26T100000Z.jpg"
 
 
+def test_assistant_photos_supports_limit_and_offset(client, db_session):
+    _photo(db_session, "2026-05-26T090000Z")
+    _photo(db_session, "2026-05-26T100000Z")
+    _photo(db_session, "2026-05-26T110000Z")
+    data = client.get("/assistant/photos?limit=1&offset=1").json()
+    assert len(data) == 1
+    assert data[0]["filename"] == "2026-05-26T100000Z.jpg"
+
+
 def test_assistant_photos_filter_start(client, db_session):
     _photo(db_session, "2026-05-26T090000Z")
     _photo(db_session, "2026-05-26T110000Z")
