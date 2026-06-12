@@ -5,11 +5,17 @@ function fmt(val, decimals) {
   return (val != null && isFinite(val)) ? Number(val).toFixed(decimals) : '?';
 }
 
+let _stripTimer = null;
+
 export async function loadSensorStrip() {
+  if (_stripTimer !== null) { clearTimeout(_stripTimer); _stripTimer = null; }
   const strip = document.getElementById('sensor-strip');
   if (!strip) return;
   try {
-    const { sensors } = await getMeterLatest();
+    const { sensors, retry_after_secs } = await getMeterLatest();
+    if (retry_after_secs) {
+      _stripTimer = setTimeout(loadSensorStrip, retry_after_secs * 1000);
+    }
     if (!sensors.length) { strip.innerHTML = ''; return; }
     strip.innerHTML = '';
     sensors.forEach(function(s) {

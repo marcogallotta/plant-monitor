@@ -85,6 +85,42 @@ describe('loadSensorStrip', () => {
     await loadSensorStrip();
     expect(document.getElementById('sensor-strip').innerHTML).toBe('');
   });
+
+  it('schedules next refresh using retry_after_secs', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', makeFetchMock([
+      {url: '/v2/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
+    ]));
+    const spy = vi.spyOn(globalThis, 'setTimeout');
+    await loadSensorStrip();
+    const call = spy.mock.calls.find(([, ms]) => ms === 120000);
+    expect(call).toBeDefined();
+    vi.useRealTimers();
+  });
+
+  it('cancels pending timer before scheduling a new one', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', makeFetchMock([
+      {url: '/v2/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
+      {url: '/v2/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
+    ]));
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+    await loadSensorStrip();
+    await loadSensorStrip();
+    expect(clearSpy).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('does not schedule timer when retry_after_secs is absent', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', makeFetchMock([
+      {url: '/v2/sensors/meter/latest', body: {sensors: []}},
+    ]));
+    const spy = vi.spyOn(globalThis, 'setTimeout');
+    await loadSensorStrip();
+    expect(spy).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
 });
 
 // ── loadPhotoSensorContext ────────────────────────────────
