@@ -25,7 +25,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('loadSensorStrip', () => {
   it('clears strip when no sensors returned', async () => {
     vi.stubGlobal('fetch', makeFetchMock([
-      {url: '/v2/sensors/meter/latest', body: {sensors: [], retry_after_secs: 300}},
+      {url: '/sensors/meter/latest', body: {sensors: [], retry_after_secs: 300}},
     ]));
     document.getElementById('sensor-strip').innerHTML = '<span>old</span>';
     await loadSensorStrip();
@@ -33,7 +33,7 @@ describe('loadSensorStrip', () => {
   });
 
   it('renders one item per sensor', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.5, humidity_pct: 55, stale: false},
       {name: 'North', temperature_c: 19.0, humidity_pct: 60, stale: false},
     ]}}]));
@@ -42,7 +42,7 @@ describe('loadSensorStrip', () => {
   });
 
   it('formats temperature to 1 decimal and humidity to 0 decimals', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.567, humidity_pct: 55.9, stale: false},
     ]}}]));
     await loadSensorStrip();
@@ -51,7 +51,7 @@ describe('loadSensorStrip', () => {
   });
 
   it('formats null readings as "?"', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: null, humidity_pct: null, stale: false},
     ]}}]));
     await loadSensorStrip();
@@ -61,7 +61,7 @@ describe('loadSensorStrip', () => {
   });
 
   it('adds sensor-stale class and title for stale sensor', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.0, humidity_pct: 50, stale: true},
     ]}}]));
     await loadSensorStrip();
@@ -71,7 +71,7 @@ describe('loadSensorStrip', () => {
   });
 
   it('does not add sensor-stale class for fresh sensor', async () => {
-    vi.stubGlobal('fetch', makeFetchMock([{url: '/v2/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
+    vi.stubGlobal('fetch', makeFetchMock([{url: '/sensors/meter/latest', body: {retry_after_secs: 300, sensors: [
       {name: 'South', temperature_c: 22.0, humidity_pct: 50, stale: false},
     ]}}]));
     await loadSensorStrip();
@@ -89,7 +89,7 @@ describe('loadSensorStrip', () => {
   it('schedules next refresh using retry_after_secs', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', makeFetchMock([
-      {url: '/v2/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
+      {url: '/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
     ]));
     const spy = vi.spyOn(globalThis, 'setTimeout');
     await loadSensorStrip();
@@ -101,8 +101,8 @@ describe('loadSensorStrip', () => {
   it('cancels pending timer before scheduling a new one', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', makeFetchMock([
-      {url: '/v2/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
-      {url: '/v2/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
+      {url: '/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
+      {url: '/sensors/meter/latest', body: {retry_after_secs: 120, sensors: []}},
     ]));
     const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
     await loadSensorStrip();
@@ -114,7 +114,7 @@ describe('loadSensorStrip', () => {
   it('does not schedule timer when retry_after_secs is absent', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('fetch', makeFetchMock([
-      {url: '/v2/sensors/meter/latest', body: {sensors: []}},
+      {url: '/sensors/meter/latest', body: {sensors: []}},
     ]));
     const spy = vi.spyOn(globalThis, 'setTimeout');
     await loadSensorStrip();

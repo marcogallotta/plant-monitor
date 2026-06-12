@@ -68,5 +68,5 @@ export function scanCameraImport()             { return apiRequest('/camera-impo
 export function importCameraPhotos(body)       { return apiJson('/camera-import/import', 'POST', body); }
 export function getThumbnailBatch(fileIds)     { return apiJson('/camera-import/thumbs/batch', 'POST', {file_ids: fileIds}); }
 
-export function getMeterLatest()               { return apiRequest('/v2/sensors/meter/latest'); }
+export function getMeterLatest()               { return apiRequest('/sensors/meter/latest'); }
 export function getSensorPhotoContext(photoId) { return apiRequest('/sensors/photos/' + photoId); }
