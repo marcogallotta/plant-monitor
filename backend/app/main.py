@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from .camera_import import router as camera_import_router, save_photo, _check_growing_units_exist
 from .database import get_db
 from .exif import read_exif_captured_at
+logging.getLogger("app").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 from .helpers import EVENT_LOAD_OPTIONS, ROTATION_TRANSPOSE, THUMBS_DIR, _delete_photo, _event_out, _filtered_photo_query, _generate_thumbnail, _get_event_loaded, _get_photo_loaded, _invalidate_thumb_cache, _normalise_label_name, _photo_out
