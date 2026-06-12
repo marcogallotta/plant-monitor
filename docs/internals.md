@@ -32,12 +32,12 @@ covers the ones wired into the app or the test/ops loop.
 concerns are split out into routers under `app/routers/` and registered via `include_router` in
 `main.py`:
 
-| Module                   | Prefix           | Covers                                                                             |
-| ------------------------ | ---------------- | ---------------------------------------------------------------------------------- |
-| `routers/assistant.py`   | `/assistant`     | Read-only assistant API (+ a small unauthenticated public router)                  |
-| `routers/sensors.py`     | `/sensors`       | Sensor proxy endpoints (the `SensorState` client itself stays in `app/sensors.py`) |
-| `routers/suggestions.py` | `/suggestions`   | AI tag-suggestion review queue                                                     |
-| `camera_import.py`       | `/camera-import` | SD/card scan + import                                                              |
+| Module                   | Prefix           | Covers                                                                           |
+| ------------------------ | ---------------- | -------------------------------------------------------------------------------- |
+| `routers/assistant.py`   | `/assistant`     | Read-only assistant API (+ a small unauthenticated public router)                |
+| `routers/sensors.py`     | `/sensors`       | All sensor endpoints: ingest, latest, readings, photo context                    |
+| `routers/suggestions.py` | `/suggestions`   | AI tag-suggestion review queue                                                   |
+| `camera_import.py`       | `/camera-import` | SD/card scan + import                                                            |
 
 `helpers.py` holds the response serializers (`_photo_out`, `_event_out`) and the shared
 `_filtered_photo_query` / eager-load options used across endpoints — anything that builds a
@@ -393,11 +393,15 @@ to `~/.local/state/plant-monitoring/switchbot_queue.jsonl` and flushed on the ne
 
 Configuration (Pi `.env`):
 
-| Var                  | Example                                                    |
-| -------------------- | ---------------------------------------------------------- |
-| `SWITCHBOT_SENSORS`  | `[{"mac":"D5:3A:42:86:2C:63","name":"South"},…]`           |
-| `XIAOMI_BACKEND_URL` | `http://laptop.local:8001`                                 |
-| `INGEST_API_TOKEN`   | _(same token as photo upload)_                             |
+| Var                  | Example                                                                        |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `SWITCHBOT_SENSORS`  | `[{"id":"south","mac":"D5:3A:42:86:2C:63","name":"South"},…]`                  |
+| `XIAOMI_SENSORS`     | `[{"id":"cilantro","mac":"5C:85:7E:14:43:45","name":"Cilantro"},…]`            |
+| `XIAOMI_BACKEND_URL` | `http://laptop.local:8001`                                                     |
+| `INGEST_API_TOKEN`   | _(same token as photo upload)_                                                 |
+
+`id` is a stable slug used in API paths (e.g. `south`, `cilantro`). The backend reads these via
+`sensor_registry.py` (`load_sensor_registry()`, cached) and resolves slugs to MACs for DB queries.
 
 Pi-side setup (one-time, run as `marco` on `plantpi` — IP `10.141.108.206`):
 
@@ -422,30 +426,13 @@ python scripts/backfill_switchbot.py             # ingest for real
 
 ### Read endpoints
 
-- `GET /sensors/meter/latest` — one row per distinct MAC (most recent), with a `stale: true` flag
-  when `recorded_at` is older than 30 minutes (2× the ingest interval).
-- `GET /sensors/meter/{mac}/readings?start_ts=…&end_ts=…&max_points=N` — readings for one MAC in a
-  time window, with optional bucket downsampling.
+- `GET /sensors/meter/latest` — one row per distinct MAC (most recent), with `id` (slug), `name`,
+  `type`, `stale`, and `retry_after_secs` hint. `stale: true` when `recorded_at` is older than
+  30 minutes (2× the ingest interval).
+- `GET /sensors/{slug}/readings?start_ts=…&end_ts=…&max_points=N` — readings for one sensor
+  identified by slug, in a time window, with optional bucket downsampling.
 - `GET /sensors/photos/{photo_id}` — meter readings ±60 min around `photo.captured_at`, grouped by
   MAC (used by the dashboard photo modal).
-
----
-
-## Sensor proxy (legacy)
-
-`app/sensors.py` contains a `SensorState` class that reads through to the upstream
-`laptop.local:8000` API. It is used only by the legacy `GET /sensors/latest` endpoint (the
-dashboard sensor strip was rewired to use `/sensors/meter/latest` from the local DB). Configuration:
-
-| Var              | Example                                          |
-| ---------------- | ------------------------------------------------ |
-| `SENSOR_API_URL` | `https://laptop.local:8000`                      |
-| `SENSOR_API_KEY` | `happydevilelephantsmoking`                      |
-| `SENSOR_SENSORS` | `[{"mac":"D5:3A:42:86:2C:63","name":"South"},…]` |
-
-`SensorState` resolves MACs → sensor UUIDs lazily via `GET /sensors` on the upstream API and caches
-the result. It uses `verify=False` for TLS (self-signed cert on LAN). If `SENSOR_API_URL` is not
-set, `get_state()` returns `None` and the endpoint returns `{"available": false, "sensors": []}`.
 
 ---
 
@@ -513,12 +500,12 @@ Upsert: `INSERT … ON CONFLICT (mac, recorded_at) DO NOTHING`. Returns `{"inser
 Both accept either the `INGEST_API_TOKEN` bearer **or** a dashboard session cookie (dual auth: the
 middleware lets a valid ingest bearer through, otherwise falls back to session auth).
 
-- `GET /sensors/flower-care/latest` — one row per distinct MAC (most recent), with a `stale: true`
-  flag when `recorded_at` is older than 90 minutes (1.5× the ingest interval). Stale sensors stay
-  in the list rather than dropping off.
-- `GET /sensors/flower-care/{mac}/readings?start_ts=…&end_ts=…` — all readings for one MAC in a
-  time window, ordered by `recorded_at`. Both params are optional; offset-aware timestamps only
-  (naive returns 422).
+- `GET /sensors/flower-care/latest` — one row per distinct MAC (most recent), with `id` (slug),
+  `name`, `type`, `stale`, and `retry_after_secs` hint. `stale: true` when `recorded_at` is older
+  than 90 minutes (1.5× the ingest interval). Stale sensors stay in the list rather than dropping off.
+- `GET /sensors/{slug}/readings?start_ts=…&end_ts=…` — all readings for one sensor identified by
+  slug, in a time window, ordered by `recorded_at`. Both params are optional; offset-aware timestamps
+  only (naive returns 422).
 
 ---
 
