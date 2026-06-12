@@ -89,6 +89,19 @@ make e2e-install    # one-time: install Playwright + Chromium
 make test-e2e       # Playwright end-to-end tests (NOT included in `make test`)
 ```
 
+## Pi uploader deployment
+
+Deploy the live Raspberry Pi uploader from the laptop checkout, not from another checkout on the Pi:
+
+```sh
+bash scripts/deploy_pi_upload.sh
+```
+
+The script stages `pi/upload.py` to `plantpi.local`, prints a diff against
+`/home/pi/plant-monitoring/upload.py`, installs it with sudo, verifies the installed file matches the
+staged file, runs `python3 upload.py capture` once, and prints any remaining files in `capture/`.
+This avoids accidentally reinstalling a stale Pi-side copy of the uploader.
+
 ## Project structure
 
 ```text

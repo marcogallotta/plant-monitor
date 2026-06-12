@@ -815,6 +815,21 @@ partial-archive state that requires manual investigation. This pre-check prevent
 loop that would otherwise occur when a POST succeeds but the archive move is skipped due to a
 destination collision.
 
+`upload.py` requires `api_token` in `config.json`. Missing token is a hard failure so systemd marks
+`plant-upload.service` failed instead of sending unauthenticated requests or exiting successfully.
+
+Deploy uploader changes from the laptop checkout with:
+
+```sh
+bash scripts/deploy_pi_upload.sh
+```
+
+The helper stages the local `pi/upload.py` to `/tmp/plant-upload.py` on `plantpi.local`, diffs that
+staged file against `/home/pi/plant-monitoring/upload.py`, installs it with sudo, verifies the
+post-install diff is empty, runs `python3 upload.py capture`, and prints any remaining files in
+`capture/`. Do not use `/home/marco/plant-monitoring/pi/upload.py` on the Pi as the source of truth;
+it can be stale while the live service uses `/home/pi/plant-monitoring/upload.py`.
+
 ---
 
 ## Stabilization worker (tilt/drift correction)
