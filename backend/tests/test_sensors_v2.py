@@ -144,3 +144,83 @@ class TestFlowerCareLatestV2:
         data = {r["mac"]: r for r in client.get("/v2/sensors/flower-care/latest").json()["sensors"]}
         assert data["FC:BB:00:00:00:01"]["stale"] is True
         assert data["FC:CC:00:00:00:01"]["stale"] is False
+
+
+class TestSensorIdsV2:
+    @pytest.fixture(autouse=True)
+    def set_sensor_registry(self, monkeypatch):
+        from app.sensor_registry import clear_sensor_registry_cache
+
+        monkeypatch.setenv(
+            "SWITCHBOT_SENSORS",
+            '[{"id":"south","mac":"SB:ID:00:00:00:01","name":"South"}]',
+        )
+        monkeypatch.setenv(
+            "XIAOMI_SENSORS",
+            '[{"id":"cilantro","mac":"FC:ID:00:00:00:01","name":"Cilantro"}]',
+        )
+        clear_sensor_registry_cache()
+        yield
+        clear_sensor_registry_cache()
+
+    def test_latest_includes_configured_meter_id(self, client):
+        client.post(
+            "/sensors/ingest",
+            json=[_sb_row("SB:ID:00:00:00:01", "2026-06-09T08:00:00Z")],
+            headers=_headers(),
+        )
+
+        data = client.get("/v2/sensors/meter/latest").json()
+
+        assert data["sensors"][0]["id"] == "south"
+        assert data["sensors"][0]["name"] == "South"
+        assert data["sensors"][0]["type"] == "meter"
+
+    def test_latest_includes_configured_flower_care_id(self, client):
+        client.post(
+            "/sensors/ingest",
+            json=[_fc_row("FC:ID:00:00:00:01", "2026-06-09T08:00:00Z")],
+            headers=_headers(),
+        )
+
+        data = client.get("/v2/sensors/flower-care/latest").json()
+
+        assert data["sensors"][0]["id"] == "cilantro"
+        assert data["sensors"][0]["name"] == "Cilantro"
+        assert data["sensors"][0]["type"] == "flower-care"
+
+    def test_readings_by_sensor_id_resolves_meter_mac(self, client):
+        client.post(
+            "/sensors/ingest",
+            json=[_sb_row("SB:ID:00:00:00:01", "2026-06-09T08:00:00Z", humidity_pct=61.0)],
+            headers=_headers(),
+        )
+
+        data = client.get(
+            "/v2/sensors/south/readings",
+            params={"start_ts": "2026-06-09T00:00:00Z", "end_ts": "2026-06-10T00:00:00Z"},
+        ).json()
+
+        assert len(data) == 1
+        assert data[0]["mac"] == "SB:ID:00:00:00:01"
+        assert data[0]["humidity_pct"] == pytest.approx(61.0)
+
+    def test_readings_by_sensor_id_resolves_flower_care_mac(self, client):
+        client.post(
+            "/sensors/ingest",
+            json=[_fc_row("FC:ID:00:00:00:01", "2026-06-09T08:00:00Z", temperature_c=23.0)],
+            headers=_headers(),
+        )
+
+        data = client.get(
+            "/v2/sensors/cilantro/readings",
+            params={"start_ts": "2026-06-09T00:00:00Z", "end_ts": "2026-06-10T00:00:00Z"},
+        ).json()
+
+        assert len(data) == 1
+        assert data[0]["mac"] == "FC:ID:00:00:00:01"
+        assert data[0]["temperature_c"] == pytest.approx(23.0)
+
+    def test_unknown_sensor_id_returns_404(self, client):
+        resp = client.get("/v2/sensors/unknown/readings")
+        assert resp.status_code == 404
