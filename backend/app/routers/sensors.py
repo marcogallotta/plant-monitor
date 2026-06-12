@@ -1,6 +1,9 @@
+import logging
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
@@ -36,6 +39,12 @@ class SensorReadingIn(BaseModel):
 def sensor_ingest(readings: list[SensorReadingIn], db: Session = Depends(get_db)):
     if not readings:
         return {"inserted": 0, "skipped": 0}
+
+    now = datetime.now(timezone.utc)
+    latest_recorded_at = max(r.recorded_at for r in readings)
+    lag_secs = (now - latest_recorded_at).total_seconds()
+    log.info("sensor_ingest mac=%s n=%d latest_recorded_at=%s lag_secs=%.1f",
+             readings[0].mac, len(readings), latest_recorded_at.isoformat(), lag_secs)
 
     rows = [
         {
