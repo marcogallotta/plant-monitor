@@ -1,0 +1,31 @@
+{
+  "schema": "switchstand-repository-prototype-v1",
+  "repository": {
+    "provider": "github",
+    "full_name": "marcogallotta/plant-monitor",
+    "default_branch": "main"
+  },
+  "docs": {
+    "readme": "README.md",
+    "architecture": "docs/internals.md",
+    "roadmap": "docs/roadmap.md",
+    "sensor_ingest": "docs/sensor-ingest.md"
+  },
+  "validation": {
+    "full": "make test",
+    "pi": "make test-pi",
+    "browser": "make test-e2e",
+    "ci": ".github/workflows/ci.yml"
+  },
+  "operations": {
+    "pi_uploader": {
+      "entry": "scripts/deploy_pi_upload.sh",
+      "live_effect": true
+    }
+  },
+  "prototype_notes": [
+    "Internal prototype only; not a stable public Switchstand schema.",
+    "Work identity and authority stay in Switchstand, not in this file.",
+    "Local ignored Claude instructions must be reconciled separately before Claude adoption."
+  ]
+}
